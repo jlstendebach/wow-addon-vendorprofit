@@ -1,5 +1,5 @@
 -- The shopping panel: the queued order, what to buy, what you already have,
--- what to craft, the order's profit, and the scan and buy buttons.
+-- what to craft, the order's profit, and the scan, buy and craft buttons.
 --
 -- It docks beside the auction house when that's open (and opens there by
 -- itself if something is queued), otherwise beside the professions window.
@@ -12,6 +12,7 @@ local VendorProfit = ns.VendorProfit
 local Order = VendorProfit.Order
 local Shopper = VendorProfit.Shopper
 local Inventory = VendorProfit.Inventory
+local Crafter = VendorProfit.Crafter
 local L = VendorProfit.L
 
 local Panel = {}
@@ -259,6 +260,25 @@ local function BuyButtonState()
     return string.format(L.BUTTON_BUY, nextPurchase.quantity, ItemName(nextPurchase.itemID), Money(nextPurchase.budget)), true
 end
 
+local function CraftButtonState()
+    if Crafter.IsCasting() then
+        return L.CRAFTING, false
+    end
+    local nextCraft = Crafter.Next()
+    if nextCraft == nil then
+        return L.NOTHING_TO_CRAFT, false
+    end
+    local name = ItemName(nextCraft.step.itemID)
+    if nextCraft.open then
+        return string.format(L.OPEN_TO_CRAFT, nextCraft.open, name), false
+    elseif nextCraft.materials then
+        return string.format(L.NEED_MATERIALS, name), false
+    elseif nextCraft.crafts == 1 then
+        return string.format(L.CRAFT_ONCE, name), true
+    end
+    return string.format(L.CRAFT_TIMES, name, nextCraft.crafts), true
+end
+
 local function LayoutButtons()
     local b = frame.buttons
     local status = Shopper.Status()
@@ -266,6 +286,10 @@ local function LayoutButtons()
     local text, enabled = BuyButtonState()
     b.buy:SetText(text)
     b.buy:SetEnabled(enabled)
+
+    local craftText, craftEnabled = CraftButtonState()
+    b.craft:SetText(craftText)
+    b.craft:SetEnabled(craftEnabled and not Order.IsEmpty())
 
     b.scan:SetText(status == "ready" and L.SCAN_AGAIN or L.SCAN)
     b.scan:SetEnabled((status == "idle" or status == "ready") and not Order.IsEmpty())
@@ -288,6 +312,11 @@ local function LayoutButtons()
     b.buy:ClearAllPoints()
     b.buy:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, bottom)
     b.buy:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING, bottom)
+    bottom = bottom - BUTTON_HEIGHT - 4
+
+    b.craft:ClearAllPoints()
+    b.craft:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, bottom)
+    b.craft:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING, bottom)
     bottom = bottom - BUTTON_HEIGHT - 4
 
     local half = (WIDTH - 2 * PADDING - 6) / 2
@@ -369,7 +398,10 @@ local function Create()
         anyway = MakeButton(L.BUY_ANYWAY, function() Shopper.SetOverride(true) end, L.BUY_ANYWAY_HELP),
         recount = MakeButton(L.FORGET_MAIL, Order.ForgetMail, L.FORGET_MAIL_HELP),
         clear = MakeButton(L.CLEAR, Order.Clear),
+        -- Mouse down prepares, the click crafts: see Crafter.lua.
+        craft = MakeButton("", function() Crafter.Craft() end),
     }
+    frame.buttons.craft:SetScript("OnMouseDown", Crafter.Prepare)
 end
 
 -- Where you moved the panel to: { left, top } from the screen's bottom left.
@@ -485,6 +517,12 @@ end)
 local events = CreateFrame("Frame")
 events:RegisterEvent("BAG_UPDATE_DELAYED")
 events:RegisterEvent("PLAYER_MONEY")
+-- The Craft button follows the open profession window and your casting.
+for _, event in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE", "TRADE_SKILL_LIST_UPDATE" }) do
+    pcall(events.RegisterEvent, events, event)
+end
+pcall(events.RegisterUnitEvent, events, "UNIT_SPELLCAST_START", "player")
+pcall(events.RegisterUnitEvent, events, "UNIT_SPELLCAST_STOP", "player")
 events:SetScript("OnEvent", function(_, event)
     if event == "BAG_UPDATE_DELAYED" then
         local status = Shopper.Status()

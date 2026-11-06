@@ -54,7 +54,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "Shopper.lua", "Panel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "Shopper.lua", "Crafter.lua", "Panel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
 run('__stub.Fire("TRADE_SKILL_SHOW")')
@@ -756,6 +756,37 @@ check("other people's casts ignored", ev("#__stub.errors") == 0)
 run6, ev6 = route_client("VendorProfitCharDB = { order = { entries = {}, snapshot = { [1] = 2 }, bought = { [1] = 3 }, spent = 5 } }")
 run6('VendorProfit.Order.Entries()')
 check("old snapshot and purchase record dropped", ev6("VendorProfitCharDB.order.snapshot") is None and ev6("VendorProfitCharDB.order.bought") is None)
+
+
+# --- Craft button ------------------------------------------------------------------
+run, ev = shop_client()
+run('__stub.bags[2841] = 0; __stub.bags[2840] = 0; __stub.bank[2840] = 0')
+run('__stub.createCount = 2'); run(QUEUE + ':Click()')
+CRAFT = "VendorProfit.Panel.Buttons().craft"
+check("blacksmithing open, first step is mining: says to open it",
+      ev(CRAFT + ".__text") == "Open Mining to craft Copper Bar" and not ev(CRAFT + ":IsEnabled()"))
+run('__stub.OpenProfession(186, "Mining", %s)' % MINING)
+check("mining open but no ore: missing materials",
+      ev(CRAFT + ".__text") == "Missing materials for Copper Bar" and not ev(CRAFT + ":IsEnabled()"))
+run('__stub.bags[2770] = 7; __stub.bags[3576] = 7; __stub.Fire("BAG_UPDATE_DELAYED")')
+check("materials there: craft the copper bars", ev(CRAFT + ".__text") == "Craft Copper Bar, 7 times" and ev(CRAFT + ":IsEnabled()"))
+run(CRAFT + ":Click()")
+check("a click without a mouse down first crafts one (the game's quirk)", list(ev("__stub.crafted[1]").values()) == [2657, 1])
+run(CRAFT + ".__scripts.OnMouseDown(" + CRAFT + ")")
+run('__stub.Advance(0.05)')
+run(CRAFT + ":Click()")
+check("pressed then clicked: crafts all 7", list(ev("__stub.crafted[2]").values()) == [2657, 7])
+run('__stub.casting = "Smelt Copper"; __stub.Fire("UNIT_SPELLCAST_START", "player")')
+check("while casting: button waits", ev(CRAFT + ".__text") == "Crafting..." and not ev(CRAFT + ":IsEnabled()"))
+run('__stub.casting = nil; __stub.bags[2770] = 0; __stub.bags[2840] = 7; __stub.Fire("BAG_UPDATE_DELAYED")')
+check("copper bars made: next is bronze bars", ev(CRAFT + ".__text") == "Craft Bronze Bar, 7 times")
+run('__stub.bags[2840] = 0; __stub.bags[3576] = 0; __stub.bags[2841] = 14; __stub.Fire("BAG_UPDATE_DELAYED")')
+check("bronze made: the cuirass is in blacksmithing", ev(CRAFT + ".__text") == "Open Blacksmithing to craft Rough Bronze Cuirass")
+run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
+check("blacksmithing open: craft the cuirasses", ev(CRAFT + ".__text") == "Craft Rough Bronze Cuirass, 2 times")
+run('VendorProfit.Order.Clear()')
+check("empty order: craft off", not ev(CRAFT + ":IsEnabled()"))
+check("no errors from crafting", ev("#__stub.errors") == 0)
 
 print()
 failed = [label for label, ok in results if not ok]

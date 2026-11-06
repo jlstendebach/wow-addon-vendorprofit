@@ -14,7 +14,7 @@ Vendor Profit: -2s 91c   [Queue]   <- ...sold to a vendor
 
 - **Vendor Profit:** what you make by crafting the item and selling it to a vendor, at Auctionator's To Craft cost.
 - **Cheapest Route:** the same three numbers when every reagent is got the cheapest way, crafting reagents yourself where that's cheaper than buying them, all the way down. Hover the section to see the route.
-- **Queue** adds the recipe to a shopping order. A shopping panel then plans it with what you already have, scans the auction house, checks the order is still profitable at live prices, and buys what's missing one confirmed purchase at a time.
+- **Queue** adds the recipe to a shopping order. A shopping panel then plans it with what you already have, scans the auction house, checks the order is still profitable at live prices, buys what's missing one confirmed purchase at a time, and crafts the steps in order.
 
 Requires [Auctionator](https://www.curseforge.com/wow/addons/auctionator).
 
@@ -123,6 +123,8 @@ It lists **To buy**, **From your bags and bank** (with how many are in the bank 
 - **Not enough gold, no reply, a failed purchase:** nothing is recorded, the panel says what happened, and the item is scanned again. A purchase that gets no reply but goes through later is still recorded when the success arrives.
 - **Items that don't stack** (gear and the like) are listed as **buy yourself**: the panel only buys stackable items.
 
+**5. Craft.** The **Craft** button crafts the next step on the list, as many times as it needs (up to what you have materials for): **Craft Copper Bar, 7 times**. The game only crafts recipes of the profession window that's open, and in Forever an addon can't open one for you outside combat-locked special buttons. So when the next step is in another profession it says so: **Open Mining to craft Copper Bar**. It skips ahead to a later step the open window can make if you have its materials, says **Missing materials for ...** when you don't, and waits while you're casting. Crafting the queued item counts the order down as usual.
+
 **Mail.** Auction purchases may arrive in your mailbox rather than your bags. A purchase counts as **in the mail** until that many more of the item show up in your bags or bank, so it's counted either way and never bought twice. If something is still shown as in the mail after you've collected it (say you used it up as it arrived), **Forget mail** stops counting it.
 
 **Moving the panel.** Drag it anywhere. From then on it opens where you left it (saved per character). It still opens with the auction house when something is queued, and always closes with it; `/vprofit` opens it again. `/vprofit reset` docks it beside the auction house or professions window again.
@@ -152,6 +154,7 @@ Files:
 | `Order.lua` | The saved order: what's in the mail, what was spent, counting crafts down |
 | `QueueButton.lua` | The Queue button |
 | `Shopper.lua` | Scanning the auction house, live pricing, quotes and purchases |
+| `Crafter.lua` | The Craft button: the next step the open profession can make |
 | `Panel.lua` | The shopping panel, moving it, and `/vprofit` |
 
 Saved data, per character (`VendorProfitCharDB`):

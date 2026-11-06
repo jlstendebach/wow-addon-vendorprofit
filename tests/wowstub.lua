@@ -36,6 +36,7 @@ function FrameMethods:IsVisible()
     return true
 end
 function FrameMethods:RegisterEvent(e) self.__events[e] = true end
+function FrameMethods:RegisterUnitEvent(e) self.__events[e] = true end
 function FrameMethods:UnregisterEvent(e) self.__events[e] = nil end
 function FrameMethods:UnregisterAllEvents() self.__events = {} end
 function FrameMethods:SetScript(k, fn) self.__scripts[k] = fn end
@@ -154,6 +155,9 @@ C_Timer = { After = function(seconds, fn) stub.timers[#stub.timers + 1] = { at =
 SlashCmdList = {}
 stub.money = 1000000
 function GetMoney() return stub.money end
+function GetTime() return stub.now end
+stub.casting = nil
+function UnitCastingInfo(unit) if unit == "player" then return stub.casting end end
 function ButtonFrameTemplate_HidePortrait() end
 function ButtonFrameTemplate_HideButtonBar() end
 Enum = { CraftingReagentType = { Basic = 0, Optional = 1 }, PlayerInteractionType = { Auctioneer = 21, Merchant = 5 } }
@@ -262,7 +266,19 @@ C_TradeSkillUI = {
     GetRecipeInfo = function(recipeID)
         local r = FindRecipe(recipeID)
         if r == nil then return nil end
-        return { recipeID = recipeID, learned = r.learned ~= false, isEnchantingRecipe = r.isEnchant or false }
+        -- How many can be made from what's in the bags.
+        local available = math.huge
+        for _, reagent in ipairs(r.reagents) do
+            if not reagent.optional then
+                available = math.min(available, math.floor((stub.bags[reagent.itemID] or 0) / reagent.quantity))
+            end
+        end
+        if available == math.huge then available = 0 end
+        return { recipeID = recipeID, learned = r.learned ~= false, isEnchantingRecipe = r.isEnchant or false, numAvailable = available }
+    end,
+    CraftRecipe = function(recipeID, count)
+        stub.crafted = stub.crafted or {}
+        stub.crafted[#stub.crafted + 1] = { recipeID, count }
     end,
     GetAllRecipeIDs = function()
         local ids = {}
