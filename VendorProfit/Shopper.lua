@@ -164,9 +164,10 @@ end
 --                  order makes from here. Items you have count at what they'd
 --                  cost to get now, whether you had them or bought them for
 --                  this order; what was paid before is spent either way.
---   auctionProfit  the same, selling at auction (Auctionator's price after the
---                  auction house cut) instead of to vendors; nil if a queued
---                  item has no auction price
+--   auctionRevenue what everything queued sells for at auction: Auctionator's
+--                  price after the auction house cut; nil if a queued item
+--                  has no auction price
+--   auctionProfit  auctionRevenue - ownedValue - remaining
 --   spent          what the panel has spent on this order, for reference
 --   unscanned      auction items not scanned yet
 --   short          auction items with fewer listed than needed
@@ -231,7 +232,8 @@ function Shopper.Recompute()
     end
     local auctionProfit
     if auctionRevenue then
-        auctionProfit = math.floor(auctionRevenue * VendorProfit.GetAfterAHCut()) - plan.ownedValue - remaining
+        auctionRevenue = math.floor(auctionRevenue * VendorProfit.GetAfterAHCut())
+        auctionProfit = auctionRevenue - plan.ownedValue - remaining
     end
 
     local spent = Order.Spent()
@@ -242,6 +244,7 @@ function Shopper.Recompute()
         ownedValue = plan.ownedValue,
         remaining = remaining,
         profit = plan.revenue - plan.ownedValue - remaining,
+        auctionRevenue = auctionRevenue,
         auctionProfit = auctionProfit,
         unscanned = unscanned,
         short = short,

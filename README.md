@@ -99,6 +99,8 @@ What it can't know:
 - **What you already have.** Reagents in your bags are priced at their market value, since you could sell them instead.
 - **Recipes in professions you haven't opened** on this character, or on your other characters.
 
+**Money** is shown with silver and copper always two digits after a larger coin, like a clock: **5s 07c**, so it can't be misread as 5s 70c. That's everywhere this addon shows money; Auctionator's own lines are left as they are.
+
 ## Shopping
 
 **1. Queue.** Set the number in the professions window's Create box (say 10) and click **Queue** beside the Cheapest Route section's Vendor Profit line. Queuing a recipe already in the order adds to it. The shopping panel opens; `/vprofit` toggles it any time.
@@ -113,13 +115,15 @@ What it can't know:
 The panel is laid out as:
 
 ```
-Queued                                       [ Clear ]
+Queued
     Rough Bronze Cuirass x10                 [Remove]
 Profit                                       [ Scan ]
     Vendor price                             60s
+    Auction price                            1g 23s 50c
+
     Items you have                           -10s
     Items to buy                             -33s 75c
-    ─────────────────────────────────────────
+
     Vendor profit                            16s 25c
     Auction profit                           79s 75c
 ──────────────── To do ────────────────
@@ -141,7 +145,7 @@ Profit                                       [ Scan ]
 
 **Take from bank.** At the bank, **Take** on the **Take from bank** step moves exactly those amounts into your bags: it splits them off the bank's stacks (smallest stacks first) into empty bag slots, one move at a time, waiting for each to finish. If something isn't in the bank after all, or your bags fill up, or the bank closes, it stops and says so. The panel opens beside the bank by itself when the order has something to fetch, and closes with it.
 
-**Vendor profit** is what finishing the order makes from where you stand: the **Vendor price** of everything still queued, minus what the **Items you have** are worth, minus the **Items to buy**. **Auction profit** is the same selling at auction instead: Auctionator's price for the queued items after the 5% auction house cut (or *no auction price*). Buying checks Vendor profit. Items you have count at the cheapest way to get them now, whether you had them already or bought them for this order. What you've paid is spent either way, so it doesn't change whether finishing is worth it. It's shown below the profits as **Spent on this order so far**, but not taken off. That way an order you've partly shopped for and crafted gives the same answer as clearing it and queuing what's left.
+**Profit** is three small groups: what everything still queued sells for (**Vendor price**, and **Auction price**: Auctionator's price after the 5% auction house cut, so it's what you'd actually get, or *no auction price*), what it costs (**Items you have**, what the items you have are worth, and **Items to buy**), and what finishing the order makes from where you stand (**Vendor profit** and **Auction profit**: each price minus both costs). Buying checks Vendor profit. Items you have count at the cheapest way to get them now, whether you had them already or bought them for this order. What you've paid is spent either way, so it doesn't change whether finishing is worth it. It's shown below the profits as **Spent on this order so far**, but not taken off. That way an order you've partly shopped for and crafted gives the same answer as clearing it and queuing what's left.
 
 **Crafting counts the order down.** Each time you craft a queued recipe, its count drops by one, and the order finishes when everything queued is made. Reagents you craft with leave your bags, so the plan always works from what's actually left.
 
@@ -163,7 +167,7 @@ The buttons for each part sit on their section's heading, with short labels; hov
 
 **Moving the panel.** Drag it anywhere. From then on it opens where you left it (saved per character). It still opens with the auction house when something is queued, and always closes with it; `/vprofit` opens it again. `/vprofit reset` docks it beside the auction house or professions window again.
 
-The order is saved per character. **Clear** on the **Queued** heading empties it and its record.
+The order is saved per character. **Remove** takes a recipe out; removing the last one empties the order and its record.
 
 ## How it works
 

@@ -77,6 +77,7 @@ VendorProfit.L = {
     CRAFTS_ONE = "%d craft",
     NEXT_MARK = "\194\187",
     VENDOR_PRICE = "Vendor price",
+    AUCTION_PRICE = "Auction price",
     SPENT = "Spent on this order so far",
     ITEMS_YOU_HAVE = "Items you have",
     ITEMS_TO_BUY = "Items to buy",
@@ -111,8 +112,6 @@ VendorProfit.L = {
     BUY_ANYWAY = "Buy anyway",
     BUY_ANYWAY_HELP = "Click to buy anyway, until the next scan.",
     ORDER_DONE = "|cffffd100Vendor Profit:|r order done: everything queued is crafted.",
-    CLEAR = "Clear",
-    CLEAR_HELP = "Empties the order.",
     SCAN_FIRST = "Scan prices first: Scan is on the Profit heading.",
     SCAN_OPEN_AH = "Open the auction house to scan live prices.",
     FROM_AUCTION = "auction",
@@ -261,14 +260,44 @@ function VendorProfit.Calculate(schematicForm)
     return result
 end
 
+-- Coin icons, as the game draws them in money text.
+VendorProfit.COINS = {
+    gold = "|TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t",
+    silver = "|TInterface\\MoneyFrame\\UI-SilverIcon:0:0:2:0|t",
+    copper = "|TInterface\\MoneyFrame\\UI-CopperIcon:0:0:2:0|t",
+}
+
+-- Money as coins, like the game's own money text, except that silver and
+-- copper are always two digits after a larger coin: 5s 07c, not 5s 7c, so it
+-- can't be misread as 5s 70c. Coins that are zero are left out, and gold gets
+-- thousands separators.
+function VendorProfit.FormatCoins(copper)
+    copper = math.floor(math.abs(copper) + 0.5)
+    local gold = math.floor(copper / 10000)
+    local silver = math.floor(copper / 100) % 100
+    local cop = copper % 100
+    local coins = VendorProfit.COINS
+    local parts = {}
+    if gold > 0 then
+        parts[#parts + 1] = (BreakUpLargeNumbers and BreakUpLargeNumbers(gold) or tostring(gold)) .. coins.gold
+    end
+    if silver > 0 then
+        parts[#parts + 1] = string.format(gold > 0 and "%02d" or "%d", silver) .. coins.silver
+    end
+    if cop > 0 or #parts == 0 then
+        parts[#parts + 1] = string.format(#parts > 0 and "%02d" or "%d", cop) .. coins.copper
+    end
+    return table.concat(parts, " ")
+end
+
 -- Money text styled like Auctionator's Profit line: white, or red with a
 -- minus for a loss.
 function VendorProfit.FormatMoney(copper)
     copper = math.floor(copper + 0.5)
     if copper >= 0 then
-        return WHITE_FONT_COLOR:WrapTextInColorCode(GetMoneyString(copper, true))
+        return WHITE_FONT_COLOR:WrapTextInColorCode(VendorProfit.FormatCoins(copper))
     end
-    return RED_FONT_COLOR:WrapTextInColorCode("-" .. GetMoneyString(-copper, true))
+    return RED_FONT_COLOR:WrapTextInColorCode("-" .. VendorProfit.FormatCoins(-copper))
 end
 
 -- Lines -----------------------------------------------------------------------

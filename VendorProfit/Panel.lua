@@ -129,36 +129,30 @@ local function AddDivider(row, title)
 end
 
 -- kind: "divider" (a centered title between lines), "heading", "row",
--- "total" (a sum's result, larger), "rule" (a thin line) or "note".
+-- "note" or "gap" (space between groups).
 local function AddRow(kind, left, right, button)
     usedRows = usedRows + 1
     local row = GetRow(usedRows)
     if kind == "divider" then
         return AddDivider(row, left)
-    end
-    row.lines[1]:Hide()
-    row.lines[2]:Hide()
-    if kind == "rule" then
-        -- A thin line, as above a sum's result.
+    elseif kind == "gap" then
+        -- Space between groups of rows.
         row.left:Hide()
         row.right:Hide()
         row.button:Hide()
-        local line = row.lines[1]
-        line:ClearAllPoints()
-        line:SetPoint("LEFT", frame, "TOPLEFT", PADDING, y - 3)
-        line:SetPoint("RIGHT", frame, "TOPRIGHT", -PADDING, y - 3)
-        line:Show()
+        row.lines[1]:Hide()
+        row.lines[2]:Hide()
         y = y - 6
         return row
     end
-    local height = kind == "heading" and HEADING_HEIGHT or kind == "total" and HEADING_HEIGHT - 2 or ROW_HEIGHT
+    row.lines[1]:Hide()
+    row.lines[2]:Hide()
+    local height = kind == "heading" and HEADING_HEIGHT or ROW_HEIGHT
     if kind == "heading" then
         y = y - 4
     end
 
-    local font = kind == "heading" and "GameFontNormal" or kind == "total" and "GameFontHighlight" or "GameFontHighlightSmall"
-    row.left:SetFontObject(font)
-    row.right:SetFontObject(kind == "total" and "GameFontHighlight" or "GameFontHighlightSmall")
+    row.left:SetFontObject(kind == "heading" and "GameFontNormal" or "GameFontHighlightSmall")
     row.left:ClearAllPoints()
     row.left:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
     -- Notes are gray unless they bring their own color.
@@ -382,21 +376,26 @@ local function ScanButton()
     return button
 end
 
--- The order's profit as a sum: what it sells for, minus what's used and
--- bought, then the results.
+-- The order's profit: what it sells for, what it costs, and what it makes.
 local function AddProfit(s)
+    local function OrNoPrice(copper)
+        return copper and Money(copper) or Gray(L.NO_AUCTION_PRICE)
+    end
     AddRow("heading", L.HEAD_PROFIT, nil, ScanButton())
+    -- Three groups, set apart by a gap: what it sells for, what it costs,
+    -- what it makes. Each pair is vendor, then auction.
     AddRow("row", L.VENDOR_PRICE, Money(s.revenue))
+    AddRow("row", L.AUCTION_PRICE, OrNoPrice(s.auctionRevenue))
+    AddRow("gap")
     if s.ownedValue > 0 then
         AddRow("row", L.ITEMS_YOU_HAVE, Money(-s.ownedValue))
     end
     AddRow("row", L.ITEMS_TO_BUY, Money(-s.remaining))
-    AddRow("rule")
-    AddRow("total", L.VENDOR_PROFIT_ROW, Money(s.profit))
-    AddRow("total", L.AUCTION_PROFIT_ROW,
-        s.auctionProfit and Money(s.auctionProfit) or Gray(L.NO_AUCTION_PRICE))
+    AddRow("gap")
+    AddRow("row", L.VENDOR_PROFIT_ROW, Money(s.profit))
+    AddRow("row", L.AUCTION_PROFIT_ROW, OrNoPrice(s.auctionProfit))
     if s.spent > 0 then
-        AddRow("row", Gray(L.SPENT), Gray(GetMoneyString(s.spent, true)))
+        AddRow("row", Gray(L.SPENT), Gray(VendorProfit.FormatCoins(s.spent)))
     end
 end
 
@@ -465,11 +464,7 @@ local function AddContent()
     local plan = s.plan
 
     local entries = Order.Entries()
-    local status = Shopper.Status()
-    local busy = status == "quoting" or status == "confirm" or status == "buying"
-    AddRow("heading", L.HEAD_QUEUED, nil, #entries > 0 and {
-        text = L.CLEAR, width = 70, enabled = not busy, onClick = Order.Clear, tooltip = L.CLEAR_HELP,
-    } or nil)
+    AddRow("heading", L.HEAD_QUEUED)
     if #entries == 0 then
         AddRow("note", L.NOTHING_QUEUED)
         return

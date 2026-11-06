@@ -125,7 +125,7 @@ local function Savings(node, quantity)
     if saves <= 0 then
         return ""
     end
-    return "  " .. GREEN_FONT_COLOR:WrapTextInColorCode(string.format(L.SAVES_STEP, GetMoneyString(saves, true)))
+    return "  " .. GREEN_FONT_COLOR:WrapTextInColorCode(string.format(L.SAVES_STEP, VendorProfit.FormatCoins(saves)))
 end
 
 -- One row per reagent, children indented under the items they're crafted

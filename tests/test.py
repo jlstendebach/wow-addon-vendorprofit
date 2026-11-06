@@ -39,6 +39,8 @@ def client(before_load=""):
     loader = lua.execute("return function(src, name) return assert(loadstring(src, name)) end")
     for name in FILES:
         loader((ADDON / name).read_text(), "@" + name)("VendorProfit", ns)
+    # Coins as letters, so money reads "5s 07c" in the checks.
+    lua.execute('VendorProfit.COINS = { gold = "g", silver = "s", copper = "c" }')
     lua.execute('__stub.Fire("ADDON_LOADED", "VendorProfit")')
     lua.execute('__stub.Fire("PLAYER_LOGIN")')
     return lua.execute, lua.eval
@@ -244,7 +246,7 @@ tip = ev("__stub.HoverRoute()")
 check("tooltip titled", tip.startswith("Cheapest Route"))
 check("tooltip root: the crafted item and route cost", "Rough Bronze Cuirass x1 | |cffffffff4s 38c|r" in tip)
 check("tooltip: bronze bars crafted in Mining, 2 per craft",
-      "    |Ticon2841:0|t Bronze Bar x7 | |cff20ff20craft (Mining, makes 2)|r  |cffffffff4s 38c|r  |cff20ff20saves 8s 1c|r" in tip)
+      "    |Ticon2841:0|t Bronze Bar x7 | |cff20ff20craft (Mining, makes 2)|r  |cffffffff4s 38c|r  |cff20ff20saves 8s 01c|r" in tip)
 check("tooltip: copper bars nested under bronze bars",
       "        |Ticon2840:0|t Copper Bar x3.5 | |cff20ff20craft (Mining)|r  |cffffffff1s 75c|r  |cff20ff20saves 70c|r" in tip)
 check("tooltip: copper ore nested under copper bars",
@@ -254,7 +256,7 @@ r_ = ev("VendorProfit.RouteSection.Calculate(VendorProfit.Calculate(ProfessionsF
 check("crafted steps know their buy price", r_.route.children[1].node.buyCost == 177)
 check("tooltip doesn't repeat the section's numbers", "Crafting cost" not in tip and "Vendor profit" not in tip)
 check("tooltip: Auctionator's cost and the saving",
-      "Auctionator's To Craft | |cffffffff12s 39c|r" in tip and "Saves | |cffffffff8s 1c|r" in tip)
+      "Auctionator's To Craft | |cffffffff12s 39c|r" in tip and "Saves | |cffffffff8s 01c|r" in tip)
 check("tooltip: which professions it used", "Uses your recipes from: Blacksmithing, Mining." in tip)
 run('__stub.auctionPrices[2840] = nil; AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
 check("crafted item with no buy price: no saving shown",
@@ -455,8 +457,6 @@ def click(run, name):
         run(BUY + ":Click()")
     elif name == "scan":
         run(SCAN + ":Click()")
-    elif name == "clear":
-        run('VendorProfit.Panel.RowButton("Queued"):Click()')
     elif name == "cancel":
         run('VendorProfit.Panel.FindButton("Cancel"):Click()')
     else:
@@ -494,8 +494,9 @@ check("from your bank: the other 2 copper bars, to fetch", section(ev, "Take fro
 check("no mailbox step with nothing in the mail", section(ev, "Collect from mailbox") is None)
 check("layout: queued, profit, then the To do steps in order, then what's in your bags",
       headings(ev) == ["Queued", "Profit", "To do", "1. Buy", "2. Take from bank", "3. Craft", "Already in your bags"])
-check("profit rows", section(ev, "Profit")[:5] == [
-    "Vendor price | |cffffffff60s|r", "Items you have | |cffff2020-10s|r", "Items to buy | |cffff2020-33s 75c|r",
+check("profit rows: sell prices (auction after the AH cut), expenses, profits", section(ev, "Profit")[:6] == [
+    "Vendor price | |cffffffff60s|r", "Auction price | |cffffffff1g 23s 50c|r",
+    "Items you have | |cffff2020-10s|r", "Items to buy | |cffff2020-33s 75c|r",
     "Vendor profit | |cffffffff16s 25c|r", "Auction profit | |cffffffff79s 75c|r"])
 check("panel lists the crafts", has_line(ev, "Copper Bar x24", "Mining, 24 crafts")
       and has_line(ev, "Bronze Bar x58", "Mining, 29 crafts") and has_line(ev, "Rough Bronze Cuirass x10", "Blacksmithing, 10 crafts"))
@@ -591,7 +592,7 @@ run('__stub.CloseAH()')
 check("...and it still closes with the auction house", not ev("VendorProfit.Panel.IsShown()"))
 run('VendorProfit.Panel.Show()')
 check("reopened away from the AH: docked to the professions window", ev("VendorProfitPanel.__point[2] == ProfessionsFrame"))
-click(run, "clear")
+run("VendorProfit.Order.Clear()")
 check("clear empties the order and its record", ev("VendorProfit.Order.IsEmpty()") and ev("VendorProfitCharDB.order.spent") == 0)
 
 # --- Not profitable at live prices --------------------------------------------
@@ -981,20 +982,27 @@ check("no errors from bank edge cases", ev("#__stub.errors") == 0)
 run, ev = shop_client()
 run('__stub.createCount = 10'); run(QUEUE + ':Click()')
 run('__stub.auctionPrices[2866] = nil; VendorProfit.Order.Changed()')
-check("no auction price for the item: auction profit says so", has_line(ev, "Auction profit", "no auction price"))
+check("no auction price for the item: auction price and profit say so",
+      has_line(ev, "Auction price", "no auction price") and has_line(ev, "Auction profit", "no auction price"))
 
 
 # --- Profit as a sum; Clear on Queued; one craft -------------------------------------
 run, ev = shop_client()
 run('__stub.createCount = 1'); run(QUEUE + ':Click()')
 prof = section(ev, "Profit")
-check("profit reads as a sum: costs, a rule, then the results",
-      [l.split(" | ")[0] for l in prof[:5]] == ["Vendor price", "Items you have", "Items to buy", "Vendor profit", "Auction profit"])
+check("profit rows in order",
+      [l.split(" | ")[0] for l in prof[:6]] == ["Vendor price", "Auction price", "Items you have", "Items to buy", "Vendor profit", "Auction profit"])
 check("one craft, not '1 crafts'", has_line(ev, "Rough Bronze Cuirass x1", "Blacksmithing, 1 craft") and not has_line(ev, "1 crafts"))
-check("Clear on the Queued heading", ev('VendorProfit.Panel.RowButton("Queued").__text') == "Clear")
-click(run, "clear")
-check("clear empties the order", ev("VendorProfit.Order.IsEmpty()"))
+check("no Clear button on Queued", ev('VendorProfit.Panel.RowButton("Queued")') is None)
 check("no buttons left at the bottom", ev('VendorProfit.Panel.FindButton("Scan again")') is None)
+
+
+# --- Money: two-digit silver and copper after a larger coin --------------------------
+run, ev = client()
+for copper, text in [(507, "5s 07c"), (570, "5s 70c"), (7, "7c"), (500, "5s"), (10507, "1g 05s 07c"),
+                     (10007, "1g 07c"), (10000, "1g"), (0, "0c"), (-507, "5s 07c")]:
+    check("coins: %d -> %s" % (copper, text), ev("VendorProfit.FormatCoins(%d)" % copper) == text)
+check("loss in red with a minus", ev("VendorProfit.FormatMoney(-507)") == "|cffff2020-5s 07c|r")
 
 print()
 failed = [label for label, ok in results if not ok]
