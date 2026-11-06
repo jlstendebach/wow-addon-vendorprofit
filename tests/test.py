@@ -466,7 +466,8 @@ check("quote within budget: confirm offered",
 check("cancel offered while confirming", ev("VendorProfit.Panel.Buttons().cancel:IsShown()"))
 click(run, "buy")
 run('__stub.Advance(0.5)')
-check("bought: recorded with what it cost", ev("VendorProfitCharDB.order.bought[2770]") == 24 and ev("VendorProfitCharDB.order.spent") == 1270)
+check("bought: what it cost is recorded", ev("VendorProfitCharDB.order.spent") == 1270)
+check("went straight to the bags, so nothing counted as in the mail", ev("VendorProfit.Order.InMail(2770)") == 0)
 check("ore in bags", ev("__stub.bags[2770]") == 24)
 check("message says what was bought", has_line(ev, "Bought 24 Copper Ore for"))
 check("copper ore off the list", ev("VendorProfit.Shopper.Summary().plan.buy[2770]") is None)
@@ -482,7 +483,9 @@ run('__stub.Advance(2)')
 check("rescanned at the new price", ev("VendorProfit.Shopper.Status()") == "ready"
       and ev("VendorProfit.Panel.Buttons().buy.__text") == "Buy 29 Tin Bar (|cffffffff22s 62c|r)")
 click(run, "buy"); run('__stub.Advance(0.5)'); click(run, "buy"); run('__stub.Advance(0.5)')
-check("tin bars bought", ev("VendorProfitCharDB.order.bought[3576]") == 29 and ev("VendorProfitCharDB.order.spent") == 1270 + 2262)
+check("tin bars bought", ev("__stub.bags[3576]") == 29 and ev("VendorProfitCharDB.order.spent") == 1270 + 2262)
+check("spent is shown but not taken off the profit", has_line(ev, "Spent on this order so far")
+      and ev("VendorProfit.Shopper.Summary().profit") == ev("VendorProfit.Shopper.Summary().revenue") - ev("VendorProfit.Shopper.Summary().ownedValue"))
 check("nothing left to buy", ev("VendorProfit.Panel.Buttons().buy.__text") == "Nothing to buy here"
       and has_line(ev, "Nothing to buy: you have everything."))
 check("crafts still listed", has_line(ev, "Bronze Bar x58", "29 crafts"))
@@ -565,12 +568,18 @@ click(run, "buy"); run('__stub.Advance(0.5)'); click(run, "buy"); run('__stub.Ad
 check("ore in the mail, not the bags", ev("__stub.bags[2770]") is None and ev("__stub.mail[2770]") == 24)
 check("still counted: not bought twice", ev("VendorProfit.Shopper.Summary().plan.buy[2770]") is None
       and ev("VendorProfit.Panel.Buttons().buy.__text").startswith("Buy 29 Tin Bar"))
+check("counted as in the mail", ev("VendorProfit.Order.InMail(2770)") == 24 and has_line(ev, "Copper Ore x24", "24 in the mail"))
+check("forget mail available while something's in the mail", ev("VendorProfit.Panel.Buttons().recount:IsEnabled()"))
 run('__stub.bags[2770] = 24; __stub.mail[2770] = 0; __stub.Fire("BAG_UPDATE_DELAYED")')
-check("collected from the mail: still counted once", ev("VendorProfit.Shopper.Summary().plan.buy[2770]") is None)
+check("collected from the mail: no longer counted as in the mail", ev("VendorProfit.Order.InMail(2770)") == 0)
+check("...and still counted once", ev("VendorProfit.Shopper.Summary().plan.buy[2770]") is None
+      and ev("VendorProfit.Shopper.Summary().plan.uses[2770]") == 24)
+check("forget mail off when nothing's in the mail", not ev("VendorProfit.Panel.Buttons().recount:IsEnabled()"))
+click(run, "buy"); run('__stub.Advance(0.5)'); click(run, "buy"); run('__stub.Advance(0.5)')
+check("tin bars in the mail", ev("VendorProfit.Order.InMail(3576)") == 29)
 click(run, "recount")
-check("recount after collecting: record cleared, bags counted",
-      ev("VendorProfitCharDB.order.bought[2770]") is None and ev("VendorProfit.Shopper.Summary().plan.buy[2770]") is None)
-check("recount keeps what was spent", ev("VendorProfitCharDB.order.spent") == 1200)
+check("forget mail: stops counting them, so they're needed again",
+      ev("VendorProfit.Order.InMail(3576)") == 0 and ev("VendorProfit.Shopper.Summary().plan.buy[3576].quantity") == 29)
 
 # --- Things going wrong -----------------------------------------------------------
 run, ev = shop_client()
@@ -594,7 +603,7 @@ check("priced without them: 8 x 52 + 16 x 60", ev("VendorProfit.Shopper.Summary(
 run('__stub.ah.failNext = true')
 searches = ev("#__stub.ah.searches")
 click(run, "buy"); run('__stub.Advance(0.5)'); click(run, "buy"); run('__stub.Advance(0.15)')
-check("failed purchase: nothing recorded", ev("VendorProfitCharDB.order.bought[2770]") is None and ev("VendorProfitCharDB.order.spent") == 0)
+check("failed purchase: nothing recorded", ev("VendorProfit.Order.InMail(2770)") == 0 and ev("VendorProfitCharDB.order.spent") == 0)
 check("failed purchase: says so and rescans", any("failed" in l for l in lines(ev)) and ev("VendorProfit.Shopper.Status()") == "scanning")
 run('__stub.Advance(2)')
 check("...then ready again", ev("VendorProfit.Shopper.Status()") == "ready" and ev("#__stub.ah.searches") == searches + 1)
@@ -605,8 +614,8 @@ check("no reply to a purchase: not recorded, rescanned",
       ev("VendorProfitCharDB.order.spent") == 0 and any("No reply buying" in l for l in lines(ev)))
 run('__stub.ah.noPurchaseReply = false; __stub.Advance(3)')
 run('__stub.Fire("COMMODITY_PURCHASE_SUCCEEDED")')  # the timed-out purchase went through after all
-check("a late success is still recorded", ev("VendorProfitCharDB.order.bought[2770]") == 24)
-run('VendorProfitCharDB.order.bought = {}; VendorProfitCharDB.order.spent = 0; VendorProfit.Order.Changed()')
+check("a late success is still recorded", ev("VendorProfitCharDB.order.spent") == 8 * 52 + 16 * 60 and ev("VendorProfit.Order.InMail(2770)") == 24)
+run('VendorProfit.Order.ForgetMail(); VendorProfitCharDB.order.spent = 0; VendorProfit.Order.Changed()')
 
 run('__stub.money = 10')
 click(run, "buy")
@@ -669,6 +678,65 @@ run5('SlashCmdList.VENDORPROFIT("")')
 check("/vprofit toggles the panel", not ev5("VendorProfit.Panel.IsShown()"))
 run5('VendorProfit.Order.Remove(1)')
 check("removing the last entry clears the order", ev5("VendorProfit.Order.IsEmpty()"))
+
+
+# --- Crafting counts the order down (the "profit changed" bug) ------------------
+# Queue 2, buy everything, craft one: the order must give the same answer as
+# clearing it and queuing 1 fresh.
+def craft(run, recipe_id, used, made):
+    """Crafts once: takes reagents from bags, adds the result, fires the events."""
+    for item_id, n in used.items():
+        run('__stub.bags[%d] = (__stub.bags[%d] or 0) - %d' % (item_id, item_id, n))
+    for item_id, n in made.items():
+        run('__stub.bags[%d] = (__stub.bags[%d] or 0) + %d' % (item_id, item_id, n))
+    run('__stub.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", %d)' % recipe_id)
+    run('__stub.Fire("BAG_UPDATE_DELAYED")')
+
+run, ev = shop_client()
+run('__stub.bags[2841] = 0; __stub.bags[2840] = 0; __stub.bank[2840] = 0')
+run('__stub.createCount = 2'); run(QUEUE + ':Click()')
+run('''
+    __stub.ah.listings[2770] = { { unitPrice = 50, quantity = 100 } }
+    __stub.ah.listings[3576] = { { unitPrice = 75, quantity = 100 } }
+''')
+run('__stub.OpenAH()'); click(run, "scan"); run('__stub.Advance(2)')
+for _ in range(2):
+    click(run, "buy"); run('__stub.Advance(0.5)'); click(run, "buy"); run('__stub.Advance(0.5)')
+check("bought 7 ore and 7 tin bars for 2 cuirasses (14 bronze bars)", ev("__stub.bags[2770]") == 7 and ev("__stub.bags[3576]") == 7)
+
+# Craft the first cuirass all the way: 4 copper bars, 4 bronze smelts (making
+# 8 bars), then the cuirass, leaving 1 bronze bar, 3 ore and 3 tin bars.
+for _ in range(4):
+    craft(run, 2657, {COPPER_ORE: 1}, {COPPER_BAR: 1})
+check("crafting intermediates doesn't count the order down", ev("VendorProfit.Order.Entries()[1].crafts") == 2)
+for _ in range(4):
+    craft(run, 2659, {COPPER_BAR: 1, TIN_BAR: 1}, {BRONZE_BAR: 2})
+craft(run, 2670, {BRONZE_BAR: 7}, {CUIRASS_ID: 1})
+check("crafting the queued item counts it down", ev("VendorProfit.Order.Entries()[1].crafts") == 1)
+run('__stub.bags[2866] = 0; __stub.Fire("BAG_UPDATE_DELAYED")')  # sold it
+old = ev("VendorProfit.Shopper.Summary()")
+old_profit, old_buy = old.profit, {l.itemID: l.quantity for l in old.plan.buyOrder.values()}
+check("plan works from what's left: 1 bronze bar, 3 ore, 3 tin bars", ev("__stub.bags[2841]") == 1
+      and old.plan.uses[BRONZE_BAR] == 1 and old.plan.uses[COPPER_ORE] == 3 and old.plan.uses[TIN_BAR] == 3)
+check("nothing more to buy", old_buy == {})
+
+run('VendorProfit.Order.Clear()')
+run('__stub.createCount = 1'); run(QUEUE + ':Click()')
+fresh = ev("VendorProfit.Shopper.Summary()")
+check("same profit as clearing and queuing again", abs(fresh.profit - old_profit) < 1e-6)
+check("same shopping list as queuing again", {l.itemID: l.quantity for l in fresh.plan.buyOrder.values()} == old_buy)
+
+for _ in range(3):
+    craft(run, 2657, {COPPER_ORE: 1}, {COPPER_BAR: 1})
+craft(run, 2670, {BRONZE_BAR: 7}, {CUIRASS_ID: 1})
+check("crafting the last one finishes the order", ev("VendorProfit.Order.IsEmpty()") and ev("VendorProfitCharDB.order.spent") == 0)
+run('__stub.Fire("UNIT_SPELLCAST_SUCCEEDED", "party1", "cast", 2670)')
+check("other people's casts ignored", ev("#__stub.errors") == 0)
+
+# Saved data from 1.2.x is tidied.
+run6, ev6 = route_client("VendorProfitCharDB = { order = { entries = {}, snapshot = { [1] = 2 }, bought = { [1] = 3 }, spent = 5 } }")
+run6('VendorProfit.Order.Entries()')
+check("old snapshot and purchase record dropped", ev6("VendorProfitCharDB.order.snapshot") is None and ev6("VendorProfitCharDB.order.bought") is None)
 
 print()
 failed = [label for label, ok in results if not ok]

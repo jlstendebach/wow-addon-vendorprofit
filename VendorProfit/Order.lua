@@ -2,16 +2,18 @@
 --
 -- Saved data: VendorProfitCharDB.order = {
 --     entries  = { { itemID, recipeID, profession, count, crafts, reagents, sellPrice }, ... },
---     snapshot = { [itemID] = bags + bank when the order first needed it },
---     bought   = { [itemID] = how many the panel has bought },
+--     inMail   = { [itemID] = bought by the panel, not seen in bags or bank yet },
+--     lastSeen = { [itemID] = bags + bank when last checked, for items in inMail },
 --     spent    = copper spent by the panel on this order,
 -- }
 --
--- Purchases may arrive in the mailbox rather than the bags, so what the
--- order can use is the larger of what's in bags and bank now, and what was
--- there when the order started plus what the panel bought. That's right
--- whether purchases go to the bags or the mail, and items you buy from a
--- vendor or craft yourself show up through the live count.
+-- What the order can use is what's in your bags and bank now, plus purchases
+-- still in the mailbox. Purchases may arrive in either place: one is counted
+-- as in the mail until that many more of the item show up in bags or bank.
+--
+-- Crafting a queued recipe counts it down, and the order is finished once
+-- every queued craft is made. Reagents you craft with leave your bags, so the
+-- plan always works from what's actually left.
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -29,9 +31,11 @@ local function DB()
     db.order = db.order or {}
     local order = db.order
     order.entries = order.entries or {}
-    order.snapshot = order.snapshot or {}
-    order.bought = order.bought or {}
+    order.inMail = order.inMail or {}
+    order.lastSeen = order.lastSeen or {}
     order.spent = order.spent or 0
+    -- From 1.2.x, which counted purchases differently.
+    order.snapshot, order.bought = nil, nil
     return order
 end
 
@@ -99,50 +103,107 @@ end
 function Order.Clear()
     local order = DB()
     order.entries = {}
-    order.snapshot = {}
-    order.bought = {}
+    order.inMail = {}
+    order.lastSeen = {}
     order.spent = 0
     Changed()
+end
+
+-- Notes how many of an item you have just before buying it, so its arrival
+-- can be told apart from what was already there.
+function Order.BeforePurchase(itemID)
+    local order = DB()
+    if order.inMail[itemID] == nil then
+        order.lastSeen[itemID] = Inventory.Total(itemID)
+    end
+end
+
+-- Counts purchases in the mail as arrived when that many more of the item
+-- show up in bags or bank. Returns true if anything changed.
+local function Reconcile()
+    local order = DB()
+    local changed = false
+    for itemID, pending in pairs(order.inMail) do
+        local live = Inventory.Total(itemID)
+        local arrived = live - (order.lastSeen[itemID] or live)
+        if arrived > 0 then
+            pending = pending - math.min(pending, arrived)
+            changed = true
+        end
+        order.lastSeen[itemID] = live
+        if pending <= 0 then
+            order.inMail[itemID] = nil
+            order.lastSeen[itemID] = nil
+        else
+            order.inMail[itemID] = pending
+        end
+    end
+    return changed
 end
 
 -- Records a purchase made by the panel.
 function Order.RecordPurchase(itemID, quantity, total)
     local order = DB()
-    order.bought[itemID] = (order.bought[itemID] or 0) + quantity
-    order.spent = order.spent + total
-    Changed()
-end
-
--- Recounts what you have from scratch. For after collecting purchases from
--- the mailbox: they're in the bags now, so the purchase record is cleared to
--- avoid counting them twice. What was spent is kept.
-function Order.Recount()
-    local order = DB()
-    order.snapshot = {}
-    order.bought = {}
-    Changed()
-end
-
--- How many of an item the order can use: paid (bought by the panel) and
--- owned (had already). See the top of this file.
-function Order.Available(itemID)
-    local order = DB()
-    local live = Inventory.Total(itemID)
-    local snapshot = order.snapshot[itemID]
-    if snapshot == nil then
-        snapshot = live
-        order.snapshot[itemID] = live
+    if order.lastSeen[itemID] == nil then
+        order.lastSeen[itemID] = Inventory.Total(itemID)
     end
-    local bought = order.bought[itemID] or 0
-    local total = math.max(live, snapshot + bought)
-    local paid = math.min(bought, total)
-    return paid, total - paid
+    order.inMail[itemID] = (order.inMail[itemID] or 0) + quantity
+    order.spent = order.spent + total
+    Reconcile()
+    Changed()
+end
+
+-- How many purchases of an item are counted as still in the mail.
+function Order.InMail(itemID)
+    return DB().inMail[itemID] or 0
+end
+
+function Order.HasMail()
+    return next(DB().inMail) ~= nil
+end
+
+-- Stops counting purchases as in the mail: for when they've been collected
+-- but are still counted, such as when they were used up as they arrived.
+function Order.ForgetMail()
+    local order = DB()
+    order.inMail = {}
+    order.lastSeen = {}
+    Changed()
+end
+
+-- How many of an item the order can use: bags and bank, plus purchases still
+-- in the mail.
+function Order.Available(itemID)
+    return Inventory.Total(itemID) + (DB().inMail[itemID] or 0)
+end
+
+-- Crafting a queued recipe counts it down; the last one finishes the order.
+-- Returns true if the recipe was in the order.
+function Order.Crafted(recipeID)
+    local order = DB()
+    for index, entry in ipairs(order.entries) do
+        if entry.recipeID == recipeID then
+            entry.crafts = entry.crafts - 1
+            if entry.crafts <= 0 then
+                table.remove(order.entries, index)
+            end
+            if #order.entries == 0 then
+                print(VendorProfit.L.ORDER_DONE)
+                Order.Clear()
+            else
+                Changed()
+            end
+            return true
+        end
+    end
+    return false
 end
 
 -- The plan for the whole order, priced with getBuyPrices (Auctionator's
 -- prices by default).
 function Order.Plan(getBuyPrices)
     local entries = DB().entries
+    Reconcile()
     for _, entry in ipairs(entries) do
         local sellPrice = select(11, C_Item.GetItemInfo(entry.itemID))
         if sellPrice then
@@ -151,3 +212,16 @@ function Order.Plan(getBuyPrices)
     end
     return Plan.Build(entries, Order.Available, getBuyPrices)
 end
+
+local events = CreateFrame("Frame")
+events:RegisterEvent("BAG_UPDATE_DELAYED")
+events:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+events:SetScript("OnEvent", function(_, event, unit, _, spellID)
+    if event == "BAG_UPDATE_DELAYED" then
+        if Reconcile() then
+            Changed()
+        end
+    elseif unit == "player" and spellID then
+        Order.Crafted(spellID)
+    end
+end)

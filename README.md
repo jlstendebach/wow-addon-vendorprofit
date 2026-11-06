@@ -99,19 +99,23 @@ What it can't know:
 29 smelts need 29 Copper Bars (you have 5, so 24 to smelt from 24 Copper Ore) and 29 Tin Bars.
 ```
 
-It lists **To buy**, **From your bags and bank** (with how many are in the bank), **Then craft** in order (deepest first), and the order's **Profit**: what it all sells to vendors for, minus what's been spent, what your own items used are worth, and what's still to buy. Several queued recipes share your items, so nothing is counted twice.
+It lists **To buy**, **From your bags and bank** (with how many are in the bank or still in the mail), **Then craft** in order (deepest first), and the order's **Profit**. Several queued recipes share your items, so nothing is counted twice.
+
+**Profit** is what finishing the order makes from where you stand: what everything still queued sells to vendors for, minus what the items you have are worth, minus what's still to buy. Items you have count at the cheapest way to get them now, whether you had them already or bought them for this order. What you've paid is spent either way, so it doesn't change whether finishing is worth it. It's shown below Profit as **Spent on this order so far**, but not taken off. That way an order you've partly shopped for and crafted gives the same answer as clearing it and queuing what's left.
+
+**Crafting counts the order down.** Each time you craft a queued recipe, its count drops by one, and the order finishes when everything queued is made. Reagents you craft with leave your bags, so the plan always works from what's actually left.
 
 **3. Scan.** At the auction house the panel docks beside it (and opens by itself when something is queued). **Scan** reads every listing of each item the order buys there, so buying 24 is priced by walking up the cheapest listings, not at the lowest single price, and your own listings are left out. With live prices the order is planned again: if crafting something has become cheaper than buying it, or the other way round, the plan changes and the new items are scanned too.
 
 **4. Buy.** **Buy 24 Copper Ore (12s 70c)** asks the auction house for a price quote. If the quote is no more than the scan, **Confirm: 24 Copper Ore for 12s 70c** buys it. That's two clicks per item, the same as Auctionator's own buying: the game only allows a purchase as part of a click.
 
 - **Price went up:** if the quote is higher than the scan (someone bought the cheap ones first), the purchase is cancelled and the item scanned again.
-- **Not profitable:** before each purchase the whole order must still make money at current prices. If not, Buy is off and the panel says so. **Buy anyway** lets you go on until the next scan.
+- **Not profitable:** before each purchase, finishing the order must still make money at current prices. If not, Buy is off and the panel says so. **Buy anyway** lets you go on until the next scan.
 - **Not enough listed:** it buys what's there and says how many are missing.
 - **Not enough gold, no reply, a failed purchase:** nothing is recorded, the panel says what happened, and the item is scanned again. A purchase that gets no reply but goes through later is still recorded when the success arrives.
 - **Items that don't stack** (gear and the like) are listed as **buy yourself**: the panel only buys stackable items.
 
-**Mail.** Auction purchases may arrive in your mailbox rather than your bags. The order keeps its own record of what the panel bought, and counts the larger of what's in your bags and bank now, or what was there when the order started plus what it bought. So items in the mail still count, and items you craft or buy from a vendor show up as you get them. **Recount** starts the count fresh. Collect your mail first: it clears the record of purchases, which are in your bags by then.
+**Mail.** Auction purchases may arrive in your mailbox rather than your bags. A purchase counts as **in the mail** until that many more of the item show up in your bags or bank, so it's counted either way and never bought twice. If something is still shown as in the mail after you've collected it (say you used it up as it arrived), **Forget mail** stops counting it.
 
 **Moving the panel.** Drag it anywhere. From then on it opens where you left it (saved per character). It still opens with the auction house when something is queued, and always closes with it; `/vprofit` opens it again. `/vprofit reset` docks it beside the auction house or professions window again.
 
@@ -137,7 +141,7 @@ Files:
 | `RouteLine.lua` | The Vendor Profit (route) line and its tooltip |
 | `Inventory.lua` | Counting what you have in bags and bank |
 | `Plan.lua` | Turning queued crafts into what to buy and craft, in whole numbers |
-| `Order.lua` | The saved order, what it bought and spent, what it can use |
+| `Order.lua` | The saved order: what's in the mail, what was spent, counting crafts down |
 | `QueueButton.lua` | The Queue button |
 | `Shopper.lua` | Scanning the auction house, live pricing, quotes and purchases |
 | `Panel.lua` | The shopping panel, moving it, and `/vprofit` |
@@ -145,7 +149,7 @@ Files:
 Saved data, per character (`VendorProfitCharDB`):
 
 - `professions[professionID] = { name, recipes = { [recipeID] = { item, count, reagents } } }`
-- `order = { entries, snapshot, bought, spent }`: the queued crafts, what you had when each item was first needed, what the panel bought, and what it spent.
+- `order = { entries, inMail, lastSeen, spent }`: the queued crafts, purchases not seen in bags or bank yet (and the count they're waiting to rise from), and what the panel spent.
 - `panel = { left, top }`: where you moved the shopping panel, if you did.
 
 Shopping uses `C_AuctionHouse`: `SendSearchQuery` and the commodity search results to scan, `StartCommoditiesPurchase` for the quote (`COMMODITY_PRICE_UPDATED`), and `ConfirmCommoditiesPurchase`, called straight from the Confirm click, to buy (`COMMODITY_PURCHASE_SUCCEEDED` / `_FAILED`). Searches wait for the auction house's throttle and for the item to be loaded, are sent again if there's no reply, and ask for more results when the first page isn't enough.

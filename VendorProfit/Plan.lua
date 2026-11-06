@@ -7,9 +7,10 @@
 -- other steps), and buys whatever is left at the bottom. All queued crafts
 -- share one pool of items, so nothing is counted twice.
 --
--- available(itemID) returns how many can be used, split in two:
---   paid   already paid for while shopping this order; costs nothing more
---   owned  already had; counted at its route price, since it could be sold
+-- available(itemID) returns how many you have that the plan can use. They're
+-- counted at their route price (the cheapest way to get one now), whether you
+-- had them already or bought them for this order: what was paid before is
+-- spent either way, so it doesn't change whether finishing is worth it.
 --
 -- Plan.Build returns:
 --   buy[itemID]   { itemID, quantity, source, unitPrice }: source is
@@ -17,9 +18,10 @@
 --   buyOrder      the buy entries in the order they were first needed
 --   crafts        { itemID, recipeID, profession, crafts, makes, depth }
 --                 deepest first, so each step's reagents come before it
---   uses[itemID]  how many of what you have the plan uses
+--   uses[itemID]  how many of what you have the plan uses (not counting spares
+--                 its own crafts make)
 --   revenue       vendor sale value of everything queued
---   ownedValue    route price of the owned items used
+--   ownedValue    route price of the items you have that the plan uses
 --   missing       true if something on the plan has no price
 
 local _, ns = ...
@@ -42,8 +44,9 @@ function Plan.Build(entries, available, getBuyPrices)
     local function Pool(itemID)
         local entry = pool[itemID]
         if entry == nil then
-            local paid, owned = available(itemID)
-            entry = { paid = paid or 0, owned = owned or 0 }
+            -- spare: made by the plan's own crafts beyond what a step needed,
+            -- already paid for through that craft's reagents.
+            entry = { spare = 0, owned = available(itemID) or 0 }
             pool[itemID] = entry
         end
         return entry
@@ -52,16 +55,15 @@ function Plan.Build(entries, available, getBuyPrices)
     -- Takes up to amount from the pool. Returns how many are still needed.
     local function Take(itemID, amount, unitPrice)
         local entry = Pool(itemID)
-        local fromPaid = math.min(entry.paid, amount)
-        entry.paid = entry.paid - fromPaid
-        local fromOwned = math.min(entry.owned, amount - fromPaid)
+        local fromSpare = math.min(entry.spare, amount)
+        entry.spare = entry.spare - fromSpare
+        local fromOwned = math.min(entry.owned, amount - fromSpare)
         entry.owned = entry.owned - fromOwned
-        local used = fromPaid + fromOwned
-        if used > 0 then
-            plan.uses[itemID] = (plan.uses[itemID] or 0) + used
+        if fromOwned > 0 then
+            plan.uses[itemID] = (plan.uses[itemID] or 0) + fromOwned
             plan.ownedValue = plan.ownedValue + fromOwned * (unitPrice or 0)
         end
-        return amount - used
+        return amount - fromSpare - fromOwned
     end
 
     local function AddCraft(itemID, recipeID, profession, crafts, makes, depth)
@@ -100,9 +102,8 @@ function Plan.Build(entries, available, getBuyPrices)
             AddCraft(node.itemID, recipe.recipeID, recipe.profession, crafts, recipe.count, depth)
             local spare = crafts * recipe.count - amount
             if spare > 0 then
-                -- Made along the way and already paid for in its reagents.
                 local entry = Pool(node.itemID)
-                entry.paid = entry.paid + spare
+                entry.spare = entry.spare + spare
             end
             for _, child in ipairs(node.children) do
                 Require(child.node, child.quantity * crafts, depth + 1)

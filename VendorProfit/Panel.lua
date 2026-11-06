@@ -181,7 +181,15 @@ local function AddContent()
         AddRow("heading", L.HEAD_HAVE)
         for _, use in ipairs(uses) do
             local _, bank = Inventory.Count(use.itemID)
-            local right = bank > 0 and Gray(string.format(L.IN_BANK, bank)) or nil
+            local notes = {}
+            if bank > 0 then
+                notes[#notes + 1] = string.format(L.IN_BANK, bank)
+            end
+            local inMail = Order.InMail(use.itemID)
+            if inMail > 0 then
+                notes[#notes + 1] = string.format(L.IN_MAIL, inMail)
+            end
+            local right = #notes > 0 and Gray(table.concat(notes, ", ")) or nil
             AddRow("row", ItemLabel(use.itemID, use.quantity), right)
         end
     end
@@ -197,14 +205,14 @@ local function AddContent()
 
     AddRow("heading", L.HEAD_PROFIT)
     AddRow("row", L.SELLS_FOR, Money(s.revenue))
-    if s.spent > 0 then
-        AddRow("row", L.SPENT, Money(-s.spent))
-    end
     if s.ownedValue > 0 then
         AddRow("row", L.ITEMS_USED, Money(-s.ownedValue))
     end
     AddRow("row", L.STILL_TO_BUY, Money(-s.remaining))
     AddRow("row", L.PROFIT, Money(s.profit))
+    if s.spent > 0 then
+        AddRow("row", Gray(L.SPENT), Gray(GetMoneyString(s.spent, true)))
+    end
 
     if not Shopper.IsOpen() then
         AddRow("note", L.PRICES_AUCTIONATOR)
@@ -268,7 +276,7 @@ local function LayoutButtons()
         and not Shopper.IsOverridden() and Shopper.NextPurchase() ~= nil)
 
     b.clear:SetEnabled(not Order.IsEmpty() and not quoting and status ~= "buying")
-    b.recount:SetEnabled(not Order.IsEmpty())
+    b.recount:SetEnabled(Order.HasMail())
 
     -- Message above the buttons.
     local text2, isError = Shopper.Message()
@@ -359,7 +367,7 @@ local function Create()
         scan = MakeButton(L.SCAN, Shopper.Scan),
         cancel = MakeButton(L.CANCEL, Shopper.Cancel),
         anyway = MakeButton(L.BUY_ANYWAY, function() Shopper.SetOverride(true) end, L.BUY_ANYWAY_HELP),
-        recount = MakeButton(L.RECOUNT, Order.Recount, L.RECOUNT_HELP),
+        recount = MakeButton(L.FORGET_MAIL, Order.ForgetMail, L.FORGET_MAIL_HELP),
         clear = MakeButton(L.CLEAR, Order.Clear),
     }
 end

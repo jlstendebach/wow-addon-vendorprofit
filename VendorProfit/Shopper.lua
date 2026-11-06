@@ -14,7 +14,8 @@
 -- The game only allows the purchase as part of a click. Before Confirm is
 -- offered, the quote is checked against the scanned price; if it's higher,
 -- the purchase is cancelled and the item scanned again. Each purchase also
--- needs the whole order to still be profitable, unless you choose Buy anyway.
+-- needs finishing the order to still be profitable, unless you choose Buy
+-- anyway.
 --
 -- Items that don't stack (gear and the like) are listed but not bought here:
 -- buy those yourself.
@@ -156,11 +157,14 @@ end
 
 -- Summary of the order at the best prices known (live where scanned):
 --   plan           Order.Plan's plan
---   revenue        vendor sale value of everything queued
---   spent          what the panel has spent on this order
---   ownedValue     what the items you already had are worth
+--   revenue        vendor sale value of everything still queued
+--   ownedValue     what the items you have that the plan uses are worth
 --   remaining      cost of what's left to buy
---   profit         revenue - spent - ownedValue - remaining
+--   profit         revenue - ownedValue - remaining: what finishing the
+--                  order makes from here. Items you have count at what they'd
+--                  cost to get now, whether you had them or bought them for
+--                  this order; what was paid before is spent either way.
+--   spent          what the panel has spent on this order, for reference
 --   unscanned      auction items not scanned yet
 --   short          auction items with fewer listed than needed
 -- Each auction buy line also gets: total (cost now), listed (how many can be
@@ -218,7 +222,7 @@ function Shopper.Recompute()
         spent = spent,
         ownedValue = plan.ownedValue,
         remaining = remaining,
-        profit = plan.revenue - spent - plan.ownedValue - remaining,
+        profit = plan.revenue - plan.ownedValue - remaining,
         unscanned = unscanned,
         short = short,
     }
@@ -422,6 +426,7 @@ function Shopper.Buy()
     purchase = nextPurchase
     status = "quoting"
     SetMessage(nil)
+    Order.BeforePurchase(purchase.itemID)
     C_AuctionHouse.StartCommoditiesPurchase(purchase.itemID, purchase.quantity)
     local current = purchase
     C_Timer.After(Shopper.QUOTE_TIMEOUT, function()
