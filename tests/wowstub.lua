@@ -77,6 +77,7 @@ function FrameMethods:GetEffectiveScale() return 1 end
 function FrameMethods:SetFrameStrata(s) self.__strata = s end
 function FrameMethods:RegisterForClicks(...) self.__clicks = { ... } end
 function FrameMethods:SetHighlightTexture() end
+function FrameMethods:SetMotionScriptsWhileDisabled() end
 function FrameMethods:SetAttribute(k, v) self.__attrs = self.__attrs or {}; self.__attrs[k] = v end
 function FrameMethods:GetAttribute(k) return self.__attrs and self.__attrs[k] end
 function stub.Drag(f, left, top)
@@ -512,3 +513,68 @@ function stub.CloseAH()
     stub.Fire("AUCTION_HOUSE_CLOSED")
 end
 
+
+-- Bank -----------------------------------------------------------------------
+-- Containers hold slots: stub.containers[bag][slot] = { itemID, count, locked }.
+-- Bags 0-4 (16 slots each), the reagent bag 5, bank tabs 6-11 (20 slots each).
+-- Moving between them keeps stub.bags / stub.bank (what GetItemCount sees) in step.
+NUM_BAG_SLOTS = 4
+Constants = { InventoryConstants = { NumReagentBagSlots = 1, NumCharacterBankSlots = 6 } }
+BANK_CONTAINER, REAGENTBANK_CONTAINER = -1, -3
+stub.containers = {}
+local function SlotsIn(bag)
+    if bag >= 0 and bag <= 4 then return 16 end
+    if bag >= 6 and bag <= 11 then return 20 end
+    return 0
+end
+local function IsBankBag(bag) return bag >= 6 and bag <= 11 end
+local function Slot(bag, slot) return stub.containers[bag] and stub.containers[bag][slot] end
+local function SetSlot(bag, slot, v) stub.containers[bag] = stub.containers[bag] or {}; stub.containers[bag][slot] = v end
+
+-- Puts count of an item into a bank tab slot (and counts it as in the bank).
+function stub.PutInBank(bag, slot, itemID, count)
+    SetSlot(bag, slot, { itemID = itemID, count = count })
+    stub.bank[itemID] = (stub.bank[itemID] or 0) + count
+end
+-- Fills a bag slot with something else (to make bags full).
+function stub.FillBags()
+    for bag = 0, 4 do for slot = 1, 16 do
+        if not Slot(bag, slot) then SetSlot(bag, slot, { itemID = 1, count = 1 }) end
+    end end
+end
+
+local cursor
+stub.splits = {}
+C_Container = {
+    GetContainerNumSlots = function(bag) return SlotsIn(bag) end,
+    GetContainerItemInfo = function(bag, slot)
+        local s = Slot(bag, slot)
+        if s == nil or s.count <= 0 then return nil end
+        return { itemID = s.itemID, stackCount = s.count, isLocked = s.locked or false }
+    end,
+    SplitContainerItem = function(bag, slot, count)
+        local s = Slot(bag, slot)
+        stub.splits[#stub.splits + 1] = { bag, slot, count }
+        if s and count <= s.count then cursor = { bag = bag, slot = slot, itemID = s.itemID, count = count } end
+    end,
+    PickupContainerItem = function(bag, slot)
+        if cursor and Slot(bag, slot) == nil then
+            local from = Slot(cursor.bag, cursor.slot)
+            from.count = from.count - cursor.count
+            if from.count <= 0 then SetSlot(cursor.bag, cursor.slot, nil) end
+            SetSlot(bag, slot, { itemID = cursor.itemID, count = cursor.count, locked = stub.lockMoves })
+            if IsBankBag(cursor.bag) and not IsBankBag(bag) then
+                stub.bank[cursor.itemID] = stub.bank[cursor.itemID] - cursor.count
+                stub.bags[cursor.itemID] = (stub.bags[cursor.itemID] or 0) + cursor.count
+            end
+            cursor = nil
+        end
+    end,
+}
+function ClearCursor() cursor = nil end
+function GetCursorInfo() return cursor and "item" or nil end
+
+BankFrame = CreateFrame("Frame", "BankFrame")
+BankFrame:Hide()
+function stub.OpenBank() BankFrame:Show(); stub.Fire("BANKFRAME_OPENED") end
+function stub.CloseBank() BankFrame:Hide(); stub.Fire("BANKFRAME_CLOSED") end

@@ -110,7 +110,9 @@ What it can't know:
 29 smelts need 29 Copper Bars (you have 5, so 24 to smelt from 24 Copper Ore) and 29 Tin Bars.
 ```
 
-It lists **To buy**; what it uses of yours, split into **From your bags**, **From your mailbox** (purchases not collected yet, only when there are any) and **From your bank**; **Then craft** in order (deepest first); and the order's **Profit**. Your items are used from your bags first, then the mailbox, then the bank, so **From your bank** is exactly what to fetch. Bags include the reagent bank, since crafting uses it directly. Several queued recipes share your items, so nothing is counted twice.
+It lists **To buy**; what it uses of yours, split into **From your bags**, **From your mailbox** (purchases not collected yet, only when there are any) and **From your bank**; **Then craft** in order (deepest first); and the order's **Profit**. Your items are used from your bags first, then the mailbox, then the bank, so **From your bank** is exactly what to fetch. Bags include the reagent bank, since crafting uses it directly.
+
+**Take from bank.** At the bank, **Take from bank** on the **From your bank** heading moves exactly those amounts into your bags: it splits them off the bank's stacks (smallest stacks first) into empty bag slots, one move at a time, waiting for each to finish. If something isn't in the bank after all, or your bags fill up, or the bank closes, it stops and says so. The panel opens beside the bank by itself when the order has something to fetch, and closes with it. Several queued recipes share your items, so nothing is counted twice.
 
 **Profit** is what finishing the order makes from where you stand: what everything still queued sells to vendors for, minus what the items you have are worth, minus what's still to buy. Items you have count at the cheapest way to get them now, whether you had them already or bought them for this order. What you've paid is spent either way, so it doesn't change whether finishing is worth it. It's shown below Profit as **Spent on this order so far**, but not taken off. That way an order you've partly shopped for and crafted gives the same answer as clearing it and queuing what's left.
 
@@ -160,6 +162,7 @@ Files:
 | `SearchButton.lua` | The Search button: the whole crafting tree in Auctionator |
 | `Crafter.lua` | The Craft button: the next step the open profession can make |
 | `OpenButton.lua` | Opening another profession from the Craft button |
+| `Banker.lua` | Take from bank: moving exactly what's needed into your bags |
 | `Panel.lua` | The shopping panel, moving it, and `/vprofit` |
 
 Saved data, per character (`VendorProfitCharDB`):

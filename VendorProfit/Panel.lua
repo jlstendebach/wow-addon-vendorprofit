@@ -14,6 +14,7 @@ local Shopper = VendorProfit.Shopper
 local Inventory = VendorProfit.Inventory
 local Crafter = VendorProfit.Crafter
 local OpenButton = VendorProfit.OpenButton
+local Banker = VendorProfit.Banker
 local L = VendorProfit.L
 
 local Panel = {}
@@ -74,13 +75,24 @@ local function GetRow(index)
         row.right:SetWordWrap(false)
         row.button = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
         row.button:SetSize(60, 16)
+        -- Disabled buttons still show their tooltip, to say why.
+        row.button:SetMotionScriptsWhileDisabled(true)
+        row.button:SetScript("OnEnter", function(self)
+            if self.tooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(self.tooltip, 1, 1, 1, 1, true)
+                GameTooltip:Show()
+            end
+        end)
+        row.button:SetScript("OnLeave", function() GameTooltip:Hide() end)
         rows[index] = row
     end
     return row
 end
 
--- kind: "heading", "row" or "note". onRemove adds a Remove button.
-local function AddRow(kind, left, right, onRemove)
+-- kind: "heading", "row" or "note". button: { text, onClick, enabled,
+-- width, tooltip } adds a button at the right.
+local function AddRow(kind, left, right, button)
     usedRows = usedRows + 1
     local row = GetRow(usedRows)
     local height = kind == "heading" and HEADING_HEIGHT or ROW_HEIGHT
@@ -97,15 +109,19 @@ local function AddRow(kind, left, right, onRemove)
     row.left:Show()
 
     row.right:ClearAllPoints()
-    row.right:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING - (onRemove and 64 or 0), y)
+    local buttonWidth = button and (button.width or 60) or 0
+    row.right:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING - (button and buttonWidth + 4 or 0), y)
     row.right:SetText(right or "")
     row.right:SetShown(right ~= nil)
 
     row.button:ClearAllPoints()
-    if onRemove then
+    if button then
         row.button:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING, y + 2)
-        row.button:SetText(L.REMOVE)
-        row.button:SetScript("OnClick", onRemove)
+        row.button:SetWidth(buttonWidth)
+        row.button:SetText(button.text)
+        row.button:SetScript("OnClick", button.onClick)
+        row.button:SetEnabled(button.enabled ~= false)
+        row.button.tooltip = button.tooltip
         row.button:Show()
     else
         row.button:Hide()
@@ -173,6 +189,22 @@ function Panel.SplitUses(uses)
     return fromBags, fromMail, fromBank
 end
 
+-- The button on the "From your bank" heading: takes those items out.
+function Panel.BankButton(fromBank)
+    local text, enabled, tooltip
+    if Banker.IsMoving() then
+        text, enabled = L.BANK_TAKING, false
+    elseif not Banker.IsBankOpen() then
+        text, enabled, tooltip = L.BANK_TAKE, false, L.BANK_OPEN_FIRST
+    else
+        text, enabled, tooltip = L.BANK_TAKE, true, L.BANK_TAKE_HELP
+    end
+    return {
+        text = text, enabled = enabled, tooltip = tooltip, width = 110,
+        onClick = function() Banker.Withdraw(fromBank) end,
+    }
+end
+
 local function AddContent()
     local s = Shopper.Summary()
     local plan = s.plan
@@ -183,9 +215,10 @@ local function AddContent()
         AddRow("note", L.NOTHING_QUEUED)
     end
     for index, entry in ipairs(entries) do
-        AddRow("row", ItemLabel(entry.itemID, entry.crafts * entry.count), nil, function()
-            Order.Remove(index)
-        end)
+        AddRow("row", ItemLabel(entry.itemID, entry.crafts * entry.count), nil, {
+            text = L.REMOVE,
+            onClick = function() Order.Remove(index) end,
+        })
     end
     if #entries == 0 then
         return
@@ -203,10 +236,10 @@ local function AddContent()
     for _, section in ipairs({
         { heading = L.HEAD_BAGS, list = fromBags },
         { heading = L.HEAD_MAIL, list = fromMail },
-        { heading = L.HEAD_BANK, list = fromBank },
+        { heading = L.HEAD_BANK, list = fromBank, button = Panel.BankButton(fromBank) },
     }) do
         if #section.list > 0 then
-            AddRow("heading", section.heading)
+            AddRow("heading", section.heading, nil, section.button)
             for _, use in ipairs(section.list) do
                 AddRow("row", ItemLabel(use.itemID, use.quantity))
             end
@@ -325,10 +358,12 @@ local function LayoutButtons()
     b.clear:SetEnabled(not Order.IsEmpty() and not quoting and status ~= "buying")
     b.recount:SetEnabled(Order.HasMail())
 
-    -- Message above the buttons.
-    local text2, isError = Shopper.Message()
-    if text2 then
-        AddRow("note", isError and Red(text2) or text2)
+    -- Messages above the buttons.
+    for _, source in ipairs({ Shopper, Banker }) do
+        local text2, isError = source.Message()
+        if text2 then
+            AddRow("note", isError and Red(text2) or text2)
+        end
     end
 
     local bottom = y - 8
@@ -458,6 +493,8 @@ local function Dock()
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", saved.left, saved.top)
     elseif AuctionHouseFrame and AuctionHouseFrame:IsShown() then
         frame:SetPoint("TOPLEFT", AuctionHouseFrame, "TOPRIGHT", 4, 0)
+    elseif Banker.IsBankOpen() and BankFrame and BankFrame:IsShown() then
+        frame:SetPoint("TOPLEFT", BankFrame, "TOPRIGHT", 4, 0)
     elseif ProfessionsFrame and ProfessionsFrame:IsShown() then
         frame:SetPoint("TOPLEFT", ProfessionsFrame, "TOPRIGHT", 4, 0)
     else
@@ -532,6 +569,16 @@ function Panel.Lines()
     return lines
 end
 
+-- The button on the row whose left text is text, if it has one.
+function Panel.RowButton(text)
+    for index = 1, usedRows do
+        local row = rows[index]
+        if row.left:GetText() == text and row.button:IsShown() then
+            return row.button
+        end
+    end
+end
+
 function Panel.Buttons()
     return frame and frame.buttons
 end
@@ -547,6 +594,28 @@ Shopper.OnChange(function()
         Panel.Hide()
     end
     lastStatus = status
+    Panel.Refresh()
+end)
+
+-- Opens at the bank when there's something to take out of it, and closes
+-- with the bank if it opened for it.
+local openedForBank = false
+local bankWasOpen = Banker.IsBankOpen()
+Banker.OnChange(function()
+    local open = Banker.IsBankOpen()
+    if open and not bankWasOpen and not Order.IsEmpty() and not Panel.IsShown() then
+        local _, _, fromBank = Panel.SplitUses(Shopper.Summary().plan.uses)
+        if #fromBank > 0 then
+            openedForBank = true
+            Panel.Show()
+        end
+    elseif not open and bankWasOpen then
+        if openedForBank then
+            Panel.Hide()
+        end
+        openedForBank = false
+    end
+    bankWasOpen = open
     Panel.Refresh()
 end)
 

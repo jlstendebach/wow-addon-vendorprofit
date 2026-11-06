@@ -110,6 +110,17 @@ VendorProfit.L = {
     FORGET_MAIL_HELP = "Stops counting purchases as waiting in your mailbox. Use it if they're shown as in the mail but you've already collected them.",
     ORDER_DONE = "|cffffd100Vendor Profit:|r order done: everything queued is crafted.",
     CLEAR = "Clear order",
+    BANK_TAKE = "Take from bank",
+    BANK_TAKING = "Taking...",
+    BANK_OPEN_FIRST = "Open your bank to take these out.",
+    BANK_TAKE_HELP = "Moves exactly these from your bank into your bags.",
+    BANK_DONE = "Took everything from the bank.",
+    BANK_SOME_MISSING = "Took what was there; some of it wasn't in the bank.",
+    BANK_NOTHING_FOUND = "None of these are in the bank.",
+    BANK_CHANGED = "The bank changed while moving. Click Take from bank again.",
+    BANK_CLOSED_MID = "The bank closed before everything was moved.",
+    BANK_MOVE_STUCK = "An item didn't finish moving. Click Take from bank again.",
+    BAGS_FULL = "Your bags are full.",
 
     -- Shopping messages
     SCAN_FAILED = "Couldn't scan %s. Scan again to retry.",

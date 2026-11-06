@@ -54,7 +54,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Panel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Panel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
 run('__stub.Fire("TRADE_SKILL_SHOW")')
@@ -859,6 +859,83 @@ check("...then searches", len(list(ev("__stub.searched").values())) == 5)
 run('__stub.CloseAH()')
 check("search hides when the auction house closes", not ev(SEARCH + ":IsShown()"))
 check("no errors from searching", ev("#__stub.errors") == 0)
+
+
+# --- Taking things out of the bank --------------------------------------------------
+# Need 7 copper bars and 7 tin bars for 2 cuirasses. Have none in bags; the
+# bank has 5 copper bars in one tab slot and 4 + 10 in another tab, and 10 tin bars.
+run, ev = shop_client()
+run('__stub.bags[2841] = 0; __stub.bags[2840] = 0; __stub.bank[2840] = 0')
+run('''
+    __stub.PutInBank(6, 1, 2840, 5)
+    __stub.PutInBank(7, 3, 2840, 4)
+    __stub.PutInBank(7, 4, 2840, 10)
+    __stub.PutInBank(8, 1, 3576, 10)
+''')
+run('__stub.createCount = 2'); run(QUEUE + ':Click()')
+check("bank section lists what to fetch", section(ev, "From your bank") == ["|Ticon2840:0|t Copper Bar x7", "|Ticon3576:0|t Tin Bar x7"])
+TAKE = 'VendorProfit.Panel.RowButton("From your bank")'
+check("take button on the bank heading, off until the bank opens",
+      ev(TAKE + ":IsShown()") and ev(TAKE + ".__text") == "Take from bank" and not ev(TAKE + ":IsEnabled()")
+      and ev(TAKE + ".tooltip") == "Open your bank to take these out.")
+run('VendorProfit.Panel.Hide()')
+run('__stub.OpenBank()')
+check("opening the bank opens the panel when there's something to fetch", ev("VendorProfit.Panel.IsShown()"))
+check("docked beside the bank", ev("VendorProfitPanel.__point[2] == BankFrame"))
+moves = ev("(VendorProfit.Banker.PlanMoves({ { itemID = 2840, quantity = 7 }, { itemID = 3576, quantity = 7 } }))")
+mv = [(m.bag, m.slot, m.itemID, m.quantity) for m in moves.values()]
+check("plans exact amounts, smallest stacks first", mv == [(7, 3, 2840, 4), (6, 1, 2840, 3), (8, 1, 3576, 7)])
+check("take button on once the bank is open", ev(TAKE + ":IsEnabled()"))
+run(TAKE + ':Click()')
+check("moving", ev("VendorProfit.Banker.IsMoving()") and ev(TAKE + ".__text") == "Taking...")
+run('__stub.Advance(2)')
+check("moved exactly: 7 copper bars and 7 tin bars into the bags", ev("__stub.bags[2840]") == 7 and ev("__stub.bags[3576]") == 7)
+check("rest stays in the bank", ev("__stub.bank[2840]") == 12 and ev("__stub.bank[3576]") == 3)
+check("split, not whole stacks", [tuple(x.values()) for x in ev("__stub.splits").values()] == [(7, 3, 4), (6, 1, 3), (8, 1, 7)])
+check("says it's done", any("Took everything from the bank" in l for l in lines(ev)))
+run('__stub.Fire("BAG_UPDATE_DELAYED")')
+check("bank section gone, items now from bags", section(ev, "From your bank") is None
+      and section(ev, "From your bags") == ["|Ticon2840:0|t Copper Bar x7", "|Ticon3576:0|t Tin Bar x7"])
+run('__stub.CloseBank()')
+check("closes with the bank it opened for", not ev("VendorProfit.Panel.IsShown()"))
+check("no errors from the bank", ev("#__stub.errors") == 0)
+
+# Waiting for locks, full bags, missing items, bank closing.
+run, ev = shop_client()
+run('__stub.bags[2841] = 0; __stub.bags[2840] = 0; __stub.bank[2840] = 0')
+run('__stub.PutInBank(6, 1, 2840, 3); __stub.PutInBank(6, 2, 2840, 3)')
+run('__stub.OpenBank()')
+run('__stub.lockMoves = true')
+run('VendorProfit.Banker.Withdraw({ { itemID = 2840, quantity = 6 } })')
+run('__stub.Advance(1)')
+check("waits while the moved item is locked", ev("#__stub.splits") == 1 and ev("VendorProfit.Banker.IsMoving()"))
+run('__stub.containers[0][1].locked = false; __stub.lockMoves = false; __stub.Advance(1)')
+check("then does the next move", ev("#__stub.splits") == 2 and ev("__stub.bags[2840]") == 6)
+run('__stub.Advance(1)')
+check("into a different bag slot", ev("__stub.containers[0][2].count") == 3)
+
+run, ev = shop_client()
+run('__stub.PutInBank(6, 1, 2840, 3)')
+run('__stub.FillBags(); __stub.OpenBank()')
+run('VendorProfit.Banker.Withdraw({ { itemID = 2840, quantity = 3 } })'); run('__stub.Advance(1)')
+check("full bags: stops and says so", not ev("VendorProfit.Banker.IsMoving()") and ev("(VendorProfit.Banker.Message())") == "Your bags are full.")
+
+run, ev = shop_client()
+run('__stub.PutInBank(6, 1, 2840, 2); __stub.OpenBank()')
+run('VendorProfit.Banker.Withdraw({ { itemID = 2840, quantity = 5 } })'); run('__stub.Advance(1)')
+check("takes what's there and says some wasn't", ev("__stub.bags[2840]") == 3 + 2
+      and ev("(VendorProfit.Banker.Message())") == "Took what was there; some of it wasn't in the bank.")
+run('VendorProfit.Banker.Withdraw({ { itemID = 9999, quantity = 1 } })')
+check("nothing of it in the bank: says so", ev("(VendorProfit.Banker.Message())") == "None of these are in the bank.")
+
+run, ev = shop_client()
+run('__stub.PutInBank(6, 1, 2840, 2); __stub.PutInBank(6, 2, 2840, 2); __stub.OpenBank()')
+run('VendorProfit.Banker.Withdraw({ { itemID = 2840, quantity = 4 } })')
+run('__stub.CloseBank(); __stub.Advance(1)')
+check("bank closing mid-way stops", not ev("VendorProfit.Banker.IsMoving()") and ev("#__stub.splits") == 1)
+run('VendorProfit.Banker.Withdraw({ { itemID = 2840, quantity = 1 } })')
+check("can't take with the bank closed", ev("#__stub.splits") == 1)
+check("no errors from bank edge cases", ev("#__stub.errors") == 0)
 
 print()
 failed = [label for label, ok in results if not ok]
