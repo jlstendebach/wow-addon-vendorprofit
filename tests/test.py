@@ -244,16 +244,22 @@ tip = ev("__stub.HoverRoute()")
 check("tooltip titled", tip.startswith("Cheapest Route"))
 check("tooltip root: the crafted item and route cost", "Rough Bronze Cuirass x1 | |cffffffff4s 38c|r" in tip)
 check("tooltip: bronze bars crafted in Mining, 2 per craft",
-      "    |Ticon2841:0|t Bronze Bar x7 | |cff20ff20craft (Mining, makes 2)|r  |cffffffff4s 38c|r" in tip)
+      "    |Ticon2841:0|t Bronze Bar x7 | |cff20ff20craft (Mining, makes 2)|r  |cffffffff4s 38c|r  |cff20ff20saves 8s 1c|r" in tip)
 check("tooltip: copper bars nested under bronze bars",
-      "        |Ticon2840:0|t Copper Bar x3.5 | |cff20ff20craft (Mining)|r  |cffffffff1s 75c|r" in tip)
+      "        |Ticon2840:0|t Copper Bar x3.5 | |cff20ff20craft (Mining)|r  |cffffffff1s 75c|r  |cff20ff20saves 70c|r" in tip)
 check("tooltip: copper ore nested under copper bars",
       "            |Ticon2770:0|t Copper Ore x3.5 | buy (auction)  |cffffffff1s 75c|r" in tip)
-check("tooltip: tin bars bought", "        |Ticon3576:0|t Tin Bar x3.5 | buy (auction)  |cffffffff2s 63c|r" in tip)
+check("tooltip: tin bars bought, no saving shown", "        |Ticon3576:0|t Tin Bar x3.5 | buy (auction)  |cffffffff2s 63c|r\n" in tip)
+r_ = ev("VendorProfit.RouteSection.Calculate(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm))")
+check("crafted steps know their buy price", r_.route.children[1].node.buyCost == 177)
 check("tooltip doesn't repeat the section's numbers", "Crafting cost" not in tip and "Vendor profit" not in tip)
 check("tooltip: Auctionator's cost and the saving",
       "Auctionator's To Craft | |cffffffff12s 39c|r" in tip and "Saves | |cffffffff8s 1c|r" in tip)
 check("tooltip: which professions it used", "Uses your recipes from: Blacksmithing, Mining." in tip)
+run('__stub.auctionPrices[2840] = nil; AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
+check("crafted item with no buy price: no saving shown",
+      "        |Ticon2840:0|t Copper Bar x3.5 | |cff20ff20craft (Mining)|r  |cffffffff1s 75c|r\n" in ev("__stub.HoverRoute()"))
+run('__stub.auctionPrices[2840] = 70; AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
 run(SECTION + '.hover.__scripts.OnLeave()')
 check("tooltip hides on leave", not ev("GameTooltip.shown"))
 

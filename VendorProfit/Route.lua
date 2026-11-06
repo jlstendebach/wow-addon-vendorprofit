@@ -11,6 +11,8 @@
 --   children   for "craft": { { node = ..., perUnit = n, quantity = n }, ... }:
 --              perUnit is how many of that reagent one of this item takes,
 --              quantity how many one craft takes
+--   buyCost    the cheapest price to buy one (vendor or auction), or nil;
+--              for "craft", what crafting is compared against
 --   missing    true if a reagent somewhere below has no price and was
 --              counted as free, so unitCost is too low
 --
@@ -110,6 +112,7 @@ function Resolve(itemID, visiting, depth, getBuyPrices)
         end
         visiting[itemID] = nil
     end
+    best.buyCost = (vendor and auction) and math.min(vendor, auction) or vendor or auction
     return best
 end
 

@@ -7,7 +7,8 @@
 --     Profit:         auction price x number made x (1 - AH cut) - route cost
 --     Vendor Profit:  vendor sell price x number made - route cost
 --
--- Hovering the section shows the route as a tree.
+-- Hovering the section shows the route as a tree, with how much each crafted
+-- step saves over buying that item outright.
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -113,6 +114,20 @@ local function NodeCost(node, quantity)
     return VendorProfit.FormatMoney(node.unitCost * quantity)
 end
 
+-- For a crafted step: how much crafting it saves over buying that many
+-- outright, everything under it done the cheapest way. Empty if it can't be
+-- bought or there's nothing to compare.
+local function Savings(node, quantity)
+    if node.source ~= "craft" or node.buyCost == nil or node.unitCost == nil then
+        return ""
+    end
+    local saves = Round(node.buyCost * quantity) - Round(node.unitCost * quantity)
+    if saves <= 0 then
+        return ""
+    end
+    return "  " .. GREEN_FONT_COLOR:WrapTextInColorCode(string.format(L.SAVES_STEP, GetMoneyString(saves, true)))
+end
+
 -- One row per reagent, children indented under the items they're crafted
 -- into.
 local function AddRows(tooltip, children, quantity, depth, showTooltip)
@@ -120,7 +135,7 @@ local function AddRows(tooltip, children, quantity, depth, showTooltip)
         local node, amount = child.node, child.perUnit * quantity
         tooltip:AddDoubleLine(
             string.rep(INDENT, depth) .. ItemLabel(node.itemID, amount, showTooltip),
-            SourceLabel(node) .. "  " .. NodeCost(node, amount),
+            SourceLabel(node) .. "  " .. NodeCost(node, amount) .. Savings(node, amount),
             1, 1, 1, 1, 1, 1
         )
         if node.source == "craft" then

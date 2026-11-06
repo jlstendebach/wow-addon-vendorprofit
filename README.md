@@ -74,11 +74,13 @@ Profit uses Auctionator's auction price for the crafted item, like Auctionator's
 ```
 Cheapest Route
 Rough Bronze Cuirass x1                                  4s 38c
-    Bronze Bar x7      craft (Mining, makes 2)           4s 38c
-        Copper Bar x3.5    craft (Mining)                1s 75c
+    Bronze Bar x7      craft (Mining, makes 2)           4s 38c   saves 8s 1c
+        Copper Bar x3.5    craft (Mining)                1s 75c   saves 70c
             Copper Ore x3.5    buy (auction)             1s 75c
         Tin Bar x3.5       buy (auction)                 2s 63c
 ```
+
+**saves** on a crafted step is how much crafting it saves over buying that many outright, with everything under it done the cheapest way. It's what skipping that step would cost: here, buying Copper Bars instead of smelting them costs 70c more per cuirass. Steps that can't be bought show no saving.
 
 How costs are worked out:
 

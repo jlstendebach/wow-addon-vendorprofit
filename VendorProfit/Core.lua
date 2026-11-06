@@ -41,6 +41,7 @@ VendorProfit.L = {
     SOURCE_AUCTION = "buy (auction)",
     SOURCE_CRAFT = "craft",
     MAKES = "makes %d",
+    SAVES_STEP = "saves %s",
     SOURCE_NONE = "no price",
     AUCTIONATOR_COST = "Auctionator's To Craft",
     SAVES = "Saves",
