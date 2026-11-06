@@ -493,9 +493,25 @@ run('__stub.bags[2770] = 0; __stub.bags[2840] = 27; __stub.Fire("BAG_UPDATE_DELA
 check("crafted copper bars: their step goes, nothing to buy",
       not has_line(ev, "Copper Bar x24") and ev("#VendorProfit.Shopper.Summary().plan.buyOrder") == 0)
 
+# Moving the panel.
+check("panel can be dragged", ev("VendorProfitPanel.__movable") and ev("VendorProfitPanel.__drag[1]") == "LeftButton")
+run('__stub.Drag(VendorProfitPanel, 300, 700)')
+check("moved position saved", ev("VendorProfitCharDB.panel.left") == 300 and ev("VendorProfitCharDB.panel.top") == 700)
+check("not left in the game's layout cache", ev("VendorProfitPanel.__userPlaced") is False)
+run('VendorProfit.Panel.Hide(); VendorProfit.Panel.Show()')
+check("reopens where it was moved, not docked",
+      ev("VendorProfitPanel.__point[1]") == "TOPLEFT" and ev("VendorProfitPanel.__point[2] == UIParent")
+      and ev("VendorProfitPanel.__point[4]") == 300 and ev("VendorProfitPanel.__point[5]") == 700)
+
 # Closing the auction house.
 run('__stub.CloseAH()')
 check("panel closes with the auction house", not ev("VendorProfit.Panel.IsShown()"))
+run('__stub.OpenAH()')
+check("moved panel opens with the AH where it was left", ev("VendorProfit.Panel.IsShown()") and ev("VendorProfitPanel.__point[2] == UIParent"))
+run('SlashCmdList.VENDORPROFIT("reset")')
+check("/vprofit reset docks it again", ev("VendorProfitCharDB.panel") is None and ev("VendorProfitPanel.__point[2] == AuctionHouseFrame"))
+run('__stub.CloseAH()')
+check("...and it still closes with the auction house", not ev("VendorProfit.Panel.IsShown()"))
 run('VendorProfit.Panel.Show()')
 check("reopened away from the AH: docked to the professions window", ev("VendorProfitPanel.__point[2] == ProfessionsFrame"))
 click(run, "clear")

@@ -3,7 +3,9 @@
 --
 -- It docks beside the auction house when that's open (and opens there by
 -- itself if something is queued), otherwise beside the professions window.
--- /vprofit or /vendorprofit toggles it.
+-- Drag it to move it: from then on it opens where you left it, saved per
+-- character, until /vprofit reset docks it again. /vprofit or /vendorprofit
+-- toggles it.
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -332,6 +334,16 @@ local function Create()
     frame:SetWidth(WIDTH)
     frame:SetHeight(200)
     frame:EnableMouse(true)
+    frame:SetMovable(true)
+    frame:SetClampedToScreen(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        -- Saved by the addon, not the game's own layout cache.
+        self:SetUserPlaced(false)
+        Panel.SavePosition()
+    end)
     frame:Hide()
 
     -- Buy and Confirm call the game's purchase functions straight from the
@@ -352,18 +364,28 @@ local function Create()
     }
 end
 
-local dockedTo
+-- Where you moved the panel to: { left, top } from the screen's bottom left.
+local function SavedPosition()
+    local db = VendorProfitCharDB
+    return db and db.panel
+end
+
+function Panel.SavePosition()
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    VendorProfitCharDB.panel = { left = frame:GetLeft(), top = frame:GetTop() }
+end
+
 local function Dock()
     frame:ClearAllPoints()
-    if AuctionHouseFrame and AuctionHouseFrame:IsShown() then
+    local saved = SavedPosition()
+    if saved and saved.left and saved.top then
+        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", saved.left, saved.top)
+    elseif AuctionHouseFrame and AuctionHouseFrame:IsShown() then
         frame:SetPoint("TOPLEFT", AuctionHouseFrame, "TOPRIGHT", 4, 0)
-        dockedTo = AuctionHouseFrame
     elseif ProfessionsFrame and ProfessionsFrame:IsShown() then
         frame:SetPoint("TOPLEFT", ProfessionsFrame, "TOPRIGHT", 4, 0)
-        dockedTo = ProfessionsFrame
     else
         frame:SetPoint("CENTER", UIParent, "CENTER")
-        dockedTo = nil
     end
 end
 
@@ -394,6 +416,16 @@ end
 function Panel.Hide()
     if frame then
         frame:Hide()
+    end
+end
+
+-- Forgets where you moved it, so it docks again.
+function Panel.ResetPosition()
+    if VendorProfitCharDB then
+        VendorProfitCharDB.panel = nil
+    end
+    if frame then
+        Dock()
     end
 end
 
@@ -428,13 +460,14 @@ function Panel.Buttons()
     return frame and frame.buttons
 end
 
--- Opens with the auction house when something is queued; closes with it.
+-- Opens with the auction house when something is queued, and closes with
+-- it wherever it's been moved. /vprofit opens it again.
 local lastStatus = Shopper.Status()
 Shopper.OnChange(function()
     local status = Shopper.Status()
     if lastStatus == "closed" and status ~= "closed" and not Order.IsEmpty() then
         Panel.Show()
-    elseif status == "closed" and lastStatus ~= "closed" and dockedTo == AuctionHouseFrame then
+    elseif status == "closed" and lastStatus ~= "closed" then
         Panel.Hide()
     end
     lastStatus = status
@@ -456,4 +489,11 @@ end)
 
 SLASH_VENDORPROFIT1 = "/vprofit"
 SLASH_VENDORPROFIT2 = "/vendorprofit"
-SlashCmdList.VENDORPROFIT = Panel.Toggle
+SlashCmdList.VENDORPROFIT = function(arg)
+    if arg and arg:lower():match("^%s*reset%s*$") then
+        Panel.ResetPosition()
+        Panel.Show()
+    else
+        Panel.Toggle()
+    end
+end

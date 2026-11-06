@@ -113,6 +113,8 @@ It lists **To buy**, **From your bags and bank** (with how many are in the bank)
 
 **Mail.** Auction purchases may arrive in your mailbox rather than your bags. The order keeps its own record of what the panel bought, and counts the larger of what's in your bags and bank now, or what was there when the order started plus what it bought. So items in the mail still count, and items you craft or buy from a vendor show up as you get them. **Recount** starts the count fresh. Collect your mail first: it clears the record of purchases, which are in your bags by then.
 
+**Moving the panel.** Drag it anywhere. From then on it opens where you left it (saved per character). It still opens with the auction house when something is queued, and always closes with it; `/vprofit` opens it again. `/vprofit reset` docks it beside the auction house or professions window again.
+
 The order is saved per character. **Clear order** empties it and its record.
 
 ## How it works
@@ -138,12 +140,13 @@ Files:
 | `Order.lua` | The saved order, what it bought and spent, what it can use |
 | `QueueButton.lua` | The Queue button |
 | `Shopper.lua` | Scanning the auction house, live pricing, quotes and purchases |
-| `Panel.lua` | The shopping panel and `/vprofit` |
+| `Panel.lua` | The shopping panel, moving it, and `/vprofit` |
 
 Saved data, per character (`VendorProfitCharDB`):
 
 - `professions[professionID] = { name, recipes = { [recipeID] = { item, count, reagents } } }`
 - `order = { entries, snapshot, bought, spent }`: the queued crafts, what you had when each item was first needed, what the panel bought, and what it spent.
+- `panel = { left, top }`: where you moved the shopping panel, if you did.
 
 Shopping uses `C_AuctionHouse`: `SendSearchQuery` and the commodity search results to scan, `StartCommoditiesPurchase` for the quote (`COMMODITY_PRICE_UPDATED`), and `ConfirmCommoditiesPurchase`, called straight from the Confirm click, to buy (`COMMODITY_PURCHASE_SUCCEEDED` / `_FAILED`). Searches wait for the auction house's throttle and for the item to be loaded, are sent again if there's no reply, and ask for more results when the first page isn't enough.
 

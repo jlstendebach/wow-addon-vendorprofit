@@ -53,6 +53,24 @@ function FrameMethods:GetText() return self.__text end
 function FrameMethods:SetEnabled(e) self.__enabled = not not e end
 function FrameMethods:IsEnabled() return self.__enabled ~= false end
 function FrameMethods:SetTitle(t) self.__title = t end
+function FrameMethods:SetMovable(m) self.__movable = m end
+function FrameMethods:SetClampedToScreen() end
+function FrameMethods:RegisterForDrag(...) self.__drag = { ... } end
+function FrameMethods:SetUserPlaced(u) self.__userPlaced = u end
+-- Dragging: StartMoving, then the stub moves the frame to stub.dragTo = { left, top }.
+function FrameMethods:StartMoving() self.__moving = true end
+function FrameMethods:StopMovingOrSizing()
+    self.__moving = false
+    if stub.dragTo then self.__left, self.__top = stub.dragTo[1], stub.dragTo[2] end
+end
+function FrameMethods:GetLeft() return self.__left end
+function FrameMethods:GetTop() return self.__top end
+function stub.Drag(f, left, top)
+    stub.dragTo = { left, top }
+    f.__scripts.OnDragStart(f)
+    f.__scripts.OnDragStop(f)
+    stub.dragTo = nil
+end
 function FrameMethods:Click(...) if self.__scripts.OnClick and self:IsEnabled() then self.__scripts.OnClick(self, ...) end end
 function FrameMethods:CreateFontString()
     return setmetatable({ __shown = true, __parent = self, __text = "" }, FontMethods)
@@ -364,6 +382,7 @@ stub.ah = {
     quotePriceChange = 0, -- added to every quote's total
 }
 local ah = stub.ah
+UIParent = UIParent or CreateFrame("Frame", "UIParent")
 AuctionHouseFrame = CreateFrame("Frame", "AuctionHouseFrame")
 AuctionHouseFrame:Hide()
 
