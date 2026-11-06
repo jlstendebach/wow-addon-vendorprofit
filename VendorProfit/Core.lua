@@ -1,13 +1,16 @@
--- VendorProfit: adds a "Vendor Profit" line under Auctionator's crafting info
--- (To Craft / Profit) in the professions window. It shows what a craft makes
--- if the result is sold to a vendor instead of on the auction house:
+-- Vendor Profit for Auctionator: adds lines under Auctionator's crafting info
+-- (To Craft / Profit) in the professions window.
 --
---     vendor sell price x number made - cost to craft
+--   Vendor Profit  what the craft makes sold to a vendor (VendorLine.lua)
+--   Route Profit   what it makes using the cheapest way to get every reagent,
+--                  crafting them from your own recipes where that's cheaper
+--                  (Recipes.lua, Route.lua, RouteLine.lua)
 --
--- The cost to craft is Auctionator's own number, so the lines always agree.
--- VendorProfit only reads from Auctionator. It adds one FontString to
--- Auctionator's crafting info frame and post-hooks that frame's UpdateTotal to
--- know when to refresh. It never changes Auctionator's text, settings or data.
+-- This file holds what the lines share: prices, working out the recipe being
+-- shown, and attaching to Auctionator's frame. The addon only reads from
+-- Auctionator. It adds its own regions to Auctionator's crafting info frame
+-- and post-hooks that frame's UpdateTotal to know when to refresh. It never
+-- changes Auctionator's text, settings or data.
 
 local ADDON_NAME, ns = ...
 
@@ -21,23 +24,54 @@ VendorProfit.VERSION = C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version")
 -- window. It's created the first time the professions window opens.
 VendorProfit.AUCTIONATOR_FRAME = "AuctionatorCraftingInfoProfessionsFrame"
 
-local L = {
+-- What a seller keeps of an auction sale, if Auctionator doesn't say.
+VendorProfit.DEFAULT_AFTER_AH_CUT = 0.95
+
+VendorProfit.L = {
     VENDOR_PROFIT = "Vendor Profit:",
+    ROUTE_PROFIT = "Route Profit:",
     NO_SELL_PRICE = "can't be sold to vendors",
+    NO_SALE_PRICE = "no price to sell at",
     MISSING_PRICES = "(missing reagent prices)",
+    BY_AUCTION = "auction",
+    BY_VENDOR = "vendor",
+    ROUTE_TITLE = "Cheapest Route",
+    SOURCE_VENDOR = "buy (vendor)",
+    SOURCE_AUCTION = "buy (auction)",
+    SOURCE_CRAFT = "craft",
+    MAKES = "makes %d",
+    SOURCE_NONE = "no price",
+    CRAFTING_COST = "Crafting cost",
+    AUCTIONATOR_COST = "Auctionator's To Craft",
+    SAVES = "Saves",
+    AUCTION_PROFIT = "Auction house profit",
+    VENDOR_PROFIT_SHORT = "Vendor profit",
+    NO_AUCTION_PRICE = "no auction price",
+    RECIPES_FROM = "Uses your recipes from: %s.",
+    NO_RECIPES = "No recipes saved yet.",
+    OPEN_PROFESSIONS = "Open each profession once to add its recipes.",
 }
-VendorProfit.L = L
 
-local attachedFrame     -- Auctionator's frame, once the line is added to it
-local pendingItemLink   -- output item whose info is loading, to refresh once
+-- Prices ---------------------------------------------------------------------
 
--- Price of one reagent, the way Auctionator prices reagents: what a vendor
--- sells it for if a vendor does, otherwise its auction price. Auctionator only
--- knows vendor prices for items seen at a vendor while it was running.
-local function GetReagentPrice(itemID)
+-- What it costs to buy one: from a vendor (Auctionator only knows vendor
+-- prices for items it has seen at a vendor) and on the auction house.
+function VendorProfit.GetBuyPrices(itemID)
     local api = Auctionator.API.v1
-    return api.GetVendorPriceByItemID(ADDON_NAME, itemID)
-        or api.GetAuctionPriceByItemID(ADDON_NAME, itemID)
+    return api.GetVendorPriceByItemID(ADDON_NAME, itemID),
+        api.GetAuctionPriceByItemID(ADDON_NAME, itemID)
+end
+
+-- Price of one reagent the way Auctionator prices reagents: the vendor price
+-- if there is one, otherwise the auction price.
+function VendorProfit.GetReagentPrice(itemID)
+    local vendor, auction = VendorProfit.GetBuyPrices(itemID)
+    return vendor or auction
+end
+
+function VendorProfit.GetAfterAHCut()
+    local constants = Auctionator.Constants
+    return constants and constants.AfterAHCut or VendorProfit.DEFAULT_AFTER_AH_CUT
 end
 
 -- Walks the required reagents. Returns their total cost, cheapest option per
@@ -49,7 +83,7 @@ local function ScanReagents(recipeSchematic)
         if slot.reagentType == Enum.CraftingReagentType.Basic and #slot.reagents > 0 then
             local cheapest
             for _, reagent in ipairs(slot.reagents) do
-                local price = reagent.itemID and GetReagentPrice(reagent.itemID)
+                local price = reagent.itemID and VendorProfit.GetReagentPrice(reagent.itemID)
                 if price and price > 0 and (cheapest == nil or price < cheapest) then
                     cheapest = price
                 end
@@ -74,11 +108,15 @@ local function GetCraftCost(recipeSchematic, transaction, scannedTotal)
     return scannedTotal
 end
 
--- Works out the vendor profit for the recipe a schematic form is showing.
+-- The recipe being shown ----------------------------------------------------
+
+-- Works out what the lines need for the recipe a schematic form is showing.
 -- Returns a result table, or nil when the recipe makes no item (enchants).
---   status "ok":        profit, missingPrices, sellPrice, count and cost are set
---   status "noSell":    the item has no vendor price
---   status "loading":   item info isn't cached yet; itemLink is set
+--   status "loading":  item info isn't cached yet; only itemLink is set
+--   status "noSell":   the item has no vendor price; profit is nil
+--   status "ok":       profit is the vendor profit
+-- Every status but "loading" also has itemID, sellPrice, count, cost (the To
+-- Craft cost), missingPrices and recipeSchematic.
 function VendorProfit.Calculate(schematicForm)
     local recipeInfo = schematicForm:GetRecipeInfo()
     if recipeInfo == nil or recipeInfo.isEnchantingRecipe then
@@ -106,73 +144,79 @@ function VendorProfit.Calculate(schematicForm)
     if sellPrice == nil then
         return { status = "loading", itemLink = itemLink }
     end
-    if sellPrice == 0 then
-        return { status = "noSell", itemLink = itemLink }
-    end
 
     local scannedTotal, missing = ScanReagents(recipeSchematic)
     local cost = GetCraftCost(recipeSchematic, transaction, scannedTotal)
     -- Same count Auctionator's Profit line uses: the guaranteed minimum.
     local count = math.max(recipeSchematic.quantityMin or 1, 1)
 
-    return {
-        status = "ok",
+    local result = {
+        status = sellPrice > 0 and "ok" or "noSell",
         itemLink = itemLink,
+        itemID = recipeSchematic.outputItemID or C_Item.GetItemInfoInstant(itemLink),
         sellPrice = sellPrice,
         count = count,
         cost = cost,
-        profit = sellPrice * count - cost,
         missingPrices = missing,
+        recipeSchematic = recipeSchematic,
     }
+    if sellPrice > 0 then
+        result.profit = sellPrice * count - cost
+    end
+    return result
 end
 
--- The line's text for a result, styled like Auctionator's Profit line.
-function VendorProfit.FormatLine(result)
-    local value
-    if result.status == "noSell" then
-        value = GRAY_FONT_COLOR:WrapTextInColorCode(L.NO_SELL_PRICE)
-    elseif result.profit >= 0 then
-        value = WHITE_FONT_COLOR:WrapTextInColorCode(GetMoneyString(result.profit, true))
-    else
-        value = RED_FONT_COLOR:WrapTextInColorCode("-" .. GetMoneyString(-result.profit, true))
+-- Money text styled like Auctionator's Profit line: white, or red with a
+-- minus for a loss.
+function VendorProfit.FormatMoney(copper)
+    copper = math.floor(copper + 0.5)
+    if copper >= 0 then
+        return WHITE_FONT_COLOR:WrapTextInColorCode(GetMoneyString(copper, true))
     end
-
-    local text = L.VENDOR_PROFIT .. " " .. value
-    if result.missingPrices then
-        text = text .. " " .. RED_FONT_COLOR:WrapTextInColorCode(L.MISSING_PRICES)
-    end
-    return text
+    return RED_FONT_COLOR:WrapTextInColorCode("-" .. GetMoneyString(-copper, true))
 end
+
+-- Lines -----------------------------------------------------------------------
+
+-- Each line module has:
+--   Create(frame, anchor)  adds its regions to Auctionator's frame under
+--                          anchor (the region above it); returns its bottom
+--                          region for the next line to anchor to
+--   Refresh(frame, result) updates from VendorProfit.Calculate's result, or
+--                          hides when result is nil
+-- Lines appear in the order they're added.
+local lines = {}
+function VendorProfit.AddLine(line)
+    lines[#lines + 1] = line
+end
+
+local attachedFrame     -- Auctionator's frame, once the lines are added to it
+local pendingItemLink   -- output item whose info is loading, to refresh once
 
 local function Refresh(frame)
-    local line = frame.VendorProfitLine
     local result = VendorProfit.Calculate(frame:GetParent())
 
-    if result == nil then
-        line:Hide()
-        return
-    end
-
-    if result.status == "loading" then
+    if result and result.status == "loading" then
         -- Hide until the item's info arrives, then refresh once.
-        line:Hide()
-        if pendingItemLink ~= result.itemLink then
-            pendingItemLink = result.itemLink
-            Item:CreateFromItemLink(result.itemLink):ContinueOnItemLoad(function()
-                if pendingItemLink == result.itemLink then
+        local itemLink = result.itemLink
+        result = nil
+        if pendingItemLink ~= itemLink then
+            pendingItemLink = itemLink
+            Item:CreateFromItemLink(itemLink):ContinueOnItemLoad(function()
+                if pendingItemLink == itemLink then
                     pendingItemLink = nil
                     VendorProfit.Refresh()
                 end
             end)
         end
-        return
     end
 
-    line:SetText(VendorProfit.FormatLine(result))
-    line:Show()
+    for _, line in ipairs(lines) do
+        line.Refresh(frame, result)
+    end
 end
 
--- Refreshes the line now. Errors are reported but never passed back up into
+-- Refreshes the lines now. Errors are reported but never passed back up into
 -- Auctionator's or Blizzard's code that triggered the refresh.
 function VendorProfit.Refresh()
     local frame = attachedFrame
@@ -185,14 +229,13 @@ end
 local function Attach(frame)
     attachedFrame = frame
 
-    -- Sits under Auctionator's text, in the same font, so it reads as one
-    -- more line of it. As a child of Auctionator's frame it shows and hides
+    -- Lines sit under Auctionator's text, in the same font, so they read as
+    -- more lines of it. As children of Auctionator's frame they show and hide
     -- with it.
-    local line = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    line:SetJustifyH("LEFT")
-    line:SetPoint("TOPLEFT", frame.Total, "BOTTOMLEFT", 0, -2)
-    line:Hide()
-    frame.VendorProfitLine = line
+    local anchor = frame.Total
+    for _, line in ipairs(lines) do
+        anchor = line.Create(frame, anchor)
+    end
 
     -- Auctionator calls UpdateTotal whenever the recipe, its reagents or its
     -- prices change, so refreshing right after it keeps both in step.
@@ -218,7 +261,8 @@ end
 
 -- Auctionator makes its frame on TRADE_SKILL_SHOW. Hooking the function that
 -- makes it attaches right after, whichever addon sees the event first. The
--- event is a backup in case Auctionator renames that function.
+-- event is a backup in case Auctionator renames that function. Attaching only
+-- happens at these events, after every file of the addon has loaded.
 if Auctionator.CraftingInfo and Auctionator.CraftingInfo.InitializeProfessionsFrame then
     hooksecurefunc(Auctionator.CraftingInfo, "InitializeProfessionsFrame", VendorProfit.TryAttach)
 end

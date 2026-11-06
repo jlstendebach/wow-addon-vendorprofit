@@ -4,11 +4,13 @@ local stub = {}
 _G.__stub = stub
 
 stub.metadata = {}
-stub.items = {}          -- itemLink -> { sellPrice = n } ; cached = true when loaded
-stub.loadCallbacks = {}  -- itemLink -> { fn, ... }
+stub.items = {}          -- "item:<id>" -> { sellPrice = n, cached = bool, name = s }
+stub.loadCallbacks = {}  -- "item:<id>" -> { fn, ... }
 stub.timers = {}
 stub.errors = {}
 stub.recipe = nil        -- what the schematic form is showing (see SetRecipe)
+stub.recipes = {}        -- recipeID -> recipe, for the open profession window
+stub.profession = nil    -- the open profession window (see OpenProfession)
 local eventFrames = {}
 
 -- Frames and font strings ---------------------------------------------------
@@ -34,8 +36,12 @@ function FrameMethods:IsVisible()
     return true
 end
 function FrameMethods:RegisterEvent(e) self.__events[e] = true end
+function FrameMethods:UnregisterEvent(e) self.__events[e] = nil end
 function FrameMethods:UnregisterAllEvents() self.__events = {} end
 function FrameMethods:SetScript(k, fn) self.__scripts[k] = fn end
+function FrameMethods:GetScript(k) return self.__scripts[k] end
+function FrameMethods:SetAllPoints(r) self.__allPoints = r end
+function FrameMethods:EnableMouse(e) self.__mouse = e end
 function FrameMethods:CreateFontString()
     return setmetatable({ __shown = true, __parent = self, __text = "" }, FontMethods)
 end
@@ -61,6 +67,16 @@ function stub.RunTimers()
     for _, fn in ipairs(t) do fn() end
 end
 
+-- Tooltip -------------------------------------------------------------------
+GameTooltip = { lines = {}, shown = false }
+function GameTooltip:SetOwner(owner) self.owner = owner; self.lines = {} end
+function GameTooltip:SetText(t) self.lines = { { left = t } } end
+function GameTooltip:AddLine(t) self.lines[#self.lines + 1] = { left = t } end
+function GameTooltip:AddDoubleLine(l, r) self.lines[#self.lines + 1] = { left = l, right = r } end
+function GameTooltip:Show() self.shown = true end
+function GameTooltip:Hide() self.shown = false; self.owner = nil end
+function GameTooltip:IsOwned(f) return self.shown and self.owner == f end
+
 -- Globals -------------------------------------------------------------------
 function hooksecurefunc(tbl, name, hook)
     if type(tbl) == "string" then tbl, name, hook = _G, tbl, name end
@@ -80,12 +96,14 @@ C_AddOns = { GetAddOnMetadata = function(addon, key) return stub.metadata[addon]
 C_Timer = { After = function(_, fn) stub.timers[#stub.timers + 1] = fn end }
 Enum = { CraftingReagentType = { Basic = 0, Optional = 1 } }
 
-local function Color(code)
-    return { WrapTextInColorCode = function(_, t) return "|cff" .. code .. t .. "|r" end }
+local function Color(code, r, g, b)
+    return { r = r, g = g, b = b, WrapTextInColorCode = function(_, t) return "|cff" .. code .. t .. "|r" end }
 end
-WHITE_FONT_COLOR, RED_FONT_COLOR, GRAY_FONT_COLOR = Color("ffffff"), Color("ff2020"), Color("808080")
+WHITE_FONT_COLOR, RED_FONT_COLOR = Color("ffffff", 1, 1, 1), Color("ff2020", 1, 0.125, 0.125)
+GRAY_FONT_COLOR, GREEN_FONT_COLOR = Color("808080", 0.5, 0.5, 0.5), Color("20ff20", 0.125, 1, 0.125)
 
 function GetMoneyString(copper)
+    assert(copper == math.floor(copper), "GetMoneyString needs whole copper, got " .. tostring(copper))
     local g, s, c = math.floor(copper / 10000), math.floor(copper / 100) % 100, copper % 100
     local parts = {}
     if g > 0 then parts[#parts + 1] = g .. "g" end
@@ -94,25 +112,36 @@ function GetMoneyString(copper)
     return table.concat(parts, " ")
 end
 
+local function ToLink(x) return type(x) == "number" and ("item:" .. x) or x end
+local function ToID(x) return type(x) == "number" and x or tonumber(tostring(x):match("item:(%d+)")) end
+stub.ToID = ToID
+
 C_Item = {
-    GetItemInfo = function(link)
+    GetItemInfo = function(x)
+        local link = ToLink(x)
         local item = stub.items[link]
         if item == nil or not item.cached then return nil end
-        return link, link, 2, 20, 0, "Armor", "Mail", 1, "INVTYPE_CHEST", 0, item.sellPrice
+        return item.name or link, link, 2, 20, 0, "Armor", "Mail", 1, "INVTYPE_CHEST", 0, item.sellPrice or 0
+    end,
+    GetItemInfoInstant = function(x)
+        local id = ToID(x)
+        return id, "Armor", "Mail", "INVTYPE_CHEST", "icon" .. id
     end,
 }
 
+local function ItemObject(link)
+    return {
+        ContinueOnItemLoad = function(_, fn)
+            local item = stub.items[link]
+            if item and item.cached then fn() return end
+            stub.loadCallbacks[link] = stub.loadCallbacks[link] or {}
+            table.insert(stub.loadCallbacks[link], fn)
+        end,
+    }
+end
 Item = {
-    CreateFromItemLink = function(_, link)
-        return {
-            ContinueOnItemLoad = function(_, fn)
-                local item = stub.items[link]
-                if item and item.cached then fn() return end
-                stub.loadCallbacks[link] = stub.loadCallbacks[link] or {}
-                table.insert(stub.loadCallbacks[link], fn)
-            end,
-        }
-    end,
+    CreateFromItemLink = function(_, link) return ItemObject(link) end,
+    CreateFromItemID = function(_, id) return ItemObject(ToLink(id)) end,
 }
 
 function stub.LoadItem(link)
@@ -124,26 +153,73 @@ end
 
 -- Professions window ---------------------------------------------------------
 -- recipe = { recipeID, itemLink (nil = no item output), isEnchant, quantityMin,
---            reagents = { { itemID, quantity }, ... } }
+--            learned (default true),
+--            reagents = { { itemID, quantity, optional, options = { more itemIDs } }, ... } }
+local function Schematic(r)
+    local slots = {}
+    for _, reagent in ipairs(r.reagents) do
+        local options = { { itemID = reagent.itemID } }
+        for _, id in ipairs(reagent.options or {}) do options[#options + 1] = { itemID = id } end
+        slots[#slots + 1] = {
+            reagentType = reagent.optional and Enum.CraftingReagentType.Optional or Enum.CraftingReagentType.Basic,
+            quantityRequired = reagent.quantity,
+            reagents = options,
+        }
+    end
+    return {
+        recipeID = r.recipeID,
+        outputItemID = r.itemLink and ToID(r.itemLink),
+        quantityMin = r.quantityMin, quantityMax = r.quantityMin,
+        reagentSlotSchematics = slots,
+    }
+end
+
+local function FindRecipe(recipeID)
+    if stub.recipe and stub.recipe.recipeID == recipeID then return stub.recipe end
+    return stub.recipes[recipeID]
+end
+
+stub.tradeSkill = { ready = true, linked = false, guild = false, npc = false, changing = false }
 C_TradeSkillUI = {
     GetRecipeSchematic = function(recipeID)
-        local r = stub.recipe
-        if r == nil or r.recipeID ~= recipeID then return nil end
-        local slots = {}
-        for _, reagent in ipairs(r.reagents) do
-            slots[#slots + 1] = {
-                reagentType = reagent.optional and Enum.CraftingReagentType.Optional or Enum.CraftingReagentType.Basic,
-                quantityRequired = reagent.quantity,
-                reagents = { { itemID = reagent.itemID } },
-            }
-        end
-        return { recipeID = recipeID, quantityMin = r.quantityMin, quantityMax = r.quantityMin, reagentSlotSchematics = slots }
+        local r = FindRecipe(recipeID)
+        return r and Schematic(r)
     end,
     GetRecipeOutputItemData = function(recipeID)
-        local r = stub.recipe
+        local r = FindRecipe(recipeID)
         return { hyperlink = r and r.itemLink }
     end,
+    GetRecipeInfo = function(recipeID)
+        local r = FindRecipe(recipeID)
+        if r == nil then return nil end
+        return { recipeID = recipeID, learned = r.learned ~= false, isEnchantingRecipe = r.isEnchant or false }
+    end,
+    GetAllRecipeIDs = function()
+        local ids = {}
+        for id in pairs(stub.recipes) do ids[#ids + 1] = id end
+        table.sort(ids)
+        return ids
+    end,
+    GetFilteredRecipeIDs = function()
+        return stub.filteredRecipeIDs or C_TradeSkillUI.GetAllRecipeIDs()
+    end,
+    GetBaseProfessionInfo = function() return stub.profession end,
+    IsTradeSkillReady = function() return stub.tradeSkill.ready end,
+    IsDataSourceChanging = function() return stub.tradeSkill.changing end,
+    IsTradeSkillLinked = function() return stub.tradeSkill.linked end,
+    IsTradeSkillGuild = function() return stub.tradeSkill.guild end,
+    IsNPCCrafting = function() return stub.tradeSkill.npc end,
 }
+
+-- Opens a profession window with these recipes and lets the addon save them.
+function stub.OpenProfession(id, name, recipes)
+    stub.profession = { professionID = id, professionName = name }
+    stub.recipes = {}
+    for _, r in ipairs(recipes) do stub.recipes[r.recipeID] = r end
+    stub.Fire("TRADE_SKILL_SHOW")
+    stub.Fire("TRADE_SKILL_LIST_UPDATE")
+    stub.RunTimers()
+end
 
 local transaction = {
     CreateCraftingReagentInfoTbl = function() return {} end,
@@ -166,20 +242,23 @@ stub.auctionPrices = {}  -- itemID -> copper
 stub.vendorPrices = {}   -- itemID -> copper (what a vendor sells it for)
 stub.craftCostOverride = nil
 
-Auctionator = { API = { v1 = {} }, CraftingInfo = {} }
+Auctionator = { API = { v1 = {} }, CraftingInfo = {}, Constants = { AfterAHCut = 0.95 } }
 local function verify(callerID)
     if type(callerID) ~= "string" or callerID == "" then error("Invalid callerID. Use the name of your add-on.") end
 end
 function Auctionator.API.v1.GetAuctionPriceByItemID(callerID, itemID) verify(callerID) return stub.auctionPrices[itemID] end
+function Auctionator.API.v1.GetAuctionPriceByItemLink(callerID, link) verify(callerID) return stub.auctionPrices[ToID(link)] end
 function Auctionator.API.v1.GetVendorPriceByItemID(callerID, itemID) verify(callerID) return stub.vendorPrices[itemID] end
 
 function Auctionator.CraftingInfo.CalculateCraftCost(recipeSchematic)
     if stub.craftCostOverride then return stub.craftCostOverride end
     local total = 0
     for _, slot in ipairs(recipeSchematic.reagentSlotSchematics) do
-        local id = slot.reagents[1].itemID
-        local price = stub.vendorPrices[id] or stub.auctionPrices[id] or 0
-        total = total + price * slot.quantityRequired
+        if slot.reagentType == Enum.CraftingReagentType.Basic then
+            local id = slot.reagents[1].itemID
+            local price = stub.vendorPrices[id] or stub.auctionPrices[id] or 0
+            total = total + price * slot.quantityRequired
+        end
     end
     return total
 end
@@ -211,4 +290,15 @@ function stub.SetRecipe(r)
         f:SetShown(r ~= nil)
         if f:IsVisible() then f:UpdateTotal() end
     end
+end
+
+-- Hovers the route line: returns the tooltip's lines as "left | right".
+function stub.HoverRoute()
+    local hover = AuctionatorCraftingInfoProfessionsFrame.VendorProfitRouteHover
+    hover.__scripts.OnEnter(hover)
+    local out = {}
+    for _, l in ipairs(GameTooltip.lines) do
+        out[#out + 1] = l.right and (l.left .. " | " .. l.right) or l.left
+    end
+    return table.concat(out, "\n")
 end
