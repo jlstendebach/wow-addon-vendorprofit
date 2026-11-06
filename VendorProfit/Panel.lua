@@ -1,5 +1,6 @@
 -- The shopping panel: the queued order, what to buy, what you already have,
--- what to craft, the order's profit, and the scan, buy and craft buttons.
+-- what to craft and the order's profit. Buying, crafting and taking from the
+-- bank are buttons on their sections' headings.
 --
 -- It docks beside the auction house when that's open (and opens there by
 -- itself if something is queued), otherwise beside the professions window.
@@ -27,8 +28,11 @@ local ROW_HEIGHT = 15
 local HEADING_HEIGHT = 20
 local BUTTON_HEIGHT = 22
 
+local HEADING_BUTTON_WIDTH = 120
+
 local frame
 local rows = {}
+local craftCover        -- { button, profession } when Then craft's button opens a profession
 local usedRows = 0
 local y
 
@@ -103,7 +107,9 @@ local function AddRow(kind, left, right, button)
     row.left:SetFontObject(kind == "heading" and "GameFontNormal" or "GameFontHighlightSmall")
     row.left:ClearAllPoints()
     row.left:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
-    row.left:SetText(kind == "note" and Gray(left) or left)
+    -- Notes are gray unless they bring their own color.
+    local plain = kind == "note" and not left:find("^|c")
+    row.left:SetText(plain and Gray(left) or left)
     row.left:SetWordWrap(kind == "note")
     row.left:SetWidth(kind == "note" and (WIDTH - 2 * PADDING) or (WIDTH * 0.55))
     row.left:Show()
@@ -120,6 +126,7 @@ local function AddRow(kind, left, right, button)
         row.button:SetWidth(buttonWidth)
         row.button:SetText(button.text)
         row.button:SetScript("OnClick", button.onClick)
+        row.button:SetScript("OnMouseDown", button.onMouseDown)
         row.button:SetEnabled(button.enabled ~= false)
         row.button.tooltip = button.tooltip
         row.button:Show()
@@ -129,8 +136,11 @@ local function AddRow(kind, left, right, button)
 
     if kind == "note" then
         height = math.max(ROW_HEIGHT, (row.left:GetStringHeight() or 0) + 3)
+    elseif button then
+        height = math.max(height, 20)
     end
     y = y - height
+    return row
 end
 
 local function HideUnusedRows()
@@ -189,6 +199,96 @@ function Panel.SplitUses(uses)
     return fromBags, fromMail, fromBank
 end
 
+-- What clicking the To buy heading's button does, by status.
+local function BuyClick()
+    local status = Shopper.Status()
+    if status == "idle" then
+        Shopper.Scan()
+    elseif status == "confirm" then
+        Shopper.Confirm()
+    else
+        Shopper.Buy()
+    end
+end
+
+-- The To buy heading's button: { text, enabled, tooltip, onClick }, or nil
+-- when there's nothing to buy. Labels are short; the tooltip has the detail.
+-- Buy and Confirm call the game's purchase functions straight from the
+-- click, which is the only way the game allows purchases.
+local function BuyButton(plan)
+    local status = Shopper.Status()
+    local button = { onClick = BuyClick, enabled = false, width = HEADING_BUTTON_WIDTH }
+    if #plan.buyOrder == 0 and status ~= "quoting" and status ~= "confirm" and status ~= "buying" then
+        return nil
+    elseif status == "closed" then
+        button.text, button.tooltip = L.BUY_OPEN_AH, L.BUY_OPEN_AH_HELP
+    elseif status == "idle" then
+        button.text, button.tooltip, button.enabled = L.SCAN, L.BUY_SCAN_HELP, true
+    elseif status == "scanning" then
+        local done, total = Shopper.ScanProgress()
+        button.text, button.tooltip = L.BUY_SCANNING, string.format(L.BUTTON_SCANNING, math.min(done + 1, total), total)
+    elseif status == "quoting" then
+        button.text, button.tooltip = L.BUY_PRICING, L.BUTTON_QUOTING
+    elseif status == "buying" then
+        button.text, button.tooltip = L.BUY_BUYING, L.BUTTON_BUYING
+    elseif status == "confirm" then
+        local p = Shopper.Purchase()
+        button.text, button.enabled = L.BUY_CONFIRM, true
+        button.tooltip = string.format(L.BUTTON_CONFIRM, p.quantity, ItemName(p.itemID), Money(p.quote))
+    else
+        local nextPurchase = Shopper.NextPurchase()
+        button.text = L.BUY_BUY
+        if nextPurchase == nil then
+            button.tooltip = L.BUTTON_NOTHING
+        elseif not Shopper.IsProfitable() and not Shopper.IsOverridden() then
+            button.tooltip = L.BUTTON_NOT_PROFITABLE
+        else
+            button.enabled = true
+            button.tooltip = string.format(L.BUTTON_BUY, nextPurchase.quantity, ItemName(nextPurchase.itemID), Money(nextPurchase.budget))
+        end
+    end
+    return button
+end
+
+-- The Then craft heading's button: { text, enabled, tooltip, onClick,
+-- onMouseDown }, plus the next step (to mark in the list) and, when the next
+-- step is in a profession that isn't open, that profession (OpenButton.lua
+-- covers the button to open it).
+local function CraftButton()
+    local button = {
+        width = HEADING_BUTTON_WIDTH, enabled = false,
+        -- Mouse down prepares, the click crafts: see Crafter.lua.
+        onClick = function() Crafter.Craft() end, onMouseDown = Crafter.Prepare,
+    }
+    if Crafter.IsCasting() then
+        button.text = L.CRAFTING
+        return button
+    end
+    local nextCraft = Crafter.Next()
+    if nextCraft == nil then
+        return nil
+    end
+    local name = ItemName(nextCraft.step.itemID)
+    if nextCraft.open then
+        button.text = string.format(L.OPEN_LABEL, nextCraft.open)
+        if InCombatLockdown() then
+            button.tooltip = string.format(L.OPEN_AFTER_COMBAT, nextCraft.open, name)
+            return button, nextCraft.step
+        end
+        button.tooltip, button.enabled = string.format(L.OPEN_TO_CRAFT, nextCraft.open, name), true
+        return button, nextCraft.step, nextCraft.open
+    end
+    button.text = L.CRAFT_LABEL
+    if nextCraft.materials then
+        button.tooltip = string.format(L.NEED_MATERIALS, name)
+    elseif nextCraft.crafts == 1 then
+        button.tooltip, button.enabled = string.format(L.CRAFT_ONCE, name), true
+    else
+        button.tooltip, button.enabled = string.format(L.CRAFT_TIMES, name, nextCraft.crafts), true
+    end
+    return button, nextCraft.step
+end
+
 -- The button on the "From your bank" heading: takes those items out.
 function Panel.BankButton(fromBank)
     local text, enabled, tooltip
@@ -200,7 +300,7 @@ function Panel.BankButton(fromBank)
         text, enabled, tooltip = L.BANK_TAKE, true, L.BANK_TAKE_HELP
     end
     return {
-        text = text, enabled = enabled, tooltip = tooltip, width = 110,
+        text = text, enabled = enabled, tooltip = tooltip, width = HEADING_BUTTON_WIDTH,
         onClick = function() Banker.Withdraw(fromBank) end,
     }
 end
@@ -224,7 +324,13 @@ local function AddContent()
         return
     end
 
-    AddRow("heading", L.HEAD_BUY)
+    AddRow("heading", L.HEAD_BUY, nil, BuyButton(plan))
+    -- The price to confirm, where it can't be missed.
+    if Shopper.Status() == "confirm" then
+        local p = Shopper.Purchase()
+        AddRow("note", NORMAL_FONT_COLOR:WrapTextInColorCode(
+            string.format(L.BUTTON_CONFIRM, p.quantity, ItemName(p.itemID), Money(p.quote))))
+    end
     if #plan.buyOrder == 0 then
         AddRow("note", L.NOTHING_TO_BUY)
     end
@@ -246,13 +352,19 @@ local function AddContent()
         end
     end
 
-    AddRow("heading", L.HEAD_CRAFT)
+    local craftButton, nextStep, openProfession = CraftButton()
+    local craftRow = AddRow("heading", L.HEAD_CRAFT, nil, craftButton)
+    craftCover = openProfession and { button = craftRow.button, profession = openProfession } or nil
     for _, step in ipairs(plan.crafts) do
         local detail = string.format(L.CRAFTS, step.crafts)
         if step.profession then
             detail = step.profession .. ", " .. detail
         end
-        AddRow("row", ItemLabel(step.itemID, step.crafts * step.makes), Gray(detail))
+        detail = Gray(detail)
+        if step == nextStep then
+            detail = detail .. "  " .. NORMAL_FONT_COLOR:WrapTextInColorCode(L.NEXT_STEP)
+        end
+        AddRow("row", ItemLabel(step.itemID, step.crafts * step.makes), detail)
     end
 
     AddRow("heading", L.HEAD_PROFIT)
@@ -284,71 +396,12 @@ end
 
 -- Buttons ----------------------------------------------------------------------
 
-local function BuyButtonState()
-    local status = Shopper.Status()
-    if status == "closed" then
-        return L.BUTTON_OPEN_AH, false
-    elseif status == "idle" then
-        return L.BUTTON_SCAN_FIRST, false
-    elseif status == "scanning" then
-        local done, total = Shopper.ScanProgress()
-        return string.format(L.BUTTON_SCANNING, math.min(done + 1, total), total), false
-    elseif status == "quoting" then
-        return L.BUTTON_QUOTING, false
-    elseif status == "buying" then
-        return L.BUTTON_BUYING, false
-    elseif status == "confirm" then
-        local p = Shopper.Purchase()
-        return string.format(L.BUTTON_CONFIRM, p.quantity, ItemName(p.itemID), Money(p.quote)), true
-    end
-    local nextPurchase = Shopper.NextPurchase()
-    if nextPurchase == nil then
-        return L.BUTTON_NOTHING, false
-    end
-    if not Shopper.IsProfitable() and not Shopper.IsOverridden() then
-        return L.BUTTON_NOT_PROFITABLE, false
-    end
-    return string.format(L.BUTTON_BUY, nextPurchase.quantity, ItemName(nextPurchase.itemID), Money(nextPurchase.budget)), true
-end
-
--- Returns text, enabled, and the profession to open on click if the next step
--- is in one that isn't open (OpenButton.lua covers the button for that).
-local function CraftButtonState()
-    if Crafter.IsCasting() then
-        return L.CRAFTING, false
-    end
-    local nextCraft = Crafter.Next()
-    if nextCraft == nil then
-        return L.NOTHING_TO_CRAFT, false
-    end
-    local name = ItemName(nextCraft.step.itemID)
-    if nextCraft.open then
-        if InCombatLockdown() then
-            return string.format(L.OPEN_AFTER_COMBAT, nextCraft.open, name), false
-        end
-        return string.format(L.OPEN_TO_CRAFT, nextCraft.open, name), true, nextCraft.open
-    elseif nextCraft.materials then
-        return string.format(L.NEED_MATERIALS, name), false
-    elseif nextCraft.crafts == 1 then
-        return string.format(L.CRAFT_ONCE, name), true
-    end
-    return string.format(L.CRAFT_TIMES, name, nextCraft.crafts), true
-end
-
 local function LayoutButtons()
     local b = frame.buttons
     local status = Shopper.Status()
 
-    local text, enabled = BuyButtonState()
-    b.buy:SetText(text)
-    b.buy:SetEnabled(enabled)
-
-    local craftText, craftEnabled, openProfession = CraftButtonState()
-    b.craft:SetText(craftText)
-    b.craft:SetEnabled(craftEnabled and not Order.IsEmpty())
-
-    b.scan:SetText(status == "ready" and L.SCAN_AGAIN or L.SCAN)
-    b.scan:SetEnabled((status == "idle" or status == "ready") and not Order.IsEmpty())
+    b.scan:SetText(L.SCAN_AGAIN)
+    b.scan:SetEnabled(status == "ready" and not Order.IsEmpty())
 
     local quoting = status == "quoting" or status == "confirm"
     b.cancel:SetShown(quoting)
@@ -367,16 +420,6 @@ local function LayoutButtons()
     end
 
     local bottom = y - 8
-    b.buy:ClearAllPoints()
-    b.buy:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, bottom)
-    b.buy:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING, bottom)
-    bottom = bottom - BUTTON_HEIGHT - 4
-
-    b.craft:ClearAllPoints()
-    b.craft:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, bottom)
-    b.craft:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING, bottom)
-    bottom = bottom - BUTTON_HEIGHT - 4
-
     local half = (WIDTH - 2 * PADDING - 6) / 2
     b.scan:ClearAllPoints()
     b.scan:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, bottom)
@@ -398,9 +441,10 @@ local function LayoutButtons()
 
     frame:SetHeight(-bottom + PADDING)
 
-    -- With the button in place, cover it to open the profession, or uncover.
-    if openProfession and not Order.IsEmpty() then
-        b.craft:SetEnabled(OpenButton.Cover(b.craft, openProfession))
+    -- With the Then craft button in place, cover it to open the profession,
+    -- or uncover.
+    if craftCover and not Order.IsEmpty() then
+        craftCover.button:SetEnabled(OpenButton.Cover(craftCover.button, craftCover.profession))
     else
         OpenButton.Hide()
     end
@@ -457,22 +501,12 @@ local function Create()
     -- Buy and Confirm call the game's purchase functions straight from the
     -- click: the game only allows purchases as part of a click.
     frame.buttons = {
-        buy = MakeButton("", function()
-            if Shopper.Status() == "confirm" then
-                Shopper.Confirm()
-            else
-                Shopper.Buy()
-            end
-        end),
-        scan = MakeButton(L.SCAN, Shopper.Scan),
+        scan = MakeButton(L.SCAN_AGAIN, Shopper.Scan),
         cancel = MakeButton(L.CANCEL, Shopper.Cancel),
         anyway = MakeButton(L.BUY_ANYWAY, function() Shopper.SetOverride(true) end, L.BUY_ANYWAY_HELP),
         recount = MakeButton(L.FORGET_MAIL, Order.ForgetMail, L.FORGET_MAIL_HELP),
         clear = MakeButton(L.CLEAR, Order.Clear),
-        -- Mouse down prepares, the click crafts: see Crafter.lua.
-        craft = MakeButton("", function() Crafter.Craft() end),
     }
-    frame.buttons.craft:SetScript("OnMouseDown", Crafter.Prepare)
 end
 
 -- Where you moved the panel to: { left, top } from the screen's bottom left.
@@ -505,6 +539,7 @@ end
 local function Refresh()
     usedRows = 0
     y = TOP
+    craftCover = nil
     AddContent()
     LayoutButtons()
     HideUnusedRows()
