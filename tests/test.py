@@ -445,17 +445,22 @@ def has_line(ev, *parts):
 
 
 BUY = 'VendorProfit.Panel.RowButton("Buy")'
+SCAN = 'VendorProfit.Panel.RowButton("Profit")'
 CRAFT = 'VendorProfit.Panel.RowButton("Craft")'
 
 
 def click(run, name):
-    """Clicks a panel button. Buy and the first Scan are on the To buy heading."""
+    """Clicks a panel button: Buy, Scan (on Profit), Clear (on Queued), Cancel (by the price to confirm)."""
     if name == "buy":
         run(BUY + ":Click()")
     elif name == "scan":
-        run('if VendorProfit.Shopper.Status() == "idle" then ' + BUY + ':Click() else VendorProfit.Panel.Buttons().scan:Click() end')
+        run(SCAN + ":Click()")
+    elif name == "clear":
+        run('VendorProfit.Panel.RowButton("Queued"):Click()')
+    elif name == "cancel":
+        run('VendorProfit.Panel.FindButton("Cancel"):Click()')
     else:
-        run("VendorProfit.Panel.Buttons().%s:Click()" % name)
+        raise ValueError(name)
 
 
 QUEUE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitQueueButton"
@@ -482,7 +487,7 @@ check("uses the 12 bronze bars and 5 copper bars you have",
       plan.uses[BRONZE_BAR] == 12 and plan.uses[COPPER_BAR] == 5)
 s_ = ev("VendorProfit.Shopper.Summary()")
 check("estimate: 6000 - 1000 had - 3375 to buy = 1625", s_.revenue == 6000 and s_.ownedValue == 1000 and s_.remaining == 3375 and s_.profit == 1625)
-check("panel lists what to buy", has_line(ev, "Copper Ore x24", "buy (auction)") and has_line(ev, "Tin Bar x29"))
+check("panel lists what to buy", has_line(ev, "Copper Ore x24", "| auction  ") and has_line(ev, "Tin Bar x29"))
 check("from your bags: 12 bronze bars, 3 copper bars",
       section(ev, "Already in your bags") == ["|Ticon2840:0|t Copper Bar x3", "|Ticon2841:0|t Bronze Bar x12"])
 check("from your bank: the other 2 copper bars, to fetch", section(ev, "Take from bank") == ["|Ticon2840:0|t Copper Bar x2"])
@@ -494,9 +499,10 @@ check("profit rows", section(ev, "Profit")[:5] == [
     "Vendor profit | |cffffffff16s 25c|r", "Auction profit | |cffffffff79s 75c|r"])
 check("panel lists the crafts", has_line(ev, "Copper Bar x24", "Mining, 24 crafts")
       and has_line(ev, "Bronze Bar x58", "Mining, 29 crafts") and has_line(ev, "Rough Bronze Cuirass x10", "Blacksmithing, 10 crafts"))
-check("panel says prices are Auctionator's until the AH opens", has_line(ev, "Auctionator's last scan"))
+check("no notes cluttering the panel", not has_line(ev, "Auctionator's last scan") and not has_line(ev, "loses money"))
+check("Open AH says prices are Auctionator's until you scan", "Auctionator's last scan" in ev(BUY + ".tooltip"))
 check("buy button waits for the auction house",
-      ev(BUY + ".__text") == "Open AH" and not ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip") == "Talk to an auctioneer to scan prices and buy.")
+      ev(BUY + ".__text") == "Open AH" and not ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip").startswith("Talk to an auctioneer to buy."))
 
 run(QUEUE + ':Click()')
 check("queuing again adds to the same entry", ev("#VendorProfit.Order.Entries()") == 1 and ev("VendorProfit.Order.Entries()[1].crafts") == 20)
@@ -509,8 +515,9 @@ run('''
 ''')
 run('__stub.OpenAH()')
 check("panel docks beside the auction house", ev("VendorProfitPanel.__point[2] == AuctionHouseFrame"))
-check("scan first, from the To buy heading", ev("VendorProfit.Shopper.Status()") == "idle" and ev(BUY + ".__text") == "Scan" and ev(BUY + ":IsEnabled()"))
-check("bottom Scan again waits for a first scan", not ev("VendorProfit.Panel.Buttons().scan:IsEnabled()"))
+check("Buy waits for a scan", ev("VendorProfit.Shopper.Status()") == "idle" and ev(BUY + ".__text") == "Buy"
+      and not ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip") == "Scan prices first: Scan is on the Profit heading.")
+check("Scan is on the Profit heading", ev(SCAN + ".__text") == "Scan" and ev(SCAN + ":IsEnabled()"))
 click(run, "scan")
 check("scanning", ev("VendorProfit.Shopper.Status()") == "scanning")
 run('__stub.Advance(2)')
@@ -530,7 +537,7 @@ run('__stub.Advance(0.5)')
 check("quote within budget: confirm offered",
       ev("VendorProfit.Shopper.Status()") == "confirm" and ev(BUY + ".__text") == "Confirm" and ev(BUY + ":IsEnabled()"))
 check("the price to confirm shows under the heading", section(ev, "Buy")[0] == "|cffffd100Confirm: 24 Copper Ore for |cffffffff12s 70c|r|r")
-check("cancel offered while confirming", ev("VendorProfit.Panel.Buttons().cancel:IsShown()"))
+check("cancel beside the price to confirm", ev('VendorProfit.Panel.FindButton("Cancel")') is not None)
 click(run, "buy")
 run('__stub.Advance(0.5)')
 check("bought: what it cost is recorded", ev("VendorProfitCharDB.order.spent") == 1270)
@@ -598,15 +605,16 @@ run('''
 ''')
 run('__stub.OpenAH()'); click(run, "scan"); run('__stub.Advance(3)')
 check("live prices: loses money", ev("VendorProfit.Shopper.Summary().profit") < 0)
-check("buy refused", ev(BUY + ".__text") == "Buy" and not ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip").startswith("Not profitable"))
-check("panel warns", has_line(ev, "loses money"))
+check("buy turns into Buy anyway", ev(BUY + ".__text") == "Buy anyway" and ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip").startswith("Not profitable"))
+check("vendor profit shown in red", has_line(ev, "Vendor profit", "|cffff2020-"))
 run('VendorProfit.Shopper.Buy()')
 check("even called directly, nothing is bought", ev("#__stub.ah.starts") == 0)
-check("buy anyway offered", ev("VendorProfit.Panel.Buttons().anyway:IsShown()"))
-click(run, "anyway")
-check("buy anyway allows buying", ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip").startswith("Buy "))
+click(run, "buy")
+check("clicking Buy anyway buys", ev("#__stub.ah.starts") == 1 and ev("VendorProfit.Shopper.Status()") == "quoting")
+run('__stub.Advance(0.5)'); click(run, "cancel")
+check("after that, plain Buy", ev(BUY + ".__text") == "Buy" and ev(BUY + ".tooltip").startswith("Buy "))
 click(run, "scan"); run('__stub.Advance(3)')
-check("a new scan asks again", not ev(BUY + ":IsEnabled()"))
+check("a new scan asks again", ev(BUY + ".__text") == "Buy anyway")
 
 # --- Live prices change the route ------------------------------------------------
 run, ev = shop_client()
@@ -637,16 +645,16 @@ check("still counted: not bought twice", ev("VendorProfit.Shopper.Summary().plan
       and ev(BUY + ".tooltip").startswith("Buy 29 Tin Bar"))
 check("counted as in the mail", ev("VendorProfit.Order.InMail(2770)") == 24
       and section(ev, "Collect from mailbox") == ["|Ticon2770:0|t Copper Ore x24"])
-check("forget mail available while something's in the mail", ev("VendorProfit.Panel.Buttons().recount:IsEnabled()"))
 run('__stub.bags[2770] = 24; __stub.mail[2770] = 0; __stub.Fire("BAG_UPDATE_DELAYED")')
 check("collected from the mail: no longer counted as in the mail", ev("VendorProfit.Order.InMail(2770)") == 0)
 check("...and still counted once", ev("VendorProfit.Shopper.Summary().plan.buy[2770]") is None
       and ev("VendorProfit.Shopper.Summary().plan.uses[2770]") == 24)
-check("forget mail off when nothing's in the mail", not ev("VendorProfit.Panel.Buttons().recount:IsEnabled()"))
 click(run, "buy"); run('__stub.Advance(0.5)'); click(run, "buy"); run('__stub.Advance(0.5)')
 check("tin bars in the mail", ev("VendorProfit.Order.InMail(3576)") == 29)
-click(run, "recount")
-check("forget mail: stops counting them, so they're needed again",
+run('__stub.Fire("MAIL_INBOX_UPDATE")')
+check("mailbox opened with them there: still counted", ev("VendorProfit.Order.InMail(3576)") == 29)
+run('__stub.mail[3576] = 0; __stub.Fire("MAIL_INBOX_UPDATE")')
+check("mailbox shows they're gone (used as they arrived): no longer counted, needed again",
       ev("VendorProfit.Order.InMail(3576)") == 0 and ev("VendorProfit.Shopper.Summary().plan.buy[3576].quantity") == 29)
 
 # --- Things going wrong -----------------------------------------------------------
@@ -683,7 +691,7 @@ check("no reply to a purchase: not recorded, rescanned",
 run('__stub.ah.noPurchaseReply = false; __stub.Advance(3)')
 run('__stub.Fire("COMMODITY_PURCHASE_SUCCEEDED")')  # the timed-out purchase went through after all
 check("a late success is still recorded", ev("VendorProfitCharDB.order.spent") == 8 * 52 + 16 * 60 and ev("VendorProfit.Order.InMail(2770)") == 24)
-run('VendorProfit.Order.ForgetMail(); VendorProfitCharDB.order.spent = 0; VendorProfit.Order.Changed()')
+run('VendorProfitCharDB.order.inMail = {}; VendorProfitCharDB.order.lastSeen = {}; VendorProfitCharDB.order.spent = 0; VendorProfit.Order.Changed()')
 
 run('__stub.money = 10')
 click(run, "buy")
@@ -712,7 +720,7 @@ run('''
 run('__stub.OpenAH()'); click(run, "scan"); run('__stub.Advance(3)')
 check("asks for more listings when the first page isn't enough", ev("__stub.ah.moreRequests") >= 1
       and ev("VendorProfit.Shopper.Summary().plan.buy[2770].listed") == 10)
-check("only 10 listed: says so", has_line(ev, "Copper Ore x24", "only 10 listed") and has_line(ev, "Not enough listed"))
+check("only 10 listed: says so", has_line(ev, "Copper Ore x24", "only 10 listed"))
 check("buys what's there", ev(BUY + ".tooltip").startswith("Buy 10 Copper Ore"))
 check("item that doesn't stack: buy it yourself", has_line(ev, "Tin Bar x29", "buy yourself"))
 
@@ -814,7 +822,7 @@ run('__stub.createCount = 2'); run(QUEUE + ':Click()')
 OPEN = "VendorProfitOpenProfessionButton"
 check("blacksmithing open, first step is mining: offers to open it",
       ev(CRAFT + ".__text") == "Open Mining" and ev(CRAFT + ".tooltip") == "Open Mining to craft Copper Bar" and ev(CRAFT + ":IsEnabled()"))
-check("next step marked", has_line(ev, "Copper Bar x7", "next"))
+check("next step marked on the left", any(l.startswith("|cffffd100\u00bb|r ") and "Copper Bar x7" in l for l in lines(ev)))
 check("a secure button covers the craft button and casts Smelting (how Mining opens)",
       ev(OPEN + ":IsShown()") and ev(OPEN + ':GetAttribute("type")') == "spell" and ev(OPEN + ':GetAttribute("spell")') == "Smelting")
 check("cover placed on the screen, not anchored to the panel",
@@ -852,7 +860,7 @@ check("pressed then clicked: crafts all 7", list(ev("__stub.crafted[2]").values(
 run('__stub.casting = "Smelt Copper"; __stub.Fire("UNIT_SPELLCAST_START", "player")')
 check("while casting: button waits", ev(CRAFT + ".__text") == "Crafting..." and not ev(CRAFT + ":IsEnabled()"))
 run('__stub.casting = nil; __stub.bags[2770] = 0; __stub.bags[2840] = 7; __stub.Fire("BAG_UPDATE_DELAYED")')
-check("copper bars made: next is bronze bars", ev(CRAFT + ".tooltip") == "Craft Bronze Bar, 7 times" and has_line(ev, "Bronze Bar x14", "next"))
+check("copper bars made: next is bronze bars", ev(CRAFT + ".tooltip") == "Craft Bronze Bar, 7 times" and any(l.startswith("|cffffd100\u00bb|r ") and "Bronze Bar x14" in l for l in lines(ev)))
 run('__stub.bags[2840] = 0; __stub.bags[3576] = 0; __stub.bags[2841] = 14; __stub.Fire("BAG_UPDATE_DELAYED")')
 check("bronze made: the cuirass is in blacksmithing", ev(CRAFT + ".__text") == "Open Blacksmithing"
       and ev(CRAFT + ".tooltip") == "Open Blacksmithing to craft Rough Bronze Cuirass")
@@ -974,6 +982,19 @@ run, ev = shop_client()
 run('__stub.createCount = 10'); run(QUEUE + ':Click()')
 run('__stub.auctionPrices[2866] = nil; VendorProfit.Order.Changed()')
 check("no auction price for the item: auction profit says so", has_line(ev, "Auction profit", "no auction price"))
+
+
+# --- Profit as a sum; Clear on Queued; one craft -------------------------------------
+run, ev = shop_client()
+run('__stub.createCount = 1'); run(QUEUE + ':Click()')
+prof = section(ev, "Profit")
+check("profit reads as a sum: costs, a rule, then the results",
+      [l.split(" | ")[0] for l in prof[:5]] == ["Vendor price", "Items you have", "Items to buy", "Vendor profit", "Auction profit"])
+check("one craft, not '1 crafts'", has_line(ev, "Rough Bronze Cuirass x1", "Blacksmithing, 1 craft") and not has_line(ev, "1 crafts"))
+check("Clear on the Queued heading", ev('VendorProfit.Panel.RowButton("Queued").__text') == "Clear")
+click(run, "clear")
+check("clear empties the order", ev("VendorProfit.Order.IsEmpty()"))
+check("no buttons left at the bottom", ev('VendorProfit.Panel.FindButton("Scan again")') is None)
 
 print()
 failed = [label for label, ok in results if not ok]

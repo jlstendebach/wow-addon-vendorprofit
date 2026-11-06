@@ -10,6 +10,7 @@
 -- What the order can use is what's in your bags and bank now, plus purchases
 -- still in the mailbox. Purchases may arrive in either place: one is counted
 -- as in the mail until that many more of the item show up in bags or bank.
+-- Opening the mailbox corrects that from what the inbox actually holds.
 --
 -- Crafting a queued recipe counts it down, and the order is finished once
 -- every queued craft is made. Reagents you craft with leave your bags, so the
@@ -158,17 +159,40 @@ function Order.InMail(itemID)
     return DB().inMail[itemID] or 0
 end
 
-function Order.HasMail()
-    return next(DB().inMail) ~= nil
-end
-
--- Stops counting purchases as in the mail: for when they've been collected
--- but are still counted, such as when they were used up as they arrived.
-function Order.ForgetMail()
+-- Corrects what's counted as in the mail from what the inbox actually holds,
+-- when the mailbox is open and all of it is loaded. Purchases that arrived
+-- but were never seen arriving (used up straight away, say) stop counting.
+function Order.CheckInbox()
+    local shown, total = GetInboxNumItems()
+    if shown == nil or (total and total > shown) then
+        return
+    end
+    local inbox = {}
+    for index = 1, shown do
+        for attachment = 1, ATTACHMENTS_MAX_RECEIVE or 16 do
+            local _, itemID, _, count = GetInboxItem(index, attachment)
+            if itemID then
+                inbox[itemID] = (inbox[itemID] or 0) + (count or 1)
+            end
+        end
+    end
     local order = DB()
-    order.inMail = {}
-    order.lastSeen = {}
-    Changed()
+    local changed = false
+    for itemID, pending in pairs(order.inMail) do
+        local there = inbox[itemID] or 0
+        if pending > there then
+            changed = true
+            if there > 0 then
+                order.inMail[itemID] = there
+            else
+                order.inMail[itemID] = nil
+                order.lastSeen[itemID] = nil
+            end
+        end
+    end
+    if changed then
+        Changed()
+    end
 end
 
 -- How many of an item the order can use: bags and bank, plus purchases still
@@ -216,8 +240,11 @@ end
 local events = CreateFrame("Frame")
 events:RegisterEvent("BAG_UPDATE_DELAYED")
 events:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+pcall(events.RegisterEvent, events, "MAIL_INBOX_UPDATE")
 events:SetScript("OnEvent", function(_, event, unit, _, spellID)
-    if event == "BAG_UPDATE_DELAYED" then
+    if event == "MAIL_INBOX_UPDATE" then
+        Order.CheckInbox()
+    elseif event == "BAG_UPDATE_DELAYED" then
         if Reconcile() then
             Changed()
         end

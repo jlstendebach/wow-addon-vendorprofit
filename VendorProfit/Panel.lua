@@ -26,7 +26,6 @@ local PADDING = 16
 local TOP = -32
 local ROW_HEIGHT = 15
 local HEADING_HEIGHT = 20
-local BUTTON_HEIGHT = 22
 
 local HEADING_BUTTON_WIDTH = 120
 
@@ -129,8 +128,8 @@ local function AddDivider(row, title)
     return row
 end
 
--- kind: "divider" (a centered title between lines), "heading", "row" or
--- "note".
+-- kind: "divider" (a centered title between lines), "heading", "row",
+-- "total" (a sum's result, larger), "rule" (a thin line) or "note".
 local function AddRow(kind, left, right, button)
     usedRows = usedRows + 1
     local row = GetRow(usedRows)
@@ -139,23 +138,38 @@ local function AddRow(kind, left, right, button)
     end
     row.lines[1]:Hide()
     row.lines[2]:Hide()
-    local height = kind == "heading" and HEADING_HEIGHT or ROW_HEIGHT
+    if kind == "rule" then
+        -- A thin line, as above a sum's result.
+        row.left:Hide()
+        row.right:Hide()
+        row.button:Hide()
+        local line = row.lines[1]
+        line:ClearAllPoints()
+        line:SetPoint("LEFT", frame, "TOPLEFT", PADDING, y - 3)
+        line:SetPoint("RIGHT", frame, "TOPRIGHT", -PADDING, y - 3)
+        line:Show()
+        y = y - 6
+        return row
+    end
+    local height = kind == "heading" and HEADING_HEIGHT or kind == "total" and HEADING_HEIGHT - 2 or ROW_HEIGHT
     if kind == "heading" then
         y = y - 4
     end
 
-    row.left:SetFontObject(kind == "heading" and "GameFontNormal" or "GameFontHighlightSmall")
+    local font = kind == "heading" and "GameFontNormal" or kind == "total" and "GameFontHighlight" or "GameFontHighlightSmall"
+    row.left:SetFontObject(font)
+    row.right:SetFontObject(kind == "total" and "GameFontHighlight" or "GameFontHighlightSmall")
     row.left:ClearAllPoints()
     row.left:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
     -- Notes are gray unless they bring their own color.
     local plain = kind == "note" and not left:find("^|c")
     row.left:SetText(plain and Gray(left) or left)
+    local buttonWidth = button and (button.width or 60) or 0
     row.left:SetWordWrap(kind == "note")
-    row.left:SetWidth(kind == "note" and (WIDTH - 2 * PADDING) or (WIDTH * 0.55))
+    row.left:SetWidth(kind == "note" and (WIDTH - 2 * PADDING - (button and buttonWidth + 4 or 0)) or (WIDTH * 0.55))
     row.left:Show()
 
     row.right:ClearAllPoints()
-    local buttonWidth = button and (button.width or 60) or 0
     row.right:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING - (button and buttonWidth + 4 or 0), y)
     row.right:SetText(right or "")
     row.right:SetShown(right ~= nil)
@@ -198,7 +212,7 @@ end
 
 local function BuyLineRight(line)
     if line.source == "vendor" then
-        return L.SOURCE_VENDOR .. "  " .. Money(line.total)
+        return L.FROM_VENDOR .. "  " .. Money(line.total)
     elseif line.source == nil then
         return Red(L.SOURCE_NONE)
     elseif line.manual then
@@ -208,7 +222,7 @@ local function BuyLineRight(line)
     elseif line.listed and line.listed < line.quantity then
         return Red(string.format(L.ONLY_LISTED, line.listed)) .. "  " .. Money(line.total)
     end
-    return L.SOURCE_AUCTION .. "  " .. Money(line.total)
+    return L.FROM_AUCTION .. "  " .. Money(line.total)
 end
 
 -- Splits what the plan uses of your items by where they are: bags first
@@ -244,11 +258,13 @@ end
 -- What clicking the To buy heading's button does, by status.
 local function BuyClick()
     local status = Shopper.Status()
-    if status == "idle" then
-        Shopper.Scan()
-    elseif status == "confirm" then
+    if status == "confirm" then
         Shopper.Confirm()
-    else
+    elseif status == "ready" then
+        -- Showing "Buy anyway": clicking it is the go-ahead.
+        if not Shopper.IsProfitable() and not Shopper.IsOverridden() then
+            Shopper.SetOverride(true)
+        end
         Shopper.Buy()
     end
 end
@@ -265,7 +281,7 @@ local function BuyButton(plan)
     elseif status == "closed" then
         button.text, button.tooltip = L.BUY_OPEN_AH, L.BUY_OPEN_AH_HELP
     elseif status == "idle" then
-        button.text, button.tooltip, button.enabled = L.SCAN, L.BUY_SCAN_HELP, true
+        button.text, button.tooltip = L.BUY_BUY, L.SCAN_FIRST
     elseif status == "scanning" then
         local done, total = Shopper.ScanProgress()
         button.text, button.tooltip = L.BUY_SCANNING, string.format(L.BUTTON_SCANNING, math.min(done + 1, total), total)
@@ -283,7 +299,8 @@ local function BuyButton(plan)
         if nextPurchase == nil then
             button.tooltip = L.BUTTON_NOTHING
         elseif not Shopper.IsProfitable() and not Shopper.IsOverridden() then
-            button.tooltip = L.BUTTON_NOT_PROFITABLE
+            button.text, button.enabled = L.BUY_ANYWAY, true
+            button.tooltip = L.BUTTON_NOT_PROFITABLE .. " " .. L.BUY_ANYWAY_HELP
         else
             button.enabled = true
             button.tooltip = string.format(L.BUTTON_BUY, nextPurchase.quantity, ItemName(nextPurchase.itemID), Money(nextPurchase.budget))
@@ -347,33 +364,39 @@ function Panel.BankButton(fromBank)
     }
 end
 
-local function AddProfit(s, plan)
-    AddRow("heading", L.HEAD_PROFIT)
+-- The Profit heading's button: scans the auction house for live prices.
+local function ScanButton()
+    local status = Shopper.Status()
+    local button = { text = L.SCAN, width = HEADING_BUTTON_WIDTH, enabled = false, onClick = Shopper.Scan }
+    if status == "closed" then
+        button.tooltip = L.SCAN_OPEN_AH
+    elseif status == "scanning" then
+        local done, total = Shopper.ScanProgress()
+        button.text = L.BUY_SCANNING
+        button.tooltip = string.format(L.BUTTON_SCANNING, math.min(done + 1, total), total)
+    elseif status == "idle" or status == "ready" then
+        button.enabled, button.tooltip = true, L.BUY_SCAN_HELP
+    else
+        button.tooltip = L.BUTTON_QUOTING
+    end
+    return button
+end
+
+-- The order's profit as a sum: what it sells for, minus what's used and
+-- bought, then the results.
+local function AddProfit(s)
+    AddRow("heading", L.HEAD_PROFIT, nil, ScanButton())
     AddRow("row", L.VENDOR_PRICE, Money(s.revenue))
     if s.ownedValue > 0 then
         AddRow("row", L.ITEMS_YOU_HAVE, Money(-s.ownedValue))
     end
     AddRow("row", L.ITEMS_TO_BUY, Money(-s.remaining))
-    AddRow("row", L.VENDOR_PROFIT_ROW, Money(s.profit))
-    AddRow("row", L.AUCTION_PROFIT_ROW,
+    AddRow("rule")
+    AddRow("total", L.VENDOR_PROFIT_ROW, Money(s.profit))
+    AddRow("total", L.AUCTION_PROFIT_ROW,
         s.auctionProfit and Money(s.auctionProfit) or Gray(L.NO_AUCTION_PRICE))
     if s.spent > 0 then
         AddRow("row", Gray(L.SPENT), Gray(GetMoneyString(s.spent, true)))
-    end
-
-    if not Shopper.IsOpen() then
-        AddRow("note", L.PRICES_AUCTIONATOR)
-    elseif #s.unscanned > 0 then
-        AddRow("note", L.SCAN_FOR_LIVE)
-    end
-    if #s.short > 0 then
-        AddRow("note", L.SHORT_NOTE)
-    end
-    if plan.missing then
-        AddRow("note", L.MISSING_NOTE)
-    end
-    if s.profit < 0 then
-        AddRow("note", Red(L.NOT_PROFITABLE))
     end
 end
 
@@ -396,7 +419,8 @@ local function AddToDo(plan)
         if buying == "confirm" then
             local p = Shopper.Purchase()
             AddRow("note", NORMAL_FONT_COLOR:WrapTextInColorCode(
-                string.format(L.BUTTON_CONFIRM, p.quantity, ItemName(p.itemID), Money(p.quote))))
+                string.format(L.BUTTON_CONFIRM, p.quantity, ItemName(p.itemID), Money(p.quote))), nil,
+                { text = L.CANCEL, onClick = Shopper.Cancel, width = 70 })
         end
         for _, line in ipairs(plan.buyOrder) do
             AddRow("row", ItemLabel(line.itemID, line.quantity), BuyLineRight(line))
@@ -421,15 +445,15 @@ local function AddToDo(plan)
     local craftRow = Step(L.STEP_CRAFT, craftButton)
     craftCover = openProfession and { button = craftRow.button, profession = openProfession } or nil
     for _, step in ipairs(plan.crafts) do
-        local detail = string.format(L.CRAFTS, step.crafts)
+        local detail = string.format(step.crafts == 1 and L.CRAFTS_ONE or L.CRAFTS, step.crafts)
         if step.profession then
             detail = step.profession .. ", " .. detail
         end
-        detail = Gray(detail)
+        local label = ItemLabel(step.itemID, step.crafts * step.makes)
         if step == nextStep then
-            detail = detail .. "  " .. NORMAL_FONT_COLOR:WrapTextInColorCode(L.NEXT_STEP)
+            label = NORMAL_FONT_COLOR:WrapTextInColorCode(L.NEXT_MARK) .. " " .. label
         end
-        AddRow("row", ItemLabel(step.itemID, step.crafts * step.makes), detail)
+        AddRow("row", label, Gray(detail))
     end
     return fromBags
 end
@@ -440,8 +464,12 @@ local function AddContent()
     local s = Shopper.Summary()
     local plan = s.plan
 
-    AddRow("heading", L.HEAD_QUEUED)
     local entries = Order.Entries()
+    local status = Shopper.Status()
+    local busy = status == "quoting" or status == "confirm" or status == "buying"
+    AddRow("heading", L.HEAD_QUEUED, nil, #entries > 0 and {
+        text = L.CLEAR, width = 70, enabled = not busy, onClick = Order.Clear, tooltip = L.CLEAR_HELP,
+    } or nil)
     if #entries == 0 then
         AddRow("note", L.NOTHING_QUEUED)
         return
@@ -453,7 +481,7 @@ local function AddContent()
         })
     end
 
-    AddProfit(s, plan)
+    AddProfit(s)
     local fromBags = AddToDo(plan)
 
     if #fromBags > 0 then
@@ -466,75 +494,24 @@ end
 
 -- Buttons ----------------------------------------------------------------------
 
-local function LayoutButtons()
-    local b = frame.buttons
-    local status = Shopper.Status()
-
-    b.scan:SetText(L.SCAN_AGAIN)
-    b.scan:SetEnabled(status == "ready" and not Order.IsEmpty())
-
-    local quoting = status == "quoting" or status == "confirm"
-    b.cancel:SetShown(quoting)
-    b.anyway:SetShown(not quoting and status == "ready" and not Shopper.IsProfitable()
-        and not Shopper.IsOverridden() and Shopper.NextPurchase() ~= nil)
-
-    b.clear:SetEnabled(not Order.IsEmpty() and not quoting and status ~= "buying")
-    b.recount:SetEnabled(Order.HasMail())
-
-    -- Messages above the buttons.
+-- Messages at the end, the panel's height, and the open-profession cover.
+local function FinishLayout()
     for _, source in ipairs({ Shopper, Banker }) do
-        local text2, isError = source.Message()
-        if text2 then
-            AddRow("note", isError and Red(text2) or text2)
+        local text, isError = source.Message()
+        if text then
+            AddRow("note", isError and Red(text) or text)
         end
     end
 
-    local bottom = y - 8
-    local half = (WIDTH - 2 * PADDING - 6) / 2
-    b.scan:ClearAllPoints()
-    b.scan:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, bottom)
-    b.scan:SetWidth(half)
-    for _, button in ipairs({ b.cancel, b.anyway }) do
-        button:ClearAllPoints()
-        button:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING, bottom)
-        button:SetWidth(half)
-    end
-    bottom = bottom - BUTTON_HEIGHT - 4
+    frame:SetHeight(-y + PADDING)
 
-    b.recount:ClearAllPoints()
-    b.recount:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, bottom)
-    b.recount:SetWidth(half)
-    b.clear:ClearAllPoints()
-    b.clear:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING, bottom)
-    b.clear:SetWidth(half)
-    bottom = bottom - BUTTON_HEIGHT
-
-    frame:SetHeight(-bottom + PADDING)
-
-    -- With the Then craft button in place, cover it to open the profession,
-    -- or uncover.
+    -- With the Craft button in place, cover it to open the profession, or
+    -- uncover.
     if craftCover and not Order.IsEmpty() then
         craftCover.button:SetEnabled(OpenButton.Cover(craftCover.button, craftCover.profession))
     else
         OpenButton.Hide()
     end
-end
-
-local function MakeButton(text, onClick, tooltip)
-    local button = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    button:SetHeight(BUTTON_HEIGHT)
-    button:SetText(text)
-    button:SetScript("OnClick", onClick)
-    if tooltip then
-        button:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(text)
-            GameTooltip:AddLine(tooltip, 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        button:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    end
-    return button
 end
 
 -- Frame ------------------------------------------------------------------------
@@ -568,15 +545,6 @@ local function Create()
     end)
     frame:Hide()
 
-    -- Buy and Confirm call the game's purchase functions straight from the
-    -- click: the game only allows purchases as part of a click.
-    frame.buttons = {
-        scan = MakeButton(L.SCAN_AGAIN, Shopper.Scan),
-        cancel = MakeButton(L.CANCEL, Shopper.Cancel),
-        anyway = MakeButton(L.BUY_ANYWAY, function() Shopper.SetOverride(true) end, L.BUY_ANYWAY_HELP),
-        recount = MakeButton(L.FORGET_MAIL, Order.ForgetMail, L.FORGET_MAIL_HELP),
-        clear = MakeButton(L.CLEAR, Order.Clear),
-    }
 end
 
 -- Where you moved the panel to: { left, top } from the screen's bottom left.
@@ -611,7 +579,7 @@ local function Refresh()
     y = TOP
     craftCover = nil
     AddContent()
-    LayoutButtons()
+    FinishLayout()
     HideUnusedRows()
 end
 
@@ -665,13 +633,25 @@ function Panel.Lines()
     local lines = {}
     for index = 1, usedRows do
         local row = rows[index]
-        local text = row.left:GetText() or ""
+        local text = row.left:IsShown() and row.left:GetText() or ""
         if row.right:IsShown() and (row.right:GetText() or "") ~= "" then
             text = text .. " | " .. row.right:GetText()
         end
-        lines[#lines + 1] = text
+        if text ~= "" then
+            lines[#lines + 1] = text
+        end
     end
     return lines
+end
+
+-- The first shown row button labeled text.
+function Panel.FindButton(text)
+    for index = 1, usedRows do
+        local button = rows[index].button
+        if button:IsShown() and button:GetText() == text then
+            return button
+        end
+    end
 end
 
 -- The button on the row whose left text is text (or a numbered step called
@@ -684,10 +664,6 @@ function Panel.RowButton(text)
             return row.button
         end
     end
-end
-
-function Panel.Buttons()
-    return frame and frame.buttons
 end
 
 -- Opens with the auction house when something is queued, and closes with

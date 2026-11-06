@@ -579,3 +579,17 @@ BankFrame = CreateFrame("Frame", "BankFrame")
 BankFrame:Hide()
 function stub.OpenBank() BankFrame:Show(); stub.Fire("BANKFRAME_OPENED") end
 function stub.CloseBank() BankFrame:Hide(); stub.Fire("BANKFRAME_CLOSED") end
+
+-- Mailbox: one mail per item in stub.mail, the item as its only attachment.
+ATTACHMENTS_MAX_RECEIVE = 16
+local function Mails()
+    local list = {}
+    for id, n in pairs(stub.mail) do if n > 0 then list[#list + 1] = { id, n } end end
+    table.sort(list, function(a, b) return a[1] < b[1] end)
+    return list
+end
+function GetInboxNumItems() local n = #Mails() return n, n end
+function GetInboxItem(index, attachment)
+    local m = Mails()[index]
+    if m and attachment == 1 then return "item", m[1], "icon", m[2] end
+end
