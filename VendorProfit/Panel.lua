@@ -89,16 +89,56 @@ local function GetRow(index)
             end
         end)
         row.button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        -- Lines either side of a divider's title.
+        row.lines = {}
+        for side = 1, 2 do
+            local line = frame:CreateTexture(nil, "ARTWORK")
+            line:SetColorTexture(1, 0.82, 0, 0.35)
+            line:SetHeight(1)
+            line:Hide()
+            row.lines[side] = line
+        end
         rows[index] = row
     end
     return row
 end
 
--- kind: "heading", "row" or "note". button: { text, onClick, enabled,
--- width, tooltip } adds a button at the right.
+-- button: { text, onClick, onMouseDown, enabled, width, tooltip } adds a
+-- button at the right.
+local function AddDivider(row, title)
+    y = y - 10
+    row.left:SetFontObject("GameFontNormalSmall")
+    row.left:ClearAllPoints()
+    row.left:SetPoint("TOP", frame, "TOP", 0, y)
+    row.left:SetWidth(0)
+    row.left:SetWordWrap(false)
+    row.left:SetText(title)
+    row.left:Show()
+    row.right:Hide()
+    row.button:Hide()
+    local left, right = row.lines[1], row.lines[2]
+    left:ClearAllPoints()
+    left:SetPoint("LEFT", frame, "TOPLEFT", PADDING, y - 6)
+    left:SetPoint("RIGHT", row.left, "LEFT", -6, 0)
+    right:ClearAllPoints()
+    right:SetPoint("LEFT", row.left, "RIGHT", 6, 0)
+    right:SetPoint("RIGHT", frame, "TOPRIGHT", -PADDING, y - 6)
+    left:Show()
+    right:Show()
+    y = y - HEADING_HEIGHT
+    return row
+end
+
+-- kind: "divider" (a centered title between lines), "heading", "row" or
+-- "note".
 local function AddRow(kind, left, right, button)
     usedRows = usedRows + 1
     local row = GetRow(usedRows)
+    if kind == "divider" then
+        return AddDivider(row, left)
+    end
+    row.lines[1]:Hide()
+    row.lines[2]:Hide()
     local height = kind == "heading" and HEADING_HEIGHT or ROW_HEIGHT
     if kind == "heading" then
         y = y - 4
@@ -149,6 +189,8 @@ local function HideUnusedRows()
         row.left:Hide()
         row.right:Hide()
         row.button:Hide()
+        row.lines[1]:Hide()
+        row.lines[2]:Hide()
     end
 end
 
@@ -305,75 +347,16 @@ function Panel.BankButton(fromBank)
     }
 end
 
-local function AddContent()
-    local s = Shopper.Summary()
-    local plan = s.plan
-
-    AddRow("heading", L.HEAD_QUEUED)
-    local entries = Order.Entries()
-    if #entries == 0 then
-        AddRow("note", L.NOTHING_QUEUED)
-    end
-    for index, entry in ipairs(entries) do
-        AddRow("row", ItemLabel(entry.itemID, entry.crafts * entry.count), nil, {
-            text = L.REMOVE,
-            onClick = function() Order.Remove(index) end,
-        })
-    end
-    if #entries == 0 then
-        return
-    end
-
-    AddRow("heading", L.HEAD_BUY, nil, BuyButton(plan))
-    -- The price to confirm, where it can't be missed.
-    if Shopper.Status() == "confirm" then
-        local p = Shopper.Purchase()
-        AddRow("note", NORMAL_FONT_COLOR:WrapTextInColorCode(
-            string.format(L.BUTTON_CONFIRM, p.quantity, ItemName(p.itemID), Money(p.quote))))
-    end
-    if #plan.buyOrder == 0 then
-        AddRow("note", L.NOTHING_TO_BUY)
-    end
-    for _, line in ipairs(plan.buyOrder) do
-        AddRow("row", ItemLabel(line.itemID, line.quantity), BuyLineRight(line))
-    end
-
-    local fromBags, fromMail, fromBank = Panel.SplitUses(plan.uses)
-    for _, section in ipairs({
-        { heading = L.HEAD_BAGS, list = fromBags },
-        { heading = L.HEAD_MAIL, list = fromMail },
-        { heading = L.HEAD_BANK, list = fromBank, button = Panel.BankButton(fromBank) },
-    }) do
-        if #section.list > 0 then
-            AddRow("heading", section.heading, nil, section.button)
-            for _, use in ipairs(section.list) do
-                AddRow("row", ItemLabel(use.itemID, use.quantity))
-            end
-        end
-    end
-
-    local craftButton, nextStep, openProfession = CraftButton()
-    local craftRow = AddRow("heading", L.HEAD_CRAFT, nil, craftButton)
-    craftCover = openProfession and { button = craftRow.button, profession = openProfession } or nil
-    for _, step in ipairs(plan.crafts) do
-        local detail = string.format(L.CRAFTS, step.crafts)
-        if step.profession then
-            detail = step.profession .. ", " .. detail
-        end
-        detail = Gray(detail)
-        if step == nextStep then
-            detail = detail .. "  " .. NORMAL_FONT_COLOR:WrapTextInColorCode(L.NEXT_STEP)
-        end
-        AddRow("row", ItemLabel(step.itemID, step.crafts * step.makes), detail)
-    end
-
+local function AddProfit(s, plan)
     AddRow("heading", L.HEAD_PROFIT)
-    AddRow("row", L.SELLS_FOR, Money(s.revenue))
+    AddRow("row", L.VENDOR_PRICE, Money(s.revenue))
     if s.ownedValue > 0 then
-        AddRow("row", L.ITEMS_USED, Money(-s.ownedValue))
+        AddRow("row", L.ITEMS_YOU_HAVE, Money(-s.ownedValue))
     end
-    AddRow("row", L.STILL_TO_BUY, Money(-s.remaining))
-    AddRow("row", L.PROFIT, Money(s.profit))
+    AddRow("row", L.ITEMS_TO_BUY, Money(-s.remaining))
+    AddRow("row", L.VENDOR_PROFIT_ROW, Money(s.profit))
+    AddRow("row", L.AUCTION_PROFIT_ROW,
+        s.auctionProfit and Money(s.auctionProfit) or Gray(L.NO_AUCTION_PRICE))
     if s.spent > 0 then
         AddRow("row", Gray(L.SPENT), Gray(GetMoneyString(s.spent, true)))
     end
@@ -391,6 +374,93 @@ local function AddContent()
     end
     if s.profit < 0 then
         AddRow("note", Red(L.NOT_PROFITABLE))
+    end
+end
+
+-- The To do checklist, in the order you'd do it: buy (prices can change, so
+-- first), collect purchases from the mailbox, take things from the bank, then
+-- craft. Each step shows only while it has something left in it, numbered in
+-- order. Returns the bags list for the information section below it.
+local function AddToDo(plan)
+    AddRow("divider", L.HEAD_TODO)
+    local number = 0
+    local function Step(title, button)
+        number = number + 1
+        return AddRow("heading", number .. ". " .. title, nil, button)
+    end
+
+    local buying = Shopper.Status()
+    if #plan.buyOrder > 0 or buying == "quoting" or buying == "confirm" or buying == "buying" then
+        Step(L.STEP_BUY, BuyButton(plan))
+        -- The price to confirm, where it can't be missed.
+        if buying == "confirm" then
+            local p = Shopper.Purchase()
+            AddRow("note", NORMAL_FONT_COLOR:WrapTextInColorCode(
+                string.format(L.BUTTON_CONFIRM, p.quantity, ItemName(p.itemID), Money(p.quote))))
+        end
+        for _, line in ipairs(plan.buyOrder) do
+            AddRow("row", ItemLabel(line.itemID, line.quantity), BuyLineRight(line))
+        end
+    end
+
+    local fromBags, fromMail, fromBank = Panel.SplitUses(plan.uses)
+    if #fromMail > 0 then
+        Step(L.STEP_MAIL)
+        for _, use in ipairs(fromMail) do
+            AddRow("row", ItemLabel(use.itemID, use.quantity))
+        end
+    end
+    if #fromBank > 0 then
+        Step(L.STEP_BANK, Panel.BankButton(fromBank))
+        for _, use in ipairs(fromBank) do
+            AddRow("row", ItemLabel(use.itemID, use.quantity))
+        end
+    end
+
+    local craftButton, nextStep, openProfession = CraftButton()
+    local craftRow = Step(L.STEP_CRAFT, craftButton)
+    craftCover = openProfession and { button = craftRow.button, profession = openProfession } or nil
+    for _, step in ipairs(plan.crafts) do
+        local detail = string.format(L.CRAFTS, step.crafts)
+        if step.profession then
+            detail = step.profession .. ", " .. detail
+        end
+        detail = Gray(detail)
+        if step == nextStep then
+            detail = detail .. "  " .. NORMAL_FONT_COLOR:WrapTextInColorCode(L.NEXT_STEP)
+        end
+        AddRow("row", ItemLabel(step.itemID, step.crafts * step.makes), detail)
+    end
+    return fromBags
+end
+
+-- Queued crafts, the order's profit, the To do checklist, then what's
+-- already in your bags, for information.
+local function AddContent()
+    local s = Shopper.Summary()
+    local plan = s.plan
+
+    AddRow("heading", L.HEAD_QUEUED)
+    local entries = Order.Entries()
+    if #entries == 0 then
+        AddRow("note", L.NOTHING_QUEUED)
+        return
+    end
+    for index, entry in ipairs(entries) do
+        AddRow("row", ItemLabel(entry.itemID, entry.crafts * entry.count), nil, {
+            text = L.REMOVE,
+            onClick = function() Order.Remove(index) end,
+        })
+    end
+
+    AddProfit(s, plan)
+    local fromBags = AddToDo(plan)
+
+    if #fromBags > 0 then
+        AddRow("divider", L.HEAD_BAGS)
+        for _, use in ipairs(fromBags) do
+            AddRow("row", ItemLabel(use.itemID, use.quantity))
+        end
     end
 end
 
@@ -604,11 +674,13 @@ function Panel.Lines()
     return lines
 end
 
--- The button on the row whose left text is text, if it has one.
+-- The button on the row whose left text is text (or a numbered step called
+-- text), if it has one.
 function Panel.RowButton(text)
     for index = 1, usedRows do
         local row = rows[index]
-        if row.left:GetText() == text and row.button:IsShown() then
+        local label = row.left:GetText() or ""
+        if (label == text or label:match("^%d+%. (.*)$") == text) and row.button:IsShown() then
             return row.button
         end
     end

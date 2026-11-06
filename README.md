@@ -110,19 +110,45 @@ What it can't know:
 29 smelts need 29 Copper Bars (you have 5, so 24 to smelt from 24 Copper Ore) and 29 Tin Bars.
 ```
 
-It lists **To buy**; what it uses of yours, split into **From your bags**, **From your mailbox** (purchases not collected yet, only when there are any) and **From your bank**; **Then craft** in order (deepest first); and the order's **Profit**. Your items are used from your bags first, then the mailbox, then the bank, so **From your bank** is exactly what to fetch. Bags include the reagent bank, since crafting uses it directly. Several queued recipes share your items, so nothing is counted twice.
+The panel is laid out as:
 
-**Take from bank.** At the bank, **Take from bank** on the **From your bank** heading moves exactly those amounts into your bags: it splits them off the bank's stacks (smallest stacks first) into empty bag slots, one move at a time, waiting for each to finish. If something isn't in the bank after all, or your bags fill up, or the bank closes, it stops and says so. The panel opens beside the bank by itself when the order has something to fetch, and closes with it.
+```
+Queued
+    Rough Bronze Cuirass x10                 [Remove]
+Profit
+    Vendor price                             60s
+    Items you have                           -10s
+    Items to buy                             -33s 75c
+    Vendor profit                            16s 25c
+    Auction profit                           79s 75c
+──────────────── To do ────────────────
+1. Buy                                       [ Buy ]
+    Copper Ore x24       buy (auction)       12s 70c
+    Tin Bar x29          buy (auction)       21s 75c
+2. Take from bank                            [ Take ]
+    Copper Bar x2
+3. Craft                                     [ Craft ]
+    Copper Bar x24       Mining, 24 crafts   next
+    Bronze Bar x58       Mining, 29 crafts
+    Rough Bronze Cuirass x10   Blacksmithing, 10 crafts
+──────────── Already in your bags ────────────
+    Bronze Bar x12
+    Copper Bar x3
+```
 
-**Profit** is what finishing the order makes from where you stand: what everything still queued sells to vendors for, minus what the items you have are worth, minus what's still to buy. Items you have count at the cheapest way to get them now, whether you had them already or bought them for this order. What you've paid is spent either way, so it doesn't change whether finishing is worth it. It's shown below Profit as **Spent on this order so far**, but not taken off. That way an order you've partly shopped for and crafted gives the same answer as clearing it and queuing what's left.
+**To do** is a checklist in the order you'd do it: **Buy** first (prices are what can change, so you find out at the auction house before fetching or crafting anything), **Collect from mailbox** (purchases not collected yet), **Take from bank**, then **Craft**. Each step shows only while it has something left in it and they're numbered in order, so the list gets shorter as you go. Your items are used from your bags first, then the mailbox, then the bank, so **Take from bank** lists exactly what to fetch. Bags include the reagent bank, since crafting uses it directly. **Already in your bags** is just for information. Several queued recipes share your items, so nothing is counted twice.
+
+**Take from bank.** At the bank, **Take** on the **Take from bank** step moves exactly those amounts into your bags: it splits them off the bank's stacks (smallest stacks first) into empty bag slots, one move at a time, waiting for each to finish. If something isn't in the bank after all, or your bags fill up, or the bank closes, it stops and says so. The panel opens beside the bank by itself when the order has something to fetch, and closes with it.
+
+**Vendor profit** is what finishing the order makes from where you stand: the **Vendor price** of everything still queued, minus what the **Items you have** are worth, minus the **Items to buy**. **Auction profit** is the same selling at auction instead: Auctionator's price for the queued items after the 5% auction house cut (or *no auction price*). Buying checks Vendor profit. Items you have count at the cheapest way to get them now, whether you had them already or bought them for this order. What you've paid is spent either way, so it doesn't change whether finishing is worth it. It's shown below the profits as **Spent on this order so far**, but not taken off. That way an order you've partly shopped for and crafted gives the same answer as clearing it and queuing what's left.
 
 **Crafting counts the order down.** Each time you craft a queued recipe, its count drops by one, and the order finishes when everything queued is made. Reagents you craft with leave your bags, so the plan always works from what's actually left.
 
 The buttons for each part sit on their section's heading, with short labels; hover one for the details.
 
-**3. Scan.** At the auction house the panel docks beside it (and opens by itself when something is queued). **Scan** on the **To buy** heading (away from the auction house it says **Open AH**) reads every listing of each item the order buys there, so buying 24 is priced by walking up the cheapest listings, not at the lowest single price, and your own listings are left out. With live prices the order is planned again: if crafting something has become cheaper than buying it, or the other way round, the plan changes and the new items are scanned too.
+**3. Scan.** At the auction house the panel docks beside it (and opens by itself when something is queued). **Scan** on the **Buy** step (away from the auction house it says **Open AH**) reads every listing of each item the order buys there, so buying 24 is priced by walking up the cheapest listings, not at the lowest single price, and your own listings are left out. With live prices the order is planned again: if crafting something has become cheaper than buying it, or the other way round, the plan changes and the new items are scanned too.
 
-**4. Buy.** The same button then says **Buy** (hover it: *Buy 24 Copper Ore for 12s 70c*). Clicking it asks the auction house for a price quote. If the quote is no more than the scan, the button becomes **Confirm**, with *Confirm: 24 Copper Ore for 12s 70c* shown right under the heading, and clicking it buys. That's two clicks per item, the same as Auctionator's own buying: the game only allows a purchase as part of a click. **Scan again** at the bottom refreshes prices.
+**4. Buy.** The same button then says **Buy** (hover it: *Buy 24 Copper Ore for 12s 70c*). Clicking it asks the auction house for a price quote. If the quote is no more than the scan, the button becomes **Confirm**, with *Confirm: 24 Copper Ore for 12s 70c* shown right under the step, and clicking it buys. That's two clicks per item, the same as Auctionator's own buying: the game only allows a purchase as part of a click. **Scan again** at the bottom refreshes prices.
 
 - **Price went up:** if the quote is higher than the scan (someone bought the cheap ones first), the purchase is cancelled and the item scanned again.
 - **Not profitable:** before each purchase, finishing the order must still make money at current prices. If not, Buy is off and the panel says so. **Buy anyway** lets you go on until the next scan.
@@ -130,7 +156,7 @@ The buttons for each part sit on their section's heading, with short labels; hov
 - **Not enough gold, no reply, a failed purchase:** nothing is recorded, the panel says what happened, and the item is scanned again. A purchase that gets no reply but goes through later is still recorded when the success arrives.
 - **Items that don't stack** (gear and the like) are listed as **buy yourself**: the panel only buys stackable items.
 
-**5. Craft.** **Craft** on the **Then craft** heading crafts the step marked **next**, as many times as it needs (up to what you have materials for; hover it: *Craft Copper Bar, 7 times*). The game only crafts recipes of the profession window that's open, so when the next step is in another profession the button says **Open Mining**, and clicking it opens that profession (Mining opens with Smelting). In combat it can't be clicked (hover: *Open Mining after combat*): the game doesn't let addons open professions then. It skips ahead to a later step the open window can make if you have its materials, is off with *Missing materials for ...* when you don't, and says **Crafting...** while you're casting. Materials are counted from your bags and reagent bank, which is what crafting can use; items in the main bank don't count until you take them out. Crafting the queued item counts the order down as usual.
+**5. Craft.** **Craft** on the **Craft** step crafts the step marked **next**, as many times as it needs (up to what you have materials for; hover it: *Craft Copper Bar, 7 times*). The game only crafts recipes of the profession window that's open, so when the next step is in another profession the button says **Open Mining**, and clicking it opens that profession (Mining opens with Smelting). In combat it can't be clicked (hover: *Open Mining after combat*): the game doesn't let addons open professions then. It skips ahead to a later step the open window can make if you have its materials, is off with *Missing materials for ...* when you don't, and says **Crafting...** while you're casting. Materials are counted from your bags and reagent bank, which is what crafting can use; items in the main bank don't count until you take them out. Crafting the queued item counts the order down as usual.
 
 **Mail.** Auction purchases may arrive in your mailbox rather than your bags. A purchase counts as **in the mail** until that many more of the item show up in your bags or bank, so it's counted either way and never bought twice. If something is still shown as in the mail after you've collected it (say you used it up as it arrived), **Forget mail** stops counting it.
 

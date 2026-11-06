@@ -164,6 +164,9 @@ end
 --                  order makes from here. Items you have count at what they'd
 --                  cost to get now, whether you had them or bought them for
 --                  this order; what was paid before is spent either way.
+--   auctionProfit  the same, selling at auction (Auctionator's price after the
+--                  auction house cut) instead of to vendors; nil if a queued
+--                  item has no auction price
 --   spent          what the panel has spent on this order, for reference
 --   unscanned      auction items not scanned yet
 --   short          auction items with fewer listed than needed
@@ -215,6 +218,22 @@ function Shopper.Recompute()
         remaining = remaining + line.total
     end
 
+    -- What everything queued sells for at auction (Auctionator's price, after
+    -- the auction house cut), if every queued item has an auction price.
+    local auctionRevenue = 0
+    for _, entry in ipairs(Order.Entries()) do
+        local _, auction = VendorProfit.GetBuyPrices(entry.itemID)
+        if auction == nil then
+            auctionRevenue = nil
+            break
+        end
+        auctionRevenue = auctionRevenue + auction * entry.count * entry.crafts
+    end
+    local auctionProfit
+    if auctionRevenue then
+        auctionProfit = math.floor(auctionRevenue * VendorProfit.GetAfterAHCut()) - plan.ownedValue - remaining
+    end
+
     local spent = Order.Spent()
     summary = {
         plan = plan,
@@ -223,6 +242,7 @@ function Shopper.Recompute()
         ownedValue = plan.ownedValue,
         remaining = remaining,
         profit = plan.revenue - plan.ownedValue - remaining,
+        auctionProfit = auctionProfit,
         unscanned = unscanned,
         short = short,
     }

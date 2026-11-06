@@ -412,28 +412,40 @@ def lines(ev):
     return list(ev("VendorProfit.Panel.Lines()").values())
 
 
-HEADINGS = {"Queued", "To buy", "From your bags", "From your mailbox", "From your bank", "Then craft", "Profit"}
+DIVIDERS = {"To do", "Already in your bags"}
+HEADINGS = {"Queued", "Profit"} | DIVIDERS
+STEP = re.compile(r"^\d+\. (.*)$")
+
+
+def is_heading(line):
+    return line in HEADINGS or STEP.match(line) is not None
 
 
 def section(ev, heading):
-    """The panel rows under a heading, up to the next heading."""
+    """The panel rows under a heading (or numbered step), up to the next one."""
     ls = lines(ev)
-    if heading not in ls:
-        return None
-    out = []
-    for l in ls[ls.index(heading) + 1:]:
-        if l in HEADINGS:
-            break
-        out.append(l)
-    return out
+    for i, l in enumerate(ls):
+        m = STEP.match(l)
+        if l == heading or (m and m.group(1) == heading):
+            out = []
+            for row in ls[i + 1:]:
+                if is_heading(row):
+                    break
+                out.append(row)
+            return out
+    return None
+
+
+def headings(ev):
+    return [l for l in lines(ev) if is_heading(l)]
 
 
 def has_line(ev, *parts):
     return any(all(p in l for p in parts) for l in lines(ev))
 
 
-BUY = 'VendorProfit.Panel.RowButton("To buy")'
-CRAFT = 'VendorProfit.Panel.RowButton("Then craft")'
+BUY = 'VendorProfit.Panel.RowButton("Buy")'
+CRAFT = 'VendorProfit.Panel.RowButton("Craft")'
 
 
 def click(run, name):
@@ -472,9 +484,14 @@ s_ = ev("VendorProfit.Shopper.Summary()")
 check("estimate: 6000 - 1000 had - 3375 to buy = 1625", s_.revenue == 6000 and s_.ownedValue == 1000 and s_.remaining == 3375 and s_.profit == 1625)
 check("panel lists what to buy", has_line(ev, "Copper Ore x24", "buy (auction)") and has_line(ev, "Tin Bar x29"))
 check("from your bags: 12 bronze bars, 3 copper bars",
-      section(ev, "From your bags") == ["|Ticon2840:0|t Copper Bar x3", "|Ticon2841:0|t Bronze Bar x12"])
-check("from your bank: the other 2 copper bars, to fetch", section(ev, "From your bank") == ["|Ticon2840:0|t Copper Bar x2"])
-check("no mailbox section with nothing in the mail", section(ev, "From your mailbox") is None)
+      section(ev, "Already in your bags") == ["|Ticon2840:0|t Copper Bar x3", "|Ticon2841:0|t Bronze Bar x12"])
+check("from your bank: the other 2 copper bars, to fetch", section(ev, "Take from bank") == ["|Ticon2840:0|t Copper Bar x2"])
+check("no mailbox step with nothing in the mail", section(ev, "Collect from mailbox") is None)
+check("layout: queued, profit, then the To do steps in order, then what's in your bags",
+      headings(ev) == ["Queued", "Profit", "To do", "1. Buy", "2. Take from bank", "3. Craft", "Already in your bags"])
+check("profit rows", section(ev, "Profit")[:5] == [
+    "Vendor price | |cffffffff60s|r", "Items you have | |cffff2020-10s|r", "Items to buy | |cffff2020-33s 75c|r",
+    "Vendor profit | |cffffffff16s 25c|r", "Auction profit | |cffffffff79s 75c|r"])
 check("panel lists the crafts", has_line(ev, "Copper Bar x24", "Mining, 24 crafts")
       and has_line(ev, "Bronze Bar x58", "Mining, 29 crafts") and has_line(ev, "Rough Bronze Cuirass x10", "Blacksmithing, 10 crafts"))
 check("panel says prices are Auctionator's until the AH opens", has_line(ev, "Auctionator's last scan"))
@@ -512,7 +529,7 @@ check("no purchase without confirming", ev("#__stub.ah.confirms") == 0)
 run('__stub.Advance(0.5)')
 check("quote within budget: confirm offered",
       ev("VendorProfit.Shopper.Status()") == "confirm" and ev(BUY + ".__text") == "Confirm" and ev(BUY + ":IsEnabled()"))
-check("the price to confirm shows under the heading", section(ev, "To buy")[0] == "|cffffd100Confirm: 24 Copper Ore for |cffffffff12s 70c|r|r")
+check("the price to confirm shows under the heading", section(ev, "Buy")[0] == "|cffffd100Confirm: 24 Copper Ore for |cffffffff12s 70c|r|r")
 check("cancel offered while confirming", ev("VendorProfit.Panel.Buttons().cancel:IsShown()"))
 click(run, "buy")
 run('__stub.Advance(0.5)')
@@ -536,8 +553,8 @@ click(run, "buy"); run('__stub.Advance(0.5)'); click(run, "buy"); run('__stub.Ad
 check("tin bars bought", ev("__stub.bags[3576]") == 29 and ev("VendorProfitCharDB.order.spent") == 1270 + 2262)
 check("spent is shown but not taken off the profit", has_line(ev, "Spent on this order so far")
       and ev("VendorProfit.Shopper.Summary().profit") == ev("VendorProfit.Shopper.Summary().revenue") - ev("VendorProfit.Shopper.Summary().ownedValue"))
-check("nothing left to buy: no buy button", ev(BUY) is None
-      and has_line(ev, "Nothing to buy: you have everything."))
+check("nothing left to buy: the Buy step is gone", ev(BUY) is None and section(ev, "Buy") is None
+      and headings(ev)[2:4] == ["To do", "1. Take from bank"])
 check("crafts still listed", has_line(ev, "Bronze Bar x58", "29 crafts"))
 check("no errors while shopping", ev("#__stub.errors") == 0)
 
@@ -619,7 +636,7 @@ check("ore in the mail, not the bags", ev("__stub.bags[2770]") is None and ev("_
 check("still counted: not bought twice", ev("VendorProfit.Shopper.Summary().plan.buy[2770]") is None
       and ev(BUY + ".tooltip").startswith("Buy 29 Tin Bar"))
 check("counted as in the mail", ev("VendorProfit.Order.InMail(2770)") == 24
-      and section(ev, "From your mailbox") == ["|Ticon2770:0|t Copper Ore x24"])
+      and section(ev, "Collect from mailbox") == ["|Ticon2770:0|t Copper Ore x24"])
 check("forget mail available while something's in the mail", ev("VendorProfit.Panel.Buttons().recount:IsEnabled()"))
 run('__stub.bags[2770] = 24; __stub.mail[2770] = 0; __stub.Fire("BAG_UPDATE_DELAYED")')
 check("collected from the mail: no longer counted as in the mail", ev("VendorProfit.Order.InMail(2770)") == 0)
@@ -886,10 +903,10 @@ run('''
     __stub.PutInBank(8, 1, 3576, 10)
 ''')
 run('__stub.createCount = 2'); run(QUEUE + ':Click()')
-check("bank section lists what to fetch", section(ev, "From your bank") == ["|Ticon2840:0|t Copper Bar x7", "|Ticon3576:0|t Tin Bar x7"])
-TAKE = 'VendorProfit.Panel.RowButton("From your bank")'
+check("bank section lists what to fetch", section(ev, "Take from bank") == ["|Ticon2840:0|t Copper Bar x7", "|Ticon3576:0|t Tin Bar x7"])
+TAKE = 'VendorProfit.Panel.RowButton("Take from bank")'
 check("take button on the bank heading, off until the bank opens",
-      ev(TAKE + ":IsShown()") and ev(TAKE + ".__text") == "Take from bank" and not ev(TAKE + ":IsEnabled()")
+      ev(TAKE + ":IsShown()") and ev(TAKE + ".__text") == "Take" and not ev(TAKE + ":IsEnabled()")
       and ev(TAKE + ".tooltip") == "Open your bank to take these out.")
 run('VendorProfit.Panel.Hide()')
 run('__stub.OpenBank()')
@@ -907,8 +924,9 @@ check("rest stays in the bank", ev("__stub.bank[2840]") == 12 and ev("__stub.ban
 check("split, not whole stacks", [tuple(x.values()) for x in ev("__stub.splits").values()] == [(7, 3, 4), (6, 1, 3), (8, 1, 7)])
 check("says it's done", any("Took everything from the bank" in l for l in lines(ev)))
 run('__stub.Fire("BAG_UPDATE_DELAYED")')
-check("bank section gone, items now from bags", section(ev, "From your bank") is None
-      and section(ev, "From your bags") == ["|Ticon2840:0|t Copper Bar x7", "|Ticon3576:0|t Tin Bar x7"])
+check("bank section gone, items now from bags", section(ev, "Take from bank") is None
+      and section(ev, "Already in your bags")[:2] == ["|Ticon2840:0|t Copper Bar x7", "|Ticon3576:0|t Tin Bar x7"]
+      and headings(ev)[2:4] == ["To do", "1. Craft"])
 run('__stub.CloseBank()')
 check("closes with the bank it opened for", not ev("VendorProfit.Panel.IsShown()"))
 check("no errors from the bank", ev("#__stub.errors") == 0)
@@ -949,6 +967,13 @@ check("bank closing mid-way stops", not ev("VendorProfit.Banker.IsMoving()") and
 run('VendorProfit.Banker.Withdraw({ { itemID = 2840, quantity = 1 } })')
 check("can't take with the bank closed", ev("#__stub.splits") == 1)
 check("no errors from bank edge cases", ev("#__stub.errors") == 0)
+
+
+# --- Auction profit without an auction price; dividers ------------------------------
+run, ev = shop_client()
+run('__stub.createCount = 10'); run(QUEUE + ':Click()')
+run('__stub.auctionPrices[2866] = nil; VendorProfit.Order.Changed()')
+check("no auction price for the item: auction profit says so", has_line(ev, "Auction profit", "no auction price"))
 
 print()
 failed = [label for label, ok in results if not ok]
