@@ -190,7 +190,7 @@ C_Item = {
         local link = ToLink(x)
         local item = stub.items[link]
         if item == nil or not item.cached then return nil end
-        return item.name or link, link, 2, 20, 0, "Armor", "Mail", 1, "INVTYPE_CHEST", 0, item.sellPrice or 0
+        return item.name or link, link, 2, 20, 0, "Armor", "Mail", 1, "INVTYPE_CHEST", 0, item.sellPrice or 0, 4, 3, item.bind or 0
     end,
     GetItemCount = function(id, includeBank, _, includeReagentBank)
         local n = stub.bags[id] or 0
@@ -334,6 +334,7 @@ local function verify(callerID)
 end
 function Auctionator.API.v1.GetAuctionPriceByItemID(callerID, itemID) verify(callerID) return stub.auctionPrices[itemID] end
 function Auctionator.API.v1.GetAuctionPriceByItemLink(callerID, link) verify(callerID) return stub.auctionPrices[ToID(link)] end
+function Auctionator.API.v1.MultiSearchAdvanced(callerID, terms) verify(callerID) stub.searched = terms end
 function Auctionator.API.v1.GetVendorPriceByItemID(callerID, itemID) verify(callerID) return stub.vendorPrices[itemID] end
 
 function Auctionator.CraftingInfo.CalculateCraftCost(recipeSchematic)

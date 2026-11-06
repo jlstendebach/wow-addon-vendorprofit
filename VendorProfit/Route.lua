@@ -138,3 +138,45 @@ end
 function Route.ForResult(result)
     return Route.ForRecipe(result.itemID, Recipes.ReagentsFromSchematic(result.recipeSchematic))
 end
+
+-- Every item that could be on a route for a recipe: the item it makes, its
+-- reagents and every option for them, and everything your saved recipes
+-- could make each of those from, all the way down. Reagents come before what
+-- they're made from. Used to search the auction house for the whole tree.
+function Route.TreeItems(outputItemID, reagents)
+    local items, seen = {}, {}
+    local function Add(itemID)
+        if itemID and not seen[itemID] then
+            seen[itemID] = true
+            items[#items + 1] = itemID
+            return true
+        end
+        return false
+    end
+    Add(outputItemID)
+    local queue = {}
+    for _, slot in ipairs(reagents) do
+        for _, itemID in ipairs(slot.items) do
+            if Add(itemID) then
+                queue[#queue + 1] = { itemID = itemID, depth = 1 }
+            end
+        end
+    end
+    local index = 1
+    while index <= #queue do
+        local current = queue[index]
+        index = index + 1
+        if current.depth < Route.MAX_DEPTH then
+            for _, recipe in ipairs(Recipes.ForItem(current.itemID)) do
+                for _, slot in ipairs(recipe.reagents) do
+                    for _, itemID in ipairs(slot.items) do
+                        if Add(itemID) then
+                            queue[#queue + 1] = { itemID = itemID, depth = current.depth + 1 }
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return items
+end

@@ -7,13 +7,14 @@ To Craft: 12s 39c                  <- Auctionator
 Profit: -6s                        <- Auctionator: sell on the auction house
 Vendor Profit: -10s 92c            <- sell to a vendor instead
 ------------ Cheapest Route ------------
-To Craft: 4s 38c                   <- crafting reagents yourself where that's cheaper
+To Craft: 4s 38c         [Search]  <- crafting reagents yourself where that's cheaper
 Profit: 7s 97c                     <- ...sold on the auction house
 Vendor Profit: -2s 91c   [Queue]   <- ...sold to a vendor
 ```
 
 - **Vendor Profit:** what you make by crafting the item and selling it to a vendor, at Auctionator's To Craft cost.
 - **Cheapest Route:** the same three numbers when every reagent is got the cheapest way, crafting reagents yourself where that's cheaper than buying them, all the way down. Hover the section to see the route.
+- **Search** (at the auction house) searches Auctionator for every item in the crafting tree.
 - **Queue** adds the recipe to a shopping order. A shopping panel then plans it with what you already have, scans the auction house, checks the order is still profitable at live prices, buys what's missing one confirmed purchase at a time, and crafts the steps in order.
 
 Requires [Auctionator](https://www.curseforge.com/wow/addons/auctionator).
@@ -79,6 +80,8 @@ Rough Bronze Cuirass x1                                  4s 38c
             Copper Ore x3.5    buy (auction)             1s 75c
         Tin Bar x3.5       buy (auction)                 2s 63c
 ```
+
+**Search.** At the auction house, **Search** at the top right of the section (where Auctionator puts its own) searches Auctionator for every item in the crafting tree: the item, its reagents, and everything your saved recipes could make them from, including options the current route doesn't use, since any of those prices can change it. Items that bind on pickup are left out. On this auction house Auctionator's searches show current listings but don't save prices (only its scans do), so the section keeps using Auctionator's last scan until you scan again.
 
 **saves** on a crafted step is how much crafting it saves over buying that many outright, with everything under it done the cheapest way. It's what skipping that step would cost: here, buying Copper Bars instead of smelting them costs 70c more per cuirass. Steps that can't be bought show no saving.
 
@@ -154,6 +157,7 @@ Files:
 | `Order.lua` | The saved order: what's in the mail, what was spent, counting crafts down |
 | `QueueButton.lua` | The Queue button |
 | `Shopper.lua` | Scanning the auction house, live pricing, quotes and purchases |
+| `SearchButton.lua` | The Search button: the whole crafting tree in Auctionator |
 | `Crafter.lua` | The Craft button: the next step the open profession can make |
 | `Panel.lua` | The shopping panel, moving it, and `/vprofit` |
 

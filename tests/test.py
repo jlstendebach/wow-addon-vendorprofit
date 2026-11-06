@@ -54,7 +54,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "Shopper.lua", "Crafter.lua", "Panel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "Panel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
 run('__stub.Fire("TRADE_SKILL_SHOW")')
@@ -787,6 +787,33 @@ check("blacksmithing open: craft the cuirasses", ev(CRAFT + ".__text") == "Craft
 run('VendorProfit.Order.Clear()')
 check("empty order: craft off", not ev(CRAFT + ":IsEnabled()"))
 check("no errors from crafting", ev("#__stub.errors") == 0)
+
+
+# --- Search button -------------------------------------------------------------------
+run, ev = shop_client()
+SEARCH = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitSearchButton"
+check("search hidden while the auction house is closed", not ev(SEARCH + ":IsShown()"))
+run('__stub.OpenAH()')
+check("search shown at the auction house, top right of the section",
+      ev(SEARCH + ":IsShown()") and ev(SEARCH + ".__point[1]") == "TOPRIGHT" and ev(SEARCH + ".__point[2] == " + SECTION + ".separator"))
+check("search clickable over the tooltip area", ev(SEARCH + ":GetFrameLevel()") > ev(SECTION + ".hover:GetFrameLevel()"))
+tree = list(ev("VendorProfit.Route.TreeItems(2866, VendorProfit.Recipes.ReagentsFromSchematic(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm).recipeSchematic))").values())
+check("tree: the item, then reagents before what they're made from, including options the route doesn't use",
+      tree == [CUIRASS_ID, BRONZE_BAR, COPPER_BAR, TIN_BAR, COPPER_ORE, TIN_ORE])
+run('__stub.items["item:2866"].bind = 1')  # the cuirass binds on pickup
+run(SEARCH + ':Click()')
+names = [t.searchString for t in ev("__stub.searched").values()]
+check("searches every item in the tree, exact names", names == ["Bronze Bar", "Copper Bar", "Tin Bar", "Copper Ore", "Tin Ore"]
+      and all(t.isExact for t in ev("__stub.searched").values()))
+check("bind-on-pickup items left out", "Rough Bronze Cuirass" not in names)
+run('__stub.items["item:2771"].cached = false; __stub.searched = nil')
+run(SEARCH + ':Click()')
+check("waits for item names to load", ev("__stub.searched") is None)
+run('__stub.LoadItem("item:2771")')
+check("...then searches", len(list(ev("__stub.searched").values())) == 5)
+run('__stub.CloseAH()')
+check("search hides when the auction house closes", not ev(SEARCH + ":IsShown()"))
+check("no errors from searching", ev("#__stub.errors") == 0)
 
 print()
 failed = [label for label, ok in results if not ok]

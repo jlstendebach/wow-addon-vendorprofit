@@ -49,6 +49,10 @@ VendorProfit.L = {
     NO_RECIPES = "No recipes saved yet.",
     OPEN_PROFESSIONS = "Open each profession once to add its recipes.",
 
+    -- Search button
+    SEARCH_TREE = "Search",
+    SEARCH_TREE_HELP = "Searches Auctionator for every item in this recipe's crafting tree: the item, its reagents and everything they could be crafted from. The Cheapest Route uses Auctionator's last scan, so run a scan to update it.",
+
     -- Queue button
     QUEUE = "Queue",
     QUEUE_HELP = "Adds %d crafts of this recipe (the number in the Create box) to your shopping order.",
