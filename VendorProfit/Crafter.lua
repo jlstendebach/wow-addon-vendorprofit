@@ -1,9 +1,8 @@
 -- Crafting the order's next step from the shopping panel's Craft button.
 --
--- The game only crafts recipes of the profession window that's open, and in
--- Forever an addon can't open a profession window itself outside a special
--- button that's locked in combat. So the Craft button crafts the next step
--- the open window can make, and otherwise says which profession to open.
+-- The game only crafts recipes of the profession window that's open. So the
+-- Craft button crafts the next step the open window can make, and otherwise
+-- says which profession to open and opens it when clicked (OpenButton.lua).
 --
 -- The next step is the first one in the plan's craft list (deepest first)
 -- that belongs to the open profession and that you have the materials for in

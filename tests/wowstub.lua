@@ -27,7 +27,11 @@ function CreateFrame(_, name, parent)
 end
 function FrameMethods:GetParent() return self.__parent end
 function FrameMethods:Show() self.__shown = true end
-function FrameMethods:Hide() self.__shown = false end
+function FrameMethods:Hide()
+    local was = self.__shown
+    self.__shown = false
+    if was and self.__scripts.OnHide then self.__scripts.OnHide(self) end
+end
 function FrameMethods:SetShown(s) self.__shown = not not s end
 function FrameMethods:IsShown() return self.__shown end
 function FrameMethods:IsVisible()
@@ -65,8 +69,16 @@ function FrameMethods:StopMovingOrSizing()
     self.__moving = false
     if stub.dragTo then self.__left, self.__top = stub.dragTo[1], stub.dragTo[2] end
 end
-function FrameMethods:GetLeft() return self.__left end
+function FrameMethods:GetLeft() return self.__left or 10 end
 function FrameMethods:GetTop() return self.__top end
+function FrameMethods:GetBottom() return self.__bottom or 20 end
+function FrameMethods:GetWidth() return self.__w or 100 end
+function FrameMethods:GetEffectiveScale() return 1 end
+function FrameMethods:SetFrameStrata(s) self.__strata = s end
+function FrameMethods:RegisterForClicks(...) self.__clicks = { ... } end
+function FrameMethods:SetHighlightTexture() end
+function FrameMethods:SetAttribute(k, v) self.__attrs = self.__attrs or {}; self.__attrs[k] = v end
+function FrameMethods:GetAttribute(k) return self.__attrs and self.__attrs[k] end
 function stub.Drag(f, left, top)
     stub.dragTo = { left, top }
     f.__scripts.OnDragStart(f)
@@ -156,6 +168,10 @@ SlashCmdList = {}
 stub.money = 1000000
 function GetMoney() return stub.money end
 function GetTime() return stub.now end
+stub.inCombat = false
+function InCombatLockdown() return stub.inCombat end
+function GetCVarBool() return false end
+C_Spell = { GetSpellName = function(id) return ({ [2575] = "Mining", [2656] = "Smelting" })[id] end }
 stub.casting = nil
 function UnitCastingInfo(unit) if unit == "player" then return stub.casting end end
 function ButtonFrameTemplate_HidePortrait() end

@@ -13,6 +13,7 @@ local Order = VendorProfit.Order
 local Shopper = VendorProfit.Shopper
 local Inventory = VendorProfit.Inventory
 local Crafter = VendorProfit.Crafter
+local OpenButton = VendorProfit.OpenButton
 local L = VendorProfit.L
 
 local Panel = {}
@@ -260,6 +261,8 @@ local function BuyButtonState()
     return string.format(L.BUTTON_BUY, nextPurchase.quantity, ItemName(nextPurchase.itemID), Money(nextPurchase.budget)), true
 end
 
+-- Returns text, enabled, and the profession to open on click if the next step
+-- is in one that isn't open (OpenButton.lua covers the button for that).
 local function CraftButtonState()
     if Crafter.IsCasting() then
         return L.CRAFTING, false
@@ -270,7 +273,10 @@ local function CraftButtonState()
     end
     local name = ItemName(nextCraft.step.itemID)
     if nextCraft.open then
-        return string.format(L.OPEN_TO_CRAFT, nextCraft.open, name), false
+        if InCombatLockdown() then
+            return string.format(L.OPEN_AFTER_COMBAT, nextCraft.open, name), false
+        end
+        return string.format(L.OPEN_TO_CRAFT, nextCraft.open, name), true, nextCraft.open
     elseif nextCraft.materials then
         return string.format(L.NEED_MATERIALS, name), false
     elseif nextCraft.crafts == 1 then
@@ -287,7 +293,7 @@ local function LayoutButtons()
     b.buy:SetText(text)
     b.buy:SetEnabled(enabled)
 
-    local craftText, craftEnabled = CraftButtonState()
+    local craftText, craftEnabled, openProfession = CraftButtonState()
     b.craft:SetText(craftText)
     b.craft:SetEnabled(craftEnabled and not Order.IsEmpty())
 
@@ -339,6 +345,13 @@ local function LayoutButtons()
     bottom = bottom - BUTTON_HEIGHT
 
     frame:SetHeight(-bottom + PADDING)
+
+    -- With the button in place, cover it to open the profession, or uncover.
+    if openProfession and not Order.IsEmpty() then
+        b.craft:SetEnabled(OpenButton.Cover(b.craft, openProfession))
+    else
+        OpenButton.Hide()
+    end
 end
 
 local function MakeButton(text, onClick, tooltip)
@@ -374,12 +387,18 @@ local function Create()
     frame:SetMovable(true)
     frame:SetClampedToScreen(true)
     frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStart", function(self)
+        -- The open-profession cover doesn't follow a drag; put it back after.
+        OpenButton.Hide()
+        self:StartMoving()
+    end)
+    frame:SetScript("OnHide", OpenButton.Hide)
     frame:SetScript("OnDragStop", function(self)
         self:StopMovingOrSizing()
         -- Saved by the addon, not the game's own layout cache.
         self:SetUserPlaced(false)
         Panel.SavePosition()
+        Panel.Refresh()
     end)
     frame:Hide()
 

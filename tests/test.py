@@ -54,7 +54,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "Panel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Panel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
 run('__stub.Fire("TRADE_SKILL_SHOW")')
@@ -763,9 +763,30 @@ run, ev = shop_client()
 run('__stub.bags[2841] = 0; __stub.bags[2840] = 0; __stub.bank[2840] = 0')
 run('__stub.createCount = 2'); run(QUEUE + ':Click()')
 CRAFT = "VendorProfit.Panel.Buttons().craft"
-check("blacksmithing open, first step is mining: says to open it",
-      ev(CRAFT + ".__text") == "Open Mining to craft Copper Bar" and not ev(CRAFT + ":IsEnabled()"))
+OPEN = "VendorProfitOpenProfessionButton"
+check("blacksmithing open, first step is mining: offers to open it",
+      ev(CRAFT + ".__text") == "Open Mining to craft Copper Bar" and ev(CRAFT + ":IsEnabled()"))
+check("a secure button covers the craft button and casts Smelting (how Mining opens)",
+      ev(OPEN + ":IsShown()") and ev(OPEN + ':GetAttribute("type")') == "spell" and ev(OPEN + ':GetAttribute("spell")') == "Smelting")
+check("cover placed on the screen, not anchored to the panel",
+      ev(OPEN + ".__point[2] == UIParent") and ev(OPEN + ".__point[4]") == ev(CRAFT + ":GetLeft()"))
+check("cover is on top", ev(OPEN + ".__strata") == "DIALOG")
+run('__stub.inCombat = true; __stub.Fire("PLAYER_REGEN_DISABLED")')
+check("combat starting hides the cover", not ev(OPEN + ":IsShown()"))
+run('VendorProfit.Panel.Refresh()')
+check("in combat: says to open it after combat, not clickable",
+      ev(CRAFT + ".__text") == "Open Mining after combat to craft Copper Bar" and not ev(CRAFT + ":IsEnabled()") and not ev(OPEN + ":IsShown()"))
+run('__stub.inCombat = false; __stub.Fire("PLAYER_REGEN_ENABLED")')
+check("after combat the cover is back", ev(OPEN + ":IsShown()") and ev(CRAFT + ":IsEnabled()"))
+run('VendorProfit.Panel.Hide()')
+check("hiding the panel hides the cover", not ev(OPEN + ":IsShown()"))
+run('VendorProfit.Panel.Show()')
+run('VendorProfitPanel.__scripts.OnDragStart(VendorProfitPanel)')
+check("dragging the panel hides the cover", not ev(OPEN + ":IsShown()"))
+run('VendorProfitPanel.__scripts.OnDragStop(VendorProfitPanel)')
+check("...and it's back after the drag", ev(OPEN + ":IsShown()"))
 run('__stub.OpenProfession(186, "Mining", %s)' % MINING)
+check("mining open: no cover", not ev(OPEN + ":IsShown()"))
 check("mining open but no ore: missing materials",
       ev(CRAFT + ".__text") == "Missing materials for Copper Bar" and not ev(CRAFT + ":IsEnabled()"))
 run('__stub.bank[2770] = 7; __stub.Fire("BAG_UPDATE_DELAYED")')
@@ -785,6 +806,7 @@ run('__stub.casting = nil; __stub.bags[2770] = 0; __stub.bags[2840] = 7; __stub.
 check("copper bars made: next is bronze bars", ev(CRAFT + ".__text") == "Craft Bronze Bar, 7 times")
 run('__stub.bags[2840] = 0; __stub.bags[3576] = 0; __stub.bags[2841] = 14; __stub.Fire("BAG_UPDATE_DELAYED")')
 check("bronze made: the cuirass is in blacksmithing", ev(CRAFT + ".__text") == "Open Blacksmithing to craft Rough Bronze Cuirass")
+check("cover casts Blacksmithing", ev(OPEN + ':GetAttribute("spell")') == "Blacksmithing" and ev(OPEN + ":IsShown()"))
 run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
 check("blacksmithing open: craft the cuirasses", ev(CRAFT + ".__text") == "Craft Rough Bronze Cuirass, 2 times")
 run('VendorProfit.Order.Clear()')

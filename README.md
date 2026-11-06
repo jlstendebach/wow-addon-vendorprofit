@@ -126,7 +126,7 @@ It lists **To buy**, **From your bags and bank** (with how many are in the bank 
 - **Not enough gold, no reply, a failed purchase:** nothing is recorded, the panel says what happened, and the item is scanned again. A purchase that gets no reply but goes through later is still recorded when the success arrives.
 - **Items that don't stack** (gear and the like) are listed as **buy yourself**: the panel only buys stackable items.
 
-**5. Craft.** The **Craft** button crafts the next step on the list, as many times as it needs (up to what you have materials for): **Craft Copper Bar, 7 times**. The game only crafts recipes of the profession window that's open, and in Forever an addon can't open one for you outside combat-locked special buttons. So when the next step is in another profession it says so: **Open Mining to craft Copper Bar**. It skips ahead to a later step the open window can make if you have its materials, says **Missing materials for ...** when you don't, and waits while you're casting. Materials are counted from your bags and reagent bank, which is what crafting can use; items in the main bank don't count until you take them out. Crafting the queued item counts the order down as usual.
+**5. Craft.** The **Craft** button crafts the next step on the list, as many times as it needs (up to what you have materials for): **Craft Copper Bar, 7 times**. The game only crafts recipes of the profession window that's open, so when the next step is in another profession the button says **Open Mining to craft Copper Bar**, and clicking it opens that profession (Mining opens with Smelting). In combat it says **Open Mining after combat** instead: the game doesn't let addons open professions then. It skips ahead to a later step the open window can make if you have its materials, says **Missing materials for ...** when you don't, and waits while you're casting. Materials are counted from your bags and reagent bank, which is what crafting can use; items in the main bank don't count until you take them out. Crafting the queued item counts the order down as usual.
 
 **Mail.** Auction purchases may arrive in your mailbox rather than your bags. A purchase counts as **in the mail** until that many more of the item show up in your bags or bank, so it's counted either way and never bought twice. If something is still shown as in the mail after you've collected it (say you used it up as it arrived), **Forget mail** stops counting it.
 
@@ -159,6 +159,7 @@ Files:
 | `Shopper.lua` | Scanning the auction house, live pricing, quotes and purchases |
 | `SearchButton.lua` | The Search button: the whole crafting tree in Auctionator |
 | `Crafter.lua` | The Craft button: the next step the open profession can make |
+| `OpenButton.lua` | Opening another profession from the Craft button |
 | `Panel.lua` | The shopping panel, moving it, and `/vprofit` |
 
 Saved data, per character (`VendorProfitCharDB`):
@@ -166,6 +167,8 @@ Saved data, per character (`VendorProfitCharDB`):
 - `professions[professionID] = { name, recipes = { [recipeID] = { item, count, reagents } } }`
 - `order = { entries, inMail, lastSeen, spent }`: the queued crafts, purchases not seen in bags or bank yet (and the count they're waiting to rise from), and what the panel spent.
 - `panel = { left, top }`: where you moved the shopping panel, if you did.
+
+Opening a profession uses a secure action button casting the profession's spell, as TradeSkillMaster does in Forever. It's a separate invisible button laid over the Craft button rather than part of the panel, because a secure button inside the panel would make the panel protected and the game would block showing, hiding or moving it in combat. It's only placed out of combat and hidden as combat starts.
 
 Shopping uses `C_AuctionHouse`: `SendSearchQuery` and the commodity search results to scan, `StartCommoditiesPurchase` for the quote (`COMMODITY_PRICE_UPDATED`), and `ConfirmCommoditiesPurchase`, called straight from the Confirm click, to buy (`COMMODITY_PURCHASE_SUCCEEDED` / `_FAILED`). Searches wait for the auction house's throttle and for the item to be loaded, are sent again if there's no reply, and ask for more results when the first page isn't enough.
 
