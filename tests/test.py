@@ -54,7 +54,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteLine.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteLine.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "Shopper.lua", "Panel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
 run('__stub.Fire("TRADE_SKILL_SHOW")')
@@ -375,6 +375,284 @@ r = ev("VendorProfit.RouteLine.Calculate(VendorProfit.Calculate(ProfessionsFrame
 check("slot with options uses the cheapest option (copper bar crafted at 50c)",
       r.route.children[1].node.itemID == COPPER_BAR and r.cost == 100)
 check("no errors in the route section", ev("#__stub.errors") == 0)
+
+
+# =============================================================================
+# Queue, plan and shopping
+# =============================================================================
+def shop_client(sell=600, before_load=""):
+    run, ev = route_client(before_load)
+    run('__stub.OpenProfession(186, "Mining", %s)' % MINING)
+    run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
+    run('__stub.items["item:2866"].sellPrice = %d' % sell)
+    # Have: 12 Bronze Bars in bags, 3 Copper Bars in bags and 2 in the bank.
+    run('__stub.bags[2841] = 12; __stub.bags[2840] = 3; __stub.bank[2840] = 2')
+    run('__stub.SetRecipe(%s)' % CUIRASS)
+    return run, ev
+
+
+def lines(ev):
+    return list(ev("VendorProfit.Panel.Lines()").values())
+
+
+def has_line(ev, *parts):
+    return any(all(p in l for p in parts) for l in lines(ev))
+
+
+def click(run, name):
+    run("VendorProfit.Panel.Buttons().%s:Click()" % name)
+
+
+QUEUE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitQueueButton"
+run, ev = shop_client()
+
+# --- Queue button --------------------------------------------------------------
+check("queue button beside the route line", ev(QUEUE + ":IsShown()") and ev(QUEUE + ".__point[2] == " + ROUTE))
+run('__stub.createCount = 10')
+run(QUEUE + ':Click()')
+check("queued 10 from the Create box", ev("VendorProfit.Order.Entries()[1].crafts") == 10)
+check("panel opens", ev("VendorProfit.Panel.IsShown()"))
+check("docked beside the professions window", ev("VendorProfitPanel.__point[2] == ProfessionsFrame"))
+
+# --- The plan --------------------------------------------------------------------
+plan = ev("VendorProfit.Shopper.Summary().plan")
+buy = {l.itemID: l.quantity for l in plan.buyOrder.values()}
+check("buys 24 copper ore and 29 tin bars", buy == {COPPER_ORE: 24, TIN_BAR: 29})
+crafts = [(c.itemID, c.crafts) for c in plan.crafts.values()]
+check("crafts deepest first: copper bars, bronze bars, cuirasses",
+      crafts == [(COPPER_BAR, 24), (BRONZE_BAR, 29), (CUIRASS_ID, 10)])
+check("uses the 12 bronze bars and 5 copper bars you have",
+      plan.uses[BRONZE_BAR] == 12 and plan.uses[COPPER_BAR] == 5)
+s_ = ev("VendorProfit.Shopper.Summary()")
+check("estimate: 6000 - 1000 had - 3375 to buy = 1625", s_.revenue == 6000 and s_.ownedValue == 1000 and s_.remaining == 3375 and s_.profit == 1625)
+check("panel lists what to buy", has_line(ev, "Copper Ore x24", "buy (auction)") and has_line(ev, "Tin Bar x29"))
+check("panel lists what you have, with the bank", has_line(ev, "Copper Bar x5", "2 in bank") and has_line(ev, "Bronze Bar x12"))
+check("panel lists the crafts", has_line(ev, "Copper Bar x24", "Mining, 24 crafts")
+      and has_line(ev, "Bronze Bar x58", "Mining, 29 crafts") and has_line(ev, "Rough Bronze Cuirass x10", "Blacksmithing, 10 crafts"))
+check("panel says prices are Auctionator's until the AH opens", has_line(ev, "Auctionator's last scan"))
+check("buy button waits for the auction house",
+      ev("VendorProfit.Panel.Buttons().buy.__text") == "Open the auction house to buy" and not ev("VendorProfit.Panel.Buttons().buy:IsEnabled()"))
+
+run(QUEUE + ':Click()')
+check("queuing again adds to the same entry", ev("#VendorProfit.Order.Entries()") == 1 and ev("VendorProfit.Order.Entries()[1].crafts") == 20)
+run('VendorProfit.Order.Entries()[1].crafts = 10; VendorProfit.Order.Changed()')
+
+# --- At the auction house --------------------------------------------------------
+run('''
+    __stub.ah.listings[2770] = { { unitPrice = 50, quantity = 10 }, { unitPrice = 55, quantity = 20 }, { unitPrice = 80, quantity = 100 } }
+    __stub.ah.listings[3576] = { { unitPrice = 75, quantity = 10 }, { unitPrice = 78, quantity = 30 } }
+''')
+run('__stub.OpenAH()')
+check("panel docks beside the auction house", ev("VendorProfitPanel.__point[2] == AuctionHouseFrame"))
+check("scan first", ev("VendorProfit.Shopper.Status()") == "idle" and ev("VendorProfit.Panel.Buttons().buy.__text") == "Scan first")
+click(run, "scan")
+check("scanning", ev("VendorProfit.Shopper.Status()") == "scanning")
+run('__stub.Advance(2)')
+check("scan done", ev("VendorProfit.Shopper.Status()") == "ready")
+check("scanned the two auction items", list(ev("__stub.ah.searches").values()) == [COPPER_ORE, TIN_BAR])
+s_ = ev("VendorProfit.Shopper.Summary()")
+check("live cost walks the listings: 1270 + 2232", s_.remaining == 1270 + 2232)
+check("live profit", abs(s_.profit - (6000 - (12 * (1270 / 24 + 2232 / 29) / 2 + 5 * 1270 / 24) - 3502)) < 1e-6)
+check("buy button offers the first purchase",
+      ev("VendorProfit.Panel.Buttons().buy.__text") == "Buy 24 Copper Ore (|cffffffff12s 70c|r)" and ev("VendorProfit.Panel.Buttons().buy:IsEnabled()"))
+
+# Buy: quote, then confirm.
+click(run, "buy")
+check("buy asks for a quote", list(ev("__stub.ah.starts[1]").values()) == [COPPER_ORE, 24] and ev("VendorProfit.Shopper.Status()") == "quoting")
+check("no purchase without confirming", ev("#__stub.ah.confirms") == 0)
+run('__stub.Advance(0.5)')
+check("quote within budget: confirm offered",
+      ev("VendorProfit.Shopper.Status()") == "confirm" and ev("VendorProfit.Panel.Buttons().buy.__text") == "Confirm: 24 Copper Ore for |cffffffff12s 70c|r")
+check("cancel offered while confirming", ev("VendorProfit.Panel.Buttons().cancel:IsShown()"))
+click(run, "buy")
+run('__stub.Advance(0.5)')
+check("bought: recorded with what it cost", ev("VendorProfitCharDB.order.bought[2770]") == 24 and ev("VendorProfitCharDB.order.spent") == 1270)
+check("ore in bags", ev("__stub.bags[2770]") == 24)
+check("message says what was bought", has_line(ev, "Bought 24 Copper Ore for"))
+check("copper ore off the list", ev("VendorProfit.Shopper.Summary().plan.buy[2770]") is None)
+check("next purchase offered", ev("VendorProfit.Panel.Buttons().buy.__text") == "Buy 29 Tin Bar (|cffffffff22s 32c|r)")
+
+# Price went up between scan and buy: the cheap tin bars sold.
+run('__stub.ah.listings[3576][1].quantity = 0')
+click(run, "buy")
+run('__stub.Advance(0.5)')
+check("quote above the scan: cancelled, nothing bought", ev("__stub.ah.cancels") == 1 and ev("#__stub.ah.confirms") == 1)
+check("says the price went up", any("costs more than scanned" in l for l in lines(ev)))
+run('__stub.Advance(2)')
+check("rescanned at the new price", ev("VendorProfit.Shopper.Status()") == "ready"
+      and ev("VendorProfit.Panel.Buttons().buy.__text") == "Buy 29 Tin Bar (|cffffffff22s 62c|r)")
+click(run, "buy"); run('__stub.Advance(0.5)'); click(run, "buy"); run('__stub.Advance(0.5)')
+check("tin bars bought", ev("VendorProfitCharDB.order.bought[3576]") == 29 and ev("VendorProfitCharDB.order.spent") == 1270 + 2262)
+check("nothing left to buy", ev("VendorProfit.Panel.Buttons().buy.__text") == "Nothing to buy here"
+      and has_line(ev, "Nothing to buy: you have everything."))
+check("crafts still listed", has_line(ev, "Bronze Bar x58", "29 crafts"))
+check("no errors while shopping", ev("#__stub.errors") == 0)
+
+# Crafting the copper bars changes the bags; the plan follows.
+run('__stub.bags[2770] = 0; __stub.bags[2840] = 27; __stub.Fire("BAG_UPDATE_DELAYED")')
+check("crafted copper bars: their step goes, nothing to buy",
+      not has_line(ev, "Copper Bar x24") and ev("#VendorProfit.Shopper.Summary().plan.buyOrder") == 0)
+
+# Closing the auction house.
+run('__stub.CloseAH()')
+check("panel closes with the auction house", not ev("VendorProfit.Panel.IsShown()"))
+run('VendorProfit.Panel.Show()')
+check("reopened away from the AH: docked to the professions window", ev("VendorProfitPanel.__point[2] == ProfessionsFrame"))
+click(run, "clear")
+check("clear empties the order and its record", ev("VendorProfit.Order.IsEmpty()") and ev("VendorProfitCharDB.order.spent") == 0)
+
+# --- Not profitable at live prices --------------------------------------------
+run, ev = shop_client(sell=450)
+run('__stub.createCount = 10'); run(QUEUE + ':Click()')
+check("profitable on Auctionator's prices", ev("VendorProfit.Shopper.Summary().profit") > 0)
+run('''
+    __stub.ah.listings[2770] = { { unitPrice = 90, quantity = 100 } }
+    __stub.ah.listings[3576] = { { unitPrice = 100, quantity = 100 } }
+    __stub.ah.listings[2771] = { { unitPrice = 95, quantity = 100 } }
+''')
+run('__stub.OpenAH()'); click(run, "scan"); run('__stub.Advance(3)')
+check("live prices: loses money", ev("VendorProfit.Shopper.Summary().profit") < 0)
+check("buy refused", ev("VendorProfit.Panel.Buttons().buy.__text") == "Not profitable" and not ev("VendorProfit.Panel.Buttons().buy:IsEnabled()"))
+check("panel warns", has_line(ev, "loses money"))
+run('VendorProfit.Shopper.Buy()')
+check("even called directly, nothing is bought", ev("#__stub.ah.starts") == 0)
+check("buy anyway offered", ev("VendorProfit.Panel.Buttons().anyway:IsShown()"))
+click(run, "anyway")
+check("buy anyway allows buying", ev("VendorProfit.Panel.Buttons().buy:IsEnabled()") and ev("VendorProfit.Panel.Buttons().buy.__text").startswith("Buy "))
+click(run, "scan"); run('__stub.Advance(3)')
+check("a new scan asks again", not ev("VendorProfit.Panel.Buttons().buy:IsEnabled()"))
+
+# --- Live prices change the route ------------------------------------------------
+run, ev = shop_client()
+run('__stub.createCount = 10'); run(QUEUE + ':Click()')
+run('''
+    __stub.ah.listings[2770] = { { unitPrice = 50, quantity = 100 } }
+    __stub.ah.listings[3576] = { { unitPrice = 200, quantity = 100 } }  -- tin bars now dear
+    __stub.ah.listings[2771] = { { unitPrice = 60, quantity = 100 } }   -- tin ore cheap
+''')
+run('__stub.OpenAH()'); click(run, "scan"); run('__stub.Advance(3)')
+buy = {l.itemID: l.quantity for l in ev("VendorProfit.Shopper.Summary().plan.buyOrder").values()}
+check("tin bars now smelted from tin ore", buy == {COPPER_ORE: 24, TIN_ORE: 29})
+check("tin ore scanned too", TIN_ORE in list(ev("__stub.ah.searches").values()))
+check("tin bar step added", has_line(ev, "Tin Bar x29", "Mining, 29 crafts"))
+
+# --- Purchases that go to the mailbox -------------------------------------------
+run, ev = shop_client()
+run('__stub.createCount = 10'); run(QUEUE + ':Click()')
+run('''
+    __stub.ah.toMail = true
+    __stub.ah.listings[2770] = { { unitPrice = 50, quantity = 100 } }
+    __stub.ah.listings[3576] = { { unitPrice = 75, quantity = 100 } }
+''')
+run('__stub.OpenAH()'); click(run, "scan"); run('__stub.Advance(2)')
+click(run, "buy"); run('__stub.Advance(0.5)'); click(run, "buy"); run('__stub.Advance(0.5)')
+check("ore in the mail, not the bags", ev("__stub.bags[2770]") is None and ev("__stub.mail[2770]") == 24)
+check("still counted: not bought twice", ev("VendorProfit.Shopper.Summary().plan.buy[2770]") is None
+      and ev("VendorProfit.Panel.Buttons().buy.__text").startswith("Buy 29 Tin Bar"))
+run('__stub.bags[2770] = 24; __stub.mail[2770] = 0; __stub.Fire("BAG_UPDATE_DELAYED")')
+check("collected from the mail: still counted once", ev("VendorProfit.Shopper.Summary().plan.buy[2770]") is None)
+click(run, "recount")
+check("recount after collecting: record cleared, bags counted",
+      ev("VendorProfitCharDB.order.bought[2770]") is None and ev("VendorProfit.Shopper.Summary().plan.buy[2770]") is None)
+check("recount keeps what was spent", ev("VendorProfitCharDB.order.spent") == 1200)
+
+# --- Things going wrong -----------------------------------------------------------
+run, ev = shop_client()
+run('__stub.createCount = 10'); run(QUEUE + ':Click()')
+run('''
+    __stub.ah.listings[2770] = { { unitPrice = 50, quantity = 3, own = 3 }, { unitPrice = 52, quantity = 10, own = 2 }, { unitPrice = 60, quantity = 100 } }
+    __stub.ah.listings[3576] = { { unitPrice = 75, quantity = 100 } }
+''')
+run('__stub.OpenAH()')
+run('__stub.ah.ready = false')
+click(run, "scan"); run('__stub.Advance(2)')
+check("waits for the auction house's throttle", ev("#__stub.ah.searches") == 0 and ev("VendorProfit.Shopper.Status()") == "scanning")
+run('__stub.ah.ready = true; __stub.ah.dropSearches = 1'); run('__stub.Advance(2)')
+check("a search with no reply...", ev("#__stub.ah.searches") == 1 and ev("VendorProfit.Shopper.Status()") == "scanning")
+run('__stub.Advance(10)')
+check("...is sent again after the timeout", ev("#__stub.ah.searches") >= 3 and ev("VendorProfit.Shopper.Status()") == "ready")
+r = ev("VendorProfit.Shopper.Listing(2770)")
+check("your own listings left out", r.rows[1].unitPrice == 52 and r.rows[1].quantity == 8)
+check("priced without them: 8 x 52 + 16 x 60", ev("VendorProfit.Shopper.Summary().plan.buy[2770].total") == 8 * 52 + 16 * 60)
+
+run('__stub.ah.failNext = true')
+searches = ev("#__stub.ah.searches")
+click(run, "buy"); run('__stub.Advance(0.5)'); click(run, "buy"); run('__stub.Advance(0.15)')
+check("failed purchase: nothing recorded", ev("VendorProfitCharDB.order.bought[2770]") is None and ev("VendorProfitCharDB.order.spent") == 0)
+check("failed purchase: says so and rescans", any("failed" in l for l in lines(ev)) and ev("VendorProfit.Shopper.Status()") == "scanning")
+run('__stub.Advance(2)')
+check("...then ready again", ev("VendorProfit.Shopper.Status()") == "ready" and ev("#__stub.ah.searches") == searches + 1)
+
+run('__stub.ah.noPurchaseReply = true')
+click(run, "buy"); run('__stub.Advance(0.5)'); click(run, "buy"); run('__stub.Advance(16)')
+check("no reply to a purchase: not recorded, rescanned",
+      ev("VendorProfitCharDB.order.spent") == 0 and any("No reply buying" in l for l in lines(ev)))
+run('__stub.ah.noPurchaseReply = false; __stub.Advance(3)')
+run('__stub.Fire("COMMODITY_PURCHASE_SUCCEEDED")')  # the timed-out purchase went through after all
+check("a late success is still recorded", ev("VendorProfitCharDB.order.bought[2770]") == 24)
+run('VendorProfitCharDB.order.bought = {}; VendorProfitCharDB.order.spent = 0; VendorProfit.Order.Changed()')
+
+run('__stub.money = 10')
+click(run, "buy")
+check("not enough gold: no quote asked", any("Not enough gold" in l for l in lines(ev)) and ev("VendorProfit.Shopper.Status()") == "ready")
+run('__stub.money = 1000000')
+
+starts = ev("#__stub.ah.starts")
+click(run, "buy"); run('__stub.Advance(0.5)')
+click(run, "cancel")
+check("cancel drops the quote", ev("VendorProfit.Shopper.Status()") == "ready" and ev("__stub.ah.cancels") >= 1)
+
+cancels = ev("__stub.ah.cancels")
+click(run, "buy"); run('__stub.Advance(0.5)')
+run('__stub.CloseAH()')
+check("closing the AH mid-purchase cancels it", ev("__stub.ah.cancels") == cancels + 1 and ev("VendorProfit.Shopper.Status()") == "closed")
+check("no errors when things go wrong", ev("#__stub.errors") == 0)
+
+# Not enough listed; more results; things that don't stack.
+run, ev = shop_client()
+run('__stub.createCount = 10'); run(QUEUE + ':Click()')
+run('''
+    __stub.ah.pageSize = 1
+    __stub.ah.listings[2770] = { { unitPrice = 50, quantity = 5 }, { unitPrice = 51, quantity = 5 } }
+    __stub.ah.nonCommodity[3576] = true
+''')
+run('__stub.OpenAH()'); click(run, "scan"); run('__stub.Advance(3)')
+check("asks for more listings when the first page isn't enough", ev("__stub.ah.moreRequests") >= 1
+      and ev("VendorProfit.Shopper.Summary().plan.buy[2770].listed") == 10)
+check("only 10 listed: says so", has_line(ev, "Copper Ore x24", "only 10 listed") and has_line(ev, "Not enough listed"))
+check("buys what's there", ev("VendorProfit.Panel.Buttons().buy.__text").startswith("Buy 10 Copper Ore"))
+check("item that doesn't stack: buy it yourself", has_line(ev, "Tin Bar x29", "buy yourself"))
+
+# --- Queue rules and saving -------------------------------------------------------
+run, ev = shop_client()
+run('__stub.items["item:2866"].sellPrice = 0; AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
+check("no queue button for items vendors won't buy", not ev(QUEUE + ":IsShown()"))
+run('__stub.items["item:2866"].sellPrice = 600; AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
+run('__stub.createCount = 3'); run(QUEUE + ':Click()')
+dump = run('''
+    local function dump(v)
+        if type(v) == "table" then
+            local parts = {}
+            for k, x in pairs(v) do
+                local key = type(k) == "number" and ("[" .. k .. "]") or ("[" .. string.format("%q", k) .. "]")
+                parts[#parts + 1] = key .. "=" .. dump(x)
+            end
+            return "{" .. table.concat(parts, ",") .. "}"
+        elseif type(v) == "string" then
+            return string.format("%q", v)
+        end
+        return tostring(v)
+    end
+    return dump(VendorProfitCharDB)
+''')
+run5, ev5 = route_client("VendorProfitCharDB = " + dump)
+check("order saved across sessions", ev5("VendorProfit.Order.Entries()[1].crafts") == 3)
+run5('__stub.OpenAH()')
+check("panel opens with the AH when something is queued", ev5("VendorProfit.Panel.IsShown()"))
+run5('SlashCmdList.VENDORPROFIT("")')
+check("/vprofit toggles the panel", not ev5("VendorProfit.Panel.IsShown()"))
+run5('VendorProfit.Order.Remove(1)')
+check("removing the last entry clears the order", ev5("VendorProfit.Order.IsEmpty()"))
 
 print()
 failed = [label for label, ok in results if not ok]

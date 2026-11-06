@@ -42,6 +42,18 @@ function FrameMethods:SetScript(k, fn) self.__scripts[k] = fn end
 function FrameMethods:GetScript(k) return self.__scripts[k] end
 function FrameMethods:SetAllPoints(r) self.__allPoints = r end
 function FrameMethods:EnableMouse(e) self.__mouse = e end
+function FrameMethods:SetSize(w, h) self.__w, self.__h = w, h end
+function FrameMethods:SetWidth(w) self.__w = w end
+function FrameMethods:SetHeight(h) self.__h = h end
+function FrameMethods:GetHeight() return self.__h or 0 end
+function FrameMethods:SetPoint(...) self.__point = { ... } end
+function FrameMethods:ClearAllPoints() self.__point = nil end
+function FrameMethods:SetText(t) self.__text = t end
+function FrameMethods:GetText() return self.__text end
+function FrameMethods:SetEnabled(e) self.__enabled = not not e end
+function FrameMethods:IsEnabled() return self.__enabled ~= false end
+function FrameMethods:SetTitle(t) self.__title = t end
+function FrameMethods:Click(...) if self.__scripts.OnClick and self:IsEnabled() then self.__scripts.OnClick(self, ...) end end
 function FrameMethods:CreateFontString()
     return setmetatable({ __shown = true, __parent = self, __text = "" }, FontMethods)
 end
@@ -49,6 +61,12 @@ end
 function FontMethods:SetText(t) self.__text = t or "" end
 function FontMethods:GetText() return self.__text end
 function FontMethods:SetJustifyH() end
+function FontMethods:SetFontObject() end
+function FontMethods:SetWordWrap() end
+function FontMethods:SetWidth() end
+function FontMethods:GetStringHeight() return 12 end
+function FontMethods:ClearAllPoints() self.__point = nil end
+function FontMethods:SetShown(s) self.__shown = not not s end
 function FontMethods:SetPoint(...) self.__point = { ... } end
 function FontMethods:Show() self.__shown = true end
 function FontMethods:Hide() self.__shown = false end
@@ -61,11 +79,23 @@ function stub.Fire(event, ...)
     end
 end
 
-function stub.RunTimers()
-    local t = stub.timers
-    stub.timers = {}
-    for _, fn in ipairs(t) do fn() end
+-- Timers run in time order as time advances. RunTimers advances one second.
+stub.now = 0
+function stub.Advance(seconds)
+    local target = stub.now + seconds
+    while true do
+        local best, bestIndex
+        for i, t in ipairs(stub.timers) do
+            if t.at <= target and (best == nil or t.at < best.at) then best, bestIndex = t, i end
+        end
+        if best == nil then break end
+        table.remove(stub.timers, bestIndex)
+        stub.now = best.at
+        best.fn()
+    end
+    stub.now = target
 end
+function stub.RunTimers() stub.Advance(1) end
 
 -- Tooltip -------------------------------------------------------------------
 GameTooltip = { lines = {}, shown = false }
@@ -93,8 +123,13 @@ function geterrorhandler()
 end
 
 C_AddOns = { GetAddOnMetadata = function(addon, key) return stub.metadata[addon] and stub.metadata[addon][key] end }
-C_Timer = { After = function(_, fn) stub.timers[#stub.timers + 1] = fn end }
-Enum = { CraftingReagentType = { Basic = 0, Optional = 1 } }
+C_Timer = { After = function(seconds, fn) stub.timers[#stub.timers + 1] = { at = stub.now + seconds, fn = fn } end }
+SlashCmdList = {}
+stub.money = 1000000
+function GetMoney() return stub.money end
+function ButtonFrameTemplate_HidePortrait() end
+function ButtonFrameTemplate_HideButtonBar() end
+Enum = { CraftingReagentType = { Basic = 0, Optional = 1 }, PlayerInteractionType = { Auctioneer = 21, Merchant = 5 } }
 
 local function Color(code, r, g, b)
     return { r = r, g = g, b = b, WrapTextInColorCode = function(_, t) return "|cff" .. code .. t .. "|r" end }
@@ -112,6 +147,9 @@ function GetMoneyString(copper)
     return table.concat(parts, " ")
 end
 
+-- Inventory: bags, bank and the mailbox (which GetItemCount doesn't see).
+stub.bags, stub.bank, stub.mail = {}, {}, {}
+
 local function ToLink(x) return type(x) == "number" and ("item:" .. x) or x end
 local function ToID(x) return type(x) == "number" and x or tonumber(tostring(x):match("item:(%d+)")) end
 stub.ToID = ToID
@@ -122,6 +160,11 @@ C_Item = {
         local item = stub.items[link]
         if item == nil or not item.cached then return nil end
         return item.name or link, link, 2, 20, 0, "Armor", "Mail", 1, "INVTYPE_CHEST", 0, item.sellPrice or 0
+    end,
+    GetItemCount = function(id, includeBank, _, includeReagentBank)
+        local n = stub.bags[id] or 0
+        if includeBank then n = n + (stub.bank[id] or 0) end
+        return n
     end,
     GetItemInfoInstant = function(x)
         local id = ToID(x)
@@ -302,3 +345,115 @@ function stub.HoverRoute()
     end
     return table.concat(out, "\n")
 end
+
+-- Professions window Create box.
+stub.createCount = 1
+ProfessionsFrame.CraftingPage.CreateMultipleInputBox = { GetValue = function() return stub.createCount end }
+
+-- Auction house --------------------------------------------------------------
+-- ah.listings[itemID] = { { unitPrice, quantity, own }, ... } for stackable items;
+-- ah.nonCommodity[itemID] = true for items that don't stack.
+stub.ah = {
+    listings = {}, nonCommodity = {}, ready = true, pageSize = 100, loaded = {},
+    searches = {}, starts = {}, confirms = {}, cancels = 0,
+    dropSearches = 0,     -- ignore this many searches (no reply)
+    emptyReplies = 0,     -- answer this many searches with "no results loaded"
+    failNext = false,     -- next confirm fails
+    toMail = false,       -- purchases go to the mailbox instead of the bags
+    noPurchaseReply = false,
+    quotePriceChange = 0, -- added to every quote's total
+}
+local ah = stub.ah
+AuctionHouseFrame = CreateFrame("Frame", "AuctionHouseFrame")
+AuctionHouseFrame:Hide()
+
+local function Later(fn) C_Timer.After(0.1, fn) end
+local function Rows(id) return ah.listings[id] or {} end
+local function WalkListings(id, quantity)
+    local total, got = 0, 0
+    for _, row in ipairs(Rows(id)) do
+        local buyable = row.quantity - (row.own or 0)
+        local take = math.min(buyable, quantity - got)
+        if take > 0 then total = total + take * row.unitPrice; got = got + take end
+        if got >= quantity then break end
+    end
+    return total, got
+end
+
+C_AuctionHouse = {
+    MakeItemKey = function(id) return { itemID = id } end,
+    IsThrottledMessageSystemReady = function() return ah.ready end,
+    SendSearchQuery = function(itemKey)
+        local id = itemKey.itemID
+        ah.searches[#ah.searches + 1] = id
+        if ah.dropSearches > 0 then ah.dropSearches = ah.dropSearches - 1 return end
+        ah.loaded[id] = math.min(ah.pageSize, #Rows(id))
+        local empty = false
+        if ah.emptyReplies > 0 then ah.emptyReplies = ah.emptyReplies - 1; empty = true end
+        Later(function()
+            ah.forceEmpty = empty
+            if ah.nonCommodity[id] then
+                stub.Fire("ITEM_SEARCH_RESULTS_UPDATED", { itemID = id })
+            else
+                stub.Fire("COMMODITY_SEARCH_RESULTS_UPDATED", id)
+            end
+            ah.forceEmpty = false
+        end)
+    end,
+    HasSearchResults = function() return true end,
+    HasFullCommoditySearchResults = function(id) return not ah.forceEmpty and (ah.loaded[id] or 0) >= #Rows(id) end,
+    GetNumCommoditySearchResults = function(id) if ah.forceEmpty then return 0 end return ah.loaded[id] or 0 end,
+    GetCommoditySearchResultInfo = function(id, i)
+        local row = Rows(id)[i]
+        return row and { unitPrice = row.unitPrice, quantity = row.quantity, numOwnerItems = row.own or 0, containsOwnerItem = (row.own or 0) > 0 }
+    end,
+    RequestMoreCommoditySearchResults = function(id)
+        ah.moreRequests = (ah.moreRequests or 0) + 1
+        ah.loaded[id] = math.min((ah.loaded[id] or 0) + ah.pageSize, #Rows(id))
+        Later(function() stub.Fire("COMMODITY_SEARCH_RESULTS_ADDED", id) end)
+    end,
+    StartCommoditiesPurchase = function(id, quantity)
+        ah.starts[#ah.starts + 1] = { id, quantity }
+        Later(function()
+            local total, got = WalkListings(id, quantity)
+            if got < quantity then
+                stub.Fire("COMMODITY_PRICE_UNAVAILABLE")
+            else
+                total = total + ah.quotePriceChange
+                stub.Fire("COMMODITY_PRICE_UPDATED", math.ceil(total / quantity), total)
+            end
+        end)
+    end,
+    CancelCommoditiesPurchase = function() ah.cancels = ah.cancels + 1 end,
+    ConfirmCommoditiesPurchase = function(id, quantity)
+        ah.confirms[#ah.confirms + 1] = { id, quantity }
+        if ah.noPurchaseReply then return end
+        Later(function()
+            if ah.failNext then ah.failNext = false; stub.Fire("COMMODITY_PURCHASE_FAILED") return end
+            local total = WalkListings(id, quantity)
+            -- remove bought listings
+            local left = quantity
+            for _, row in ipairs(Rows(id)) do
+                local take = math.min(row.quantity - (row.own or 0), left)
+                row.quantity = row.quantity - take; left = left - take
+            end
+            stub.money = stub.money - total
+            local where = ah.toMail and stub.mail or stub.bags
+            where[id] = (where[id] or 0) + quantity
+            stub.Fire("COMMODITY_PURCHASE_SUCCEEDED")
+            if not ah.toMail then stub.Fire("BAG_UPDATE_DELAYED") end
+        end)
+    end,
+}
+
+function stub.OpenAH()
+    AuctionHouseFrame:Show()
+    stub.Fire("PLAYER_INTERACTION_MANAGER_FRAME_SHOW", 21)
+    stub.Fire("AUCTION_HOUSE_SHOW")
+end
+function stub.CloseAH()
+    AuctionHouseFrame:Hide()
+    stub.Fire("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", 21)
+    stub.Fire("AUCTION_HOUSE_CLOSED")
+end
+

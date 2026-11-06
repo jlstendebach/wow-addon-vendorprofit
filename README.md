@@ -5,6 +5,8 @@ An addon for World of Warcraft: Forever that adds two lines under Auctionator's 
 - **Vendor Profit:** what you make by crafting the item and selling it to a vendor instead of on the auction house.
 - **Vendor Profit (route):** the same, but getting every reagent the cheapest way, crafting reagents yourself where that's cheaper than buying them, all the way down. Hover it to see the route.
 
+Beside the route line, **Queue** adds the recipe to a shopping order. A shopping panel then plans it with what you already have, scans the auction house, checks the order is still profitable at live prices, and buys what's missing one confirmed purchase at a time.
+
 ```
 To Craft: 12s 39c
 Profit: -6s                     <- Auctionator: sell on the auction house
@@ -86,6 +88,33 @@ What it can't know:
 - **What you already have.** Reagents in your bags are priced at their market value, since you could sell them instead.
 - **Recipes in professions you haven't opened** on this character, or on your other characters.
 
+## Shopping
+
+**1. Queue.** Set the number in the professions window's Create box (say 10) and click **Queue** beside the Vendor Profit (route) line. Queuing a recipe already in the order adds to it. The shopping panel opens; `/vprofit` toggles it any time.
+
+**2. The plan.** The panel works out, in whole numbers, what the order needs, using what you already have (bags and bank) first:
+
+```
+10 Rough Bronze Cuirasses need 70 Bronze Bars. You have 12, so 58 to make: 29 smelts.
+29 smelts need 29 Copper Bars (you have 5, so 24 to smelt from 24 Copper Ore) and 29 Tin Bars.
+```
+
+It lists **To buy**, **From your bags and bank** (with how many are in the bank), **Then craft** in order (deepest first), and the order's **Profit**: what it all sells to vendors for, minus what's been spent, what your own items used are worth, and what's still to buy. Several queued recipes share your items, so nothing is counted twice.
+
+**3. Scan.** At the auction house the panel docks beside it (and opens by itself when something is queued). **Scan** reads every listing of each item the order buys there, so buying 24 is priced by walking up the cheapest listings, not at the lowest single price, and your own listings are left out. With live prices the order is planned again: if crafting something has become cheaper than buying it, or the other way round, the plan changes and the new items are scanned too.
+
+**4. Buy.** **Buy 24 Copper Ore (12s 70c)** asks the auction house for a price quote. If the quote is no more than the scan, **Confirm: 24 Copper Ore for 12s 70c** buys it. That's two clicks per item, the same as Auctionator's own buying: the game only allows a purchase as part of a click.
+
+- **Price went up:** if the quote is higher than the scan (someone bought the cheap ones first), the purchase is cancelled and the item scanned again.
+- **Not profitable:** before each purchase the whole order must still make money at current prices. If not, Buy is off and the panel says so. **Buy anyway** lets you go on until the next scan.
+- **Not enough listed:** it buys what's there and says how many are missing.
+- **Not enough gold, no reply, a failed purchase:** nothing is recorded, the panel says what happened, and the item is scanned again. A purchase that gets no reply but goes through later is still recorded when the success arrives.
+- **Items that don't stack** (gear and the like) are listed as **buy yourself**: the panel only buys stackable items.
+
+**Mail.** Auction purchases may arrive in your mailbox rather than your bags. The order keeps its own record of what the panel bought, and counts the larger of what's in your bags and bank now, or what was there when the order started plus what it bought. So items in the mail still count, and items you craft or buy from a vendor show up as you get them. **Recount** starts the count fresh. Collect your mail first: it clears the record of purchases, which are in your bags by then.
+
+The order is saved per character. **Clear order** empties it and its record.
+
 ## How it works
 
 - Auctionator makes its crafting info frame (`AuctionatorCraftingInfoProfessionsFrame`) the first time the professions window opens. The addon hooks the function that makes it, attaches right after, and retries on the next frame in case it sees the event first.
@@ -104,8 +133,19 @@ Files:
 | `Recipes.lua` | Saving and looking up this character's recipes |
 | `Route.lua` | Finding the cheapest route |
 | `RouteLine.lua` | The Vendor Profit (route) line and its tooltip |
+| `Inventory.lua` | Counting what you have in bags and bank |
+| `Plan.lua` | Turning queued crafts into what to buy and craft, in whole numbers |
+| `Order.lua` | The saved order, what it bought and spent, what it can use |
+| `QueueButton.lua` | The Queue button |
+| `Shopper.lua` | Scanning the auction house, live pricing, quotes and purchases |
+| `Panel.lua` | The shopping panel and `/vprofit` |
 
-Saved data, per character: `VendorProfitCharDB.professions[professionID] = { name, recipes = { [recipeID] = { item, count, reagents } } }`.
+Saved data, per character (`VendorProfitCharDB`):
+
+- `professions[professionID] = { name, recipes = { [recipeID] = { item, count, reagents } } }`
+- `order = { entries, snapshot, bought, spent }`: the queued crafts, what you had when each item was first needed, what the panel bought, and what it spent.
+
+Shopping uses `C_AuctionHouse`: `SendSearchQuery` and the commodity search results to scan, `StartCommoditiesPurchase` for the quote (`COMMODITY_PRICE_UPDATED`), and `ConfirmCommoditiesPurchase`, called straight from the Confirm click, to buy (`COMMODITY_PURCHASE_SUCCEEDED` / `_FAILED`). Searches wait for the auction house's throttle and for the item to be loaded, are sent again if there's no reply, and ask for more results when the first page isn't enough.
 
 ## Tests
 

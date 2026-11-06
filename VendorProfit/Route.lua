@@ -8,13 +8,18 @@
 --   unitCost   copper for one, or nil when nothing gives it a price
 --   source     "vendor", "auction", "craft" or nil (no price)
 --   recipe     for "craft": the saved recipe used (Recipes.ForItem entry)
---   children   for "craft": { { node = ..., perUnit = n }, ... }, perUnit
---              being how many of that reagent one of this item takes
+--   children   for "craft": { { node = ..., perUnit = n, quantity = n }, ... }:
+--              perUnit is how many of that reagent one of this item takes,
+--              quantity how many one craft takes
 --   missing    true if a reagent somewhere below has no price and was
 --              counted as free, so unitCost is too low
 --
 -- Costs per item are averaged over what a craft makes: a recipe that makes
 -- 2 for 10c costs 5c each.
+--
+-- Buy prices come from VendorProfit.GetBuyPrices unless a getBuyPrices
+-- function (itemID -> vendor, auction) is passed, such as live auction house
+-- prices while shopping.
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -42,13 +47,13 @@ local Resolve
 -- The cheapest way to fill each reagent slot. Returns the total cost of the
 -- reagents, their children, and whether any was counted as free. Returns nil
 -- if a slot can only be filled by an item already on the route (a loop).
-local function ResolveReagents(reagents, visiting, depth)
+local function ResolveReagents(reagents, visiting, depth, getBuyPrices)
     local total, missing, children = 0, false, {}
     for _, slot in ipairs(reagents) do
         local best
         for _, itemID in ipairs(slot.items) do
             if not visiting[itemID] then
-                local node = Resolve(itemID, visiting, depth)
+                local node = Resolve(itemID, visiting, depth, getBuyPrices)
                 if best == nil or IsBetter(node, best) then
                     best = node
                 end
@@ -63,13 +68,13 @@ local function ResolveReagents(reagents, visiting, depth)
             total = total + best.unitCost * slot.quantity
         end
         missing = missing or best.missing
-        children[#children + 1] = { node = best, perUnit = slot.quantity }
+        children[#children + 1] = { node = best, perUnit = slot.quantity, quantity = slot.quantity }
     end
     return total, children, missing
 end
 
-local function CraftNode(itemID, recipe, visiting, depth)
-    local total, children, missing = ResolveReagents(recipe.reagents, visiting, depth)
+local function CraftNode(itemID, recipe, visiting, depth, getBuyPrices)
+    local total, children, missing = ResolveReagents(recipe.reagents, visiting, depth, getBuyPrices)
     if total == nil then
         return nil
     end
@@ -86,8 +91,8 @@ local function CraftNode(itemID, recipe, visiting, depth)
     }
 end
 
-function Resolve(itemID, visiting, depth)
-    local vendor, auction = VendorProfit.GetBuyPrices(itemID)
+function Resolve(itemID, visiting, depth, getBuyPrices)
+    local vendor, auction = getBuyPrices(itemID)
     local best = { itemID = itemID, missing = false }
     if vendor and (auction == nil or vendor <= auction) then
         best.unitCost, best.source = vendor, "vendor"
@@ -98,7 +103,7 @@ function Resolve(itemID, visiting, depth)
     if depth < Route.MAX_DEPTH then
         visiting[itemID] = true
         for _, recipe in ipairs(Recipes.ForItem(itemID)) do
-            local node = CraftNode(itemID, recipe, visiting, depth + 1)
+            local node = CraftNode(itemID, recipe, visiting, depth + 1, getBuyPrices)
             if IsBetter(node, best) then
                 best = node
             end
@@ -112,12 +117,12 @@ end
 -- reagents (Recipes.ReagentsFromSchematic format). Returns
 --   { cost = copper for one craft, children = ..., missing = bool }
 -- with children's perUnit being the amount one craft takes.
-function Route.ForRecipe(outputItemID, reagents)
+function Route.ForRecipe(outputItemID, reagents, getBuyPrices)
     local visiting = {}
     if outputItemID then
         visiting[outputItemID] = true
     end
-    local total, children, missing = ResolveReagents(reagents, visiting, 1)
+    local total, children, missing = ResolveReagents(reagents, visiting, 1, getBuyPrices or VendorProfit.GetBuyPrices)
     if total == nil then
         -- Only reachable if the recipe uses its own output; price it as given.
         return { cost = 0, children = {}, missing = true }

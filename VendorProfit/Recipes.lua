@@ -172,9 +172,9 @@ events:SetScript("OnEvent", function(self, event, arg)
         db.professions = db.professions or {}
         RebuildIndex()
         self:UnregisterEvent("ADDON_LOADED")
-        self:RegisterEvent("TRADE_SKILL_SHOW")
-        self:RegisterEvent("TRADE_SKILL_LIST_UPDATE")
-        self:RegisterEvent("TRADE_SKILL_DATA_SOURCE_CHANGED")
+        for _, name in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED" }) do
+            pcall(self.RegisterEvent, self, name)
+        end
     else
         QueueScan()
     end
