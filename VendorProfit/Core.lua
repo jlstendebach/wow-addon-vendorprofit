@@ -1,14 +1,17 @@
--- Vendor Profit for Auctionator: adds lines under Auctionator's crafting info
--- (To Craft / Profit) in the professions window.
+-- Vendor Profit for Auctionator: adds to Auctionator's crafting info (To Craft
+-- / Profit) in the professions window, leaving Auctionator's own lines as
+-- they are:
 --
---   Vendor Profit          what the craft makes sold to a vendor
---                          (VendorLine.lua)
---   Vendor Profit (route)  the same, using the cheapest way to get every
---                          reagent, crafting them from your own recipes where
---                          that's cheaper (Recipes.lua, Route.lua,
---                          RouteLine.lua)
+--     To Craft: ...                Auctionator
+--     Profit: ...                  Auctionator
+--     Vendor Profit: ...           sold to a vendor, at Auctionator's To Craft
+--                                  cost (VendorLine.lua)
+--     ----- Cheapest Route -----   crafting reagents yourself where that's
+--     To Craft: ...                cheaper (RouteSection.lua, using
+--     Profit: ...                  Recipes.lua and Route.lua)
+--     Vendor Profit: ...  [Queue]  QueueButton.lua, for the shopping panel
 --
--- This file holds what the lines share: prices, working out the recipe being
+-- This file holds what they share: prices, working out the recipe being
 -- shown, and attaching to Auctionator's frame. The addon only reads from
 -- Auctionator. It adds its own regions to Auctionator's crafting info frame
 -- and post-hooks that frame's UpdateTotal to know when to refresh. It never
@@ -28,8 +31,10 @@ VendorProfit.AUCTIONATOR_FRAME = "AuctionatorCraftingInfoProfessionsFrame"
 
 VendorProfit.L = {
     VENDOR_PROFIT = "Vendor Profit:",
-    ROUTE_PROFIT = "Vendor Profit (route):",
+    TO_CRAFT = "To Craft:",
+    PROFIT_COLON = "Profit:",
     NO_SELL_PRICE = "can't be sold to vendors",
+    NO_AUCTION_PRICE = "no auction price",
     MISSING_PRICES = "(missing reagent prices)",
     ROUTE_TITLE = "Cheapest Route",
     SOURCE_VENDOR = "buy (vendor)",
@@ -37,10 +42,8 @@ VendorProfit.L = {
     SOURCE_CRAFT = "craft",
     MAKES = "makes %d",
     SOURCE_NONE = "no price",
-    CRAFTING_COST = "Crafting cost",
     AUCTIONATOR_COST = "Auctionator's To Craft",
     SAVES = "Saves",
-    VENDOR_PROFIT_SHORT = "Vendor profit",
     RECIPES_FROM = "Uses your recipes from: %s.",
     NO_RECIPES = "No recipes saved yet.",
     OPEN_PROFESSIONS = "Open each profession once to add its recipes.",
@@ -57,7 +60,7 @@ VendorProfit.L = {
     HEAD_HAVE = "From your bags and bank",
     HEAD_CRAFT = "Then craft",
     HEAD_PROFIT = "Profit",
-    NOTHING_QUEUED = "Nothing queued. Use Queue beside a recipe's Vendor Profit (route) line in the professions window.",
+    NOTHING_QUEUED = "Nothing queued. Use Queue in a recipe's Cheapest Route section in the professions window.",
     NOTHING_TO_BUY = "Nothing to buy: you have everything.",
     REMOVE = "Remove",
     BUY_YOURSELF = "buy yourself",
@@ -122,6 +125,17 @@ end
 function VendorProfit.GetReagentPrice(itemID)
     local vendor, auction = VendorProfit.GetBuyPrices(itemID)
     return vendor or auction
+end
+
+-- What a seller keeps of an auction sale: Auctionator's figure, or 95%.
+function VendorProfit.GetAfterAHCut()
+    local constants = Auctionator.Constants
+    return constants and constants.AfterAHCut or 0.95
+end
+
+-- Auctionator's auction price for a crafted item, or nil.
+function VendorProfit.GetOutputAuctionPrice(itemLink)
+    return Auctionator.API.v1.GetAuctionPriceByItemLink(ADDON_NAME, itemLink)
 end
 
 -- Walks the required reagents. Returns their total cost, cheapest option per

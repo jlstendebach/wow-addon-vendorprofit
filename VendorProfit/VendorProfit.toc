@@ -2,7 +2,7 @@
 ## Title: Vendor Profit for Auctionator
 ## Notes: Shows what a craft is worth sold to a vendor, also along the cheapest crafting route, and shops the auction house for it. Unofficial: not made by Auctionator's authors.
 ## Author: Josh
-## Version: 1.3.0
+## Version: 1.4.0
 ## Dependencies: Auctionator
 ## SavedVariablesPerCharacter: VendorProfitCharDB
 ## IconTexture: Interface\Icons\INV_Misc_Coin_02
@@ -11,7 +11,7 @@ Core.lua
 VendorLine.lua
 Recipes.lua
 Route.lua
-RouteLine.lua
+RouteSection.lua
 Inventory.lua
 Plan.lua
 Order.lua

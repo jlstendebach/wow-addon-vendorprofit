@@ -54,7 +54,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteLine.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "Shopper.lua", "Panel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "Shopper.lua", "Panel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
 run('__stub.Fire("TRADE_SKILL_SHOW")')
@@ -175,7 +175,8 @@ MINING = """{
 }"""
 NAMES = {COPPER_ORE: "Copper Ore", TIN_ORE: "Tin Ore", COPPER_BAR: "Copper Bar", TIN_BAR: "Tin Bar",
          BRONZE_BAR: "Bronze Bar", CUIRASS_ID: "Rough Bronze Cuirass"}
-ROUTE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitRouteLine"
+SECTION = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitRoute"
+ROUTE = SECTION + ".vendor"
 
 
 def route_client(before_load=""):
@@ -203,8 +204,15 @@ run, ev = route_client()
 run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
 run('__stub.SetRecipe(%s)' % CUIRASS)
 check("route line shown under the vendor line",
-      ev(ROUTE + ":IsShown()") and ev(ROUTE + ".__point[2] == AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"))
-r = ev("VendorProfit.RouteLine.Calculate(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm))")
+      ev(ROUTE + ":IsShown()") and ev(SECTION + ".separator.__point[2] == AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"))
+check("separator titled Cheapest Route, with a gap above",
+      ev(SECTION + ".separator.Label:GetText()") == "Cheapest Route" and ev(SECTION + ".separator.__point[5]") < -2
+      and ev(SECTION + ".separator:IsShown()"))
+check("section lines in order: To Craft, Profit, Vendor Profit",
+      ev(SECTION + ".toCraft.__point[2] == " + SECTION + ".separator")
+      and ev(SECTION + ".profit.__point[2] == " + SECTION + ".toCraft")
+      and ev(SECTION + ".vendor.__point[2] == " + SECTION + ".profit"))
+r = ev("VendorProfit.RouteSection.Calculate(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm))")
 check("without Mining saved, bronze bars are bought: same cost as Auctionator", r.cost == 1239)
 check("vendor line unchanged by routes", ev(LINE + ":GetText()") == "Vendor Profit: |cffff2020-10s 92c|r")
 
@@ -217,10 +225,12 @@ check("both professions listed", list(ev("VendorProfit.Recipes.ProfessionNames()
 
 run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
 run('__stub.SetRecipe(%s)' % CUIRASS)
-r = ev("VendorProfit.RouteLine.Calculate(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm))")
+r = ev("VendorProfit.RouteSection.Calculate(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm))")
 check("route cost: 7 bronze bars at 62.5c = 438c", r.cost == 438)
 check("vendor profit: 147 - 438 = -291", r.vendorProfit == -291)
-check("line shows the route's vendor profit", ev(ROUTE + ":GetText()") == "Vendor Profit (route): |cffff2020-2s 91c|r")
+check("route To Craft: 438", ev(SECTION + ".toCraft:GetText()") == "To Craft: |cffffffff4s 38c|r")
+check("route Profit: 1300 x 0.95 - 438 = 797", ev(SECTION + ".profit:GetText()") == "Profit: |cffffffff7s 97c|r")
+check("route Vendor Profit: 147 - 438", ev(ROUTE + ":GetText()") == "Vendor Profit: |cffff2020-2s 91c|r")
 
 bronze = r.route.children[1].node
 check("bronze bars crafted", bronze.source == "craft" and bronze.itemID == BRONZE_BAR)
@@ -240,19 +250,17 @@ check("tooltip: copper bars nested under bronze bars",
 check("tooltip: copper ore nested under copper bars",
       "            |Ticon2770:0|t Copper Ore x3.5 | buy (auction)  |cffffffff1s 75c|r" in tip)
 check("tooltip: tin bars bought", "        |Ticon3576:0|t Tin Bar x3.5 | buy (auction)  |cffffffff2s 63c|r" in tip)
-check("tooltip: crafting cost", "Crafting cost | |cffffffff4s 38c|r" in tip)
+check("tooltip doesn't repeat the section's numbers", "Crafting cost" not in tip and "Vendor profit" not in tip)
 check("tooltip: Auctionator's cost and the saving",
       "Auctionator's To Craft | |cffffffff12s 39c|r" in tip and "Saves | |cffffffff8s 1c|r" in tip)
-check("tooltip: vendor profit, no auction profit",
-      "Vendor profit | |cffff2020-2s 91c|r" in tip and "Auction" not in tip.replace("Auctionator", ""))
 check("tooltip: which professions it used", "Uses your recipes from: Blacksmithing, Mining." in tip)
-run('AuctionatorCraftingInfoProfessionsFrame.VendorProfitRouteHover.__scripts.OnLeave()')
+run(SECTION + '.hover.__scripts.OnLeave()')
 check("tooltip hides on leave", not ev("GameTooltip.shown"))
 
 # --- Prices change: the route follows ---------------------------------------
 run('__stub.auctionPrices[2840] = 40')  # Copper Bar now cheaper to buy than craft
 run('AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
-r = ev("VendorProfit.RouteLine.Calculate(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm))")
+r = ev("VendorProfit.RouteSection.Calculate(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm))")
 check("cheaper copper bars bought instead", r.route.children[1].node.children[1].node.source == "auction")
 check("route cost: 7 x (40 + 75) / 2 = 402.5 -> 403", r.cost == 403)
 run('__stub.auctionPrices[2840] = 70')
@@ -260,22 +268,25 @@ run('__stub.auctionPrices[2840] = 70')
 # --- Profit and items vendors won't buy ----------------------------------------
 run('__stub.items["item:2866"].sellPrice = 500')
 run('AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
-check("route profit in white: 500 - 438 = 62c", ev(ROUTE + ":GetText()") == "Vendor Profit (route): |cffffffff62c|r")
+check("route profit in white: 500 - 438 = 62c", ev(ROUTE + ":GetText()") == "Vendor Profit: |cffffffff62c|r")
 run('__stub.items["item:2866"].sellPrice = 0')
 run('AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
-check("can't be vendored: says so", ev(ROUTE + ":GetText()") == "Vendor Profit (route): |cff808080can't be sold to vendors|r")
-check("...and the route tooltip still works", "Crafting cost | |cffffffff4s 38c|r" in ev("__stub.HoverRoute()"))
+check("can't be vendored: says so", ev(ROUTE + ":GetText()") == "Vendor Profit: |cff808080can't be sold to vendors|r")
+check("...and the route tooltip still works", "Rough Bronze Cuirass x1 | |cffffffff4s 38c|r" in ev("__stub.HoverRoute()"))
+run('__stub.auctionPrices[2866] = nil; AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
+check("no auction price: route Profit says so", ev(SECTION + ".profit:GetText()") == "Profit: |cff808080no auction price|r")
+run('__stub.auctionPrices[2866] = 1300')
 run('__stub.items["item:2866"].sellPrice = 147')
 
 # --- Missing prices ------------------------------------------------------------
 run('__stub.auctionPrices[2771] = nil; __stub.auctionPrices[3576] = nil')  # no tin prices at all
 run('AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
-r = ev("VendorProfit.RouteLine.Calculate(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm))")
+r = ev("VendorProfit.RouteSection.Calculate(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm))")
 check("bronze bar has a price, so buying beats a route with a free reagent", r.route.children[1].node.source == "auction")
 check("...and the route is complete", not r.route.missing)
 run('__stub.auctionPrices[2841] = nil')  # and no bronze price either
 run('AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
-check("only route left counts tin as free and warns", "(missing reagent prices)" in ev(ROUTE + ":GetText()"))
+check("only route left counts tin as free and warns on To Craft", "(missing reagent prices)" in ev(SECTION + ".toCraft:GetText()"))
 check("tooltip marks the item with no price", "no price" in ev("__stub.HoverRoute()"))
 run('__stub.auctionPrices[2771] = 80; __stub.auctionPrices[3576] = 75; __stub.auctionPrices[2841] = 177')
 
@@ -289,7 +300,7 @@ check("tooltip redrawn once the name loads", "Copper Ore x3.5" in ev("__stub.Hov
 # --- Hidden with the vendor line ---------------------------------------------
 run('__stub.SetRecipe({ recipeID = 4001, itemLink = nil, quantityMin = 1, reagents = { { itemID = 2835, quantity = 1 } } })')
 check("no item made: route line and hover hidden",
-      not ev(ROUTE + ":IsShown()") and not ev("AuctionatorCraftingInfoProfessionsFrame.VendorProfitRouteHover:IsShown()"))
+      not ev(ROUTE + ":IsShown()") and not ev(SECTION + ".hover:IsShown()") and not ev(SECTION + ".separator:IsShown()"))
 check("no errors from routes", ev("#__stub.errors") == 0)
 
 # --- Scanning rules ---------------------------------------------------------------
@@ -360,7 +371,7 @@ run4('''
     })
 ''')
 run4('__stub.SetRecipe({ recipeID = 5000, itemLink = "item:7777", quantityMin = 1, reagents = { { itemID = 10998, quantity = 3 } } })')
-r = ev4("VendorProfit.RouteLine.Calculate(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm))")
+r = ev4("VendorProfit.RouteSection.Calculate(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm))")
 check("loop: lesser essence made from a greater (200 / 3 each)", abs(r.route.cost - 200) < 1e-9)
 check("loop: the greater is bought, not made from lesser again",
       r.route.children[1].node.children[1].node.source == "auction")
@@ -371,7 +382,7 @@ run('''__stub.SetRecipe({
     recipeID = 5001, itemLink = "item:2866", quantityMin = 1,
     reagents = { { itemID = 2840, quantity = 2, options = { 3576 } } },
 })''')
-r = ev("VendorProfit.RouteLine.Calculate(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm))")
+r = ev("VendorProfit.RouteSection.Calculate(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm))")
 check("slot with options uses the cheapest option (copper bar crafted at 50c)",
       r.route.children[1].node.itemID == COPPER_BAR and r.cost == 100)
 check("no errors in the route section", ev("#__stub.errors") == 0)
@@ -407,7 +418,9 @@ QUEUE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitQueueButton"
 run, ev = shop_client()
 
 # --- Queue button --------------------------------------------------------------
-check("queue button beside the route line", ev(QUEUE + ":IsShown()") and ev(QUEUE + ".__point[2] == " + ROUTE))
+check("queue button beside the route's Vendor Profit line", ev(QUEUE + ":IsShown()") and ev(QUEUE + ".__point[2] == " + ROUTE))
+check("queue button above the tooltip area so it can be clicked",
+      ev(QUEUE + ":GetFrameLevel()") > ev(SECTION + ".hover:GetFrameLevel()"))
 run('__stub.createCount = 10')
 run(QUEUE + ':Click()')
 check("queued 10 from the Create box", ev("VendorProfit.Order.Entries()[1].crafts") == 10)

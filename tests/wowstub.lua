@@ -46,7 +46,8 @@ function FrameMethods:SetSize(w, h) self.__w, self.__h = w, h end
 function FrameMethods:SetWidth(w) self.__w = w end
 function FrameMethods:SetHeight(h) self.__h = h end
 function FrameMethods:GetHeight() return self.__h or 0 end
-function FrameMethods:SetPoint(...) self.__point = { ... } end
+-- __point is the first point set since ClearAllPoints.
+function FrameMethods:SetPoint(...) if self.__point == nil then self.__point = { ... } end end
 function FrameMethods:ClearAllPoints() self.__point = nil end
 function FrameMethods:SetText(t) self.__text = t end
 function FrameMethods:GetText() return self.__text end
@@ -72,6 +73,14 @@ function stub.Drag(f, left, top)
     stub.dragTo = nil
 end
 function FrameMethods:Click(...) if self.__scripts.OnClick and self:IsEnabled() then self.__scripts.OnClick(self, ...) end end
+function FrameMethods:SetFrameLevel(l) self.__level = l end
+function FrameMethods:GetFrameLevel() return self.__level or 1 end
+function FrameMethods:CreateTexture()
+    local t = setmetatable({ __shown = true, __parent = self, __text = "" }, FontMethods)
+    t.SetColorTexture = function(tex, ...) tex.__color = { ... } end
+    t.SetHeight = function() end
+    return t
+end
 function FrameMethods:CreateFontString()
     return setmetatable({ __shown = true, __parent = self, __text = "" }, FontMethods)
 end
@@ -355,7 +364,7 @@ end
 
 -- Hovers the route line: returns the tooltip's lines as "left | right".
 function stub.HoverRoute()
-    local hover = AuctionatorCraftingInfoProfessionsFrame.VendorProfitRouteHover
+    local hover = AuctionatorCraftingInfoProfessionsFrame.VendorProfitRoute.hover
     hover.__scripts.OnEnter(hover)
     local out = {}
     for _, l in ipairs(GameTooltip.lines) do

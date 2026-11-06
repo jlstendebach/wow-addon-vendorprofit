@@ -1,9 +1,13 @@
--- The Vendor Profit (route) line: vendor profit using the cheapest route to
--- every reagent (Route.lua):
+-- The Cheapest Route section, under a separator below Auctionator's lines and
+-- the Vendor Profit line. It uses the cheapest way to get every reagent
+-- (Route.lua), crafting them from your own recipes where that's cheaper:
 --
---     vendor sell price x number made - route cost
+--     ----------- Cheapest Route -----------
+--     To Craft:       route cost
+--     Profit:         auction price x number made x (1 - AH cut) - route cost
+--     Vendor Profit:  vendor sell price x number made - route cost
 --
--- Hovering it shows the route as a tree with its crafting cost and profit.
+-- Hovering the section shows the route as a tree.
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -11,41 +15,51 @@ local Route = VendorProfit.Route
 local Recipes = VendorProfit.Recipes
 local L = VendorProfit.L
 
-local RouteLine = {}
-VendorProfit.RouteLine = RouteLine
+local RouteSection = {}
+VendorProfit.RouteSection = RouteSection
 
 local INDENT = "    "
+local SECTION_GAP = 8       -- space above the separator
+local SEPARATOR_HEIGHT = 14
 
 local function Round(copper)
     return math.floor(copper + 0.5)
 end
 
--- Works out the line's numbers for a VendorProfit.Calculate result:
---   route         Route.ForResult's route
---   cost          crafting cost of one craft along the route
---   vendorProfit  nil if vendors won't buy the item
-function RouteLine.Calculate(result)
+-- Works out the section's numbers for a VendorProfit.Calculate result:
+--   route          Route.ForResult's route
+--   cost           crafting cost of one craft along the route
+--   auctionProfit  after the auction house cut; nil with no auction price
+--   vendorProfit   nil if vendors won't buy the item
+function RouteSection.Calculate(result)
     local route = Route.ForResult(result)
     local cost = Round(route.cost)
     local info = { route = route, cost = cost, result = result }
+    local auctionPrice = VendorProfit.GetOutputAuctionPrice(result.itemLink)
+    if auctionPrice then
+        info.auctionProfit = math.floor(auctionPrice * result.count * VendorProfit.GetAfterAHCut()) - cost
+    end
     if result.sellPrice and result.sellPrice > 0 then
         info.vendorProfit = result.sellPrice * result.count - cost
     end
     return info
 end
 
-function RouteLine.Format(info)
-    local value
-    if info.vendorProfit == nil then
-        value = GRAY_FONT_COLOR:WrapTextInColorCode(L.NO_SELL_PRICE)
-    else
-        value = VendorProfit.FormatMoney(info.vendorProfit)
+local function Gray(text)
+    return GRAY_FONT_COLOR:WrapTextInColorCode(text)
+end
+
+-- The three lines' text: toCraft, profit, vendorProfit.
+function RouteSection.Format(info)
+    local toCraft = L.TO_CRAFT .. " " .. VendorProfit.FormatMoney(info.cost)
+    if info.route.missing then
+        toCraft = toCraft .. " " .. RED_FONT_COLOR:WrapTextInColorCode(L.MISSING_PRICES)
     end
-    local text = L.ROUTE_PROFIT .. " " .. value
-    if info.route.missing and info.vendorProfit then
-        text = text .. " " .. RED_FONT_COLOR:WrapTextInColorCode(L.MISSING_PRICES)
-    end
-    return text
+    local profit = L.PROFIT_COLON .. " " ..
+        (info.auctionProfit and VendorProfit.FormatMoney(info.auctionProfit) or Gray(L.NO_AUCTION_PRICE))
+    local vendor = L.VENDOR_PROFIT .. " " ..
+        (info.vendorProfit and VendorProfit.FormatMoney(info.vendorProfit) or Gray(L.NO_SELL_PRICE))
+    return toCraft, profit, vendor
 end
 
 -- Tooltip ---------------------------------------------------------------------
@@ -120,7 +134,7 @@ local function AddMoneyRow(tooltip, label, copper, whenNil)
     tooltip:AddDoubleLine(label, value)
 end
 
-function RouteLine.FillTooltip(tooltip, info, showTooltip)
+function RouteSection.FillTooltip(tooltip, info, showTooltip)
     local result = info.result
     tooltip:SetText(L.ROUTE_TITLE)
 
@@ -128,13 +142,11 @@ function RouteLine.FillTooltip(tooltip, info, showTooltip)
     AddRows(tooltip, info.route.children, 1, 1, showTooltip)
 
     tooltip:AddLine(" ")
-    AddMoneyRow(tooltip, L.CRAFTING_COST, info.cost)
     AddMoneyRow(tooltip, L.AUCTIONATOR_COST, result.cost)
     local saves = Round(result.cost) - info.cost
     if saves > 0 then
         AddMoneyRow(tooltip, L.SAVES, saves)
     end
-    AddMoneyRow(tooltip, L.VENDOR_PROFIT_SHORT, info.vendorProfit, L.NO_SELL_PRICE)
     if info.route.missing then
         tooltip:AddLine(L.MISSING_PRICES, RED_FONT_COLOR.r, RED_FONT_COLOR.g, RED_FONT_COLOR.b)
     end
@@ -149,7 +161,7 @@ function RouteLine.FillTooltip(tooltip, info, showTooltip)
     tooltip:AddLine(L.OPEN_PROFESSIONS, 0.6, 0.6, 0.6, true)
 end
 
--- Line ------------------------------------------------------------------------
+-- Section ---------------------------------------------------------------------
 
 local function ShowTooltip(hover)
     local info = hover.info
@@ -157,7 +169,7 @@ local function ShowTooltip(hover)
         return
     end
     GameTooltip:SetOwner(hover, "ANCHOR_RIGHT")
-    RouteLine.FillTooltip(GameTooltip, info, function()
+    RouteSection.FillTooltip(GameTooltip, info, function()
         if GameTooltip:IsOwned(hover) then
             ShowTooltip(hover)
         end
@@ -165,29 +177,69 @@ local function ShowTooltip(hover)
     GameTooltip:Show()
 end
 
-function RouteLine.Create(frame, anchor)
+local function CreateSeparator(frame, anchor)
+    local separator = CreateFrame("Frame", nil, frame)
+    separator:SetHeight(SEPARATOR_HEIGHT)
+    separator:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -SECTION_GAP)
+    separator:SetPoint("RIGHT", frame, "RIGHT")
+
+    local label = separator:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    label:SetPoint("CENTER")
+    label:SetText(L.ROUTE_TITLE)
+    separator.Label = label
+
+    for _, side in ipairs({ "Left", "Right" }) do
+        local line = separator:CreateTexture(nil, "ARTWORK")
+        line:SetColorTexture(1, 0.82, 0, 0.35)
+        line:SetHeight(1)
+        if side == "Left" then
+            line:SetPoint("LEFT", separator, "LEFT")
+            line:SetPoint("RIGHT", label, "LEFT", -6, 0)
+        else
+            line:SetPoint("LEFT", label, "RIGHT", 6, 0)
+            line:SetPoint("RIGHT", separator, "RIGHT")
+        end
+        separator[side .. "Line"] = line
+    end
+    separator:Hide()
+    return separator
+end
+
+local function CreateLine(frame, anchor, gap)
     local line = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     line:SetJustifyH("LEFT")
-    line:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+    line:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -gap)
     line:Hide()
-    frame.VendorProfitRouteLine = line
+    return line
+end
 
-    -- Font strings can't take the mouse, so a frame covers the line.
+function RouteSection.Create(frame, anchor)
+    local separator = CreateSeparator(frame, anchor)
+    local toCraft = CreateLine(frame, separator, 2)
+    local profit = CreateLine(frame, toCraft, 2)
+    local vendor = CreateLine(frame, profit, 2)
+    frame.VendorProfitRoute = { separator = separator, toCraft = toCraft, profit = profit, vendor = vendor }
+
+    -- Font strings can't take the mouse, so a frame covers the section.
     local hover = CreateFrame("Frame", nil, frame)
-    hover:SetAllPoints(line)
+    hover:SetPoint("TOPLEFT", separator, "TOPLEFT")
+    hover:SetPoint("RIGHT", separator, "RIGHT")
+    hover:SetPoint("BOTTOM", vendor, "BOTTOM")
     hover:EnableMouse(true)
     hover:SetScript("OnEnter", ShowTooltip)
     hover:SetScript("OnLeave", function() GameTooltip:Hide() end)
     hover:Hide()
-    frame.VendorProfitRouteHover = hover
-    return line
+    frame.VendorProfitRoute.hover = hover
+    return vendor
 end
 
-function RouteLine.Refresh(frame, result)
-    local line, hover = frame.VendorProfitRouteLine, frame.VendorProfitRouteHover
+function RouteSection.Refresh(frame, result)
+    local section = frame.VendorProfitRoute
+    local hover = section.hover
     if result == nil then
-        line:Hide()
-        hover:Hide()
+        for _, region in pairs(section) do
+            region:Hide()
+        end
         hover.info = nil
         if GameTooltip:IsOwned(hover) then
             GameTooltip:Hide()
@@ -195,14 +247,18 @@ function RouteLine.Refresh(frame, result)
         return
     end
 
-    local info = RouteLine.Calculate(result)
+    local info = RouteSection.Calculate(result)
     hover.info = info
-    line:SetText(RouteLine.Format(info))
-    line:Show()
-    hover:Show()
+    local toCraft, profit, vendor = RouteSection.Format(info)
+    section.toCraft:SetText(toCraft)
+    section.profit:SetText(profit)
+    section.vendor:SetText(vendor)
+    for _, region in pairs(section) do
+        region:Show()
+    end
     if GameTooltip:IsOwned(hover) then
         ShowTooltip(hover)
     end
 end
 
-VendorProfit.AddLine(RouteLine)
+VendorProfit.AddLine(RouteSection)
