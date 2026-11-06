@@ -20,3 +20,8 @@ function Inventory.Total(itemID)
     local bags, bank = Inventory.Count(itemID)
     return bags + bank
 end
+
+-- How many crafting can use: bags and the reagent bank, not the main bank.
+function Inventory.ForCrafting(itemID)
+    return C_Item.GetItemCount(itemID, false, false, true) or 0
+end

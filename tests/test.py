@@ -768,8 +768,11 @@ check("blacksmithing open, first step is mining: says to open it",
 run('__stub.OpenProfession(186, "Mining", %s)' % MINING)
 check("mining open but no ore: missing materials",
       ev(CRAFT + ".__text") == "Missing materials for Copper Bar" and not ev(CRAFT + ":IsEnabled()"))
+run('__stub.bank[2770] = 7; __stub.Fire("BAG_UPDATE_DELAYED")')
+check("ore only in the main bank: can't craft with it", ev(CRAFT + ".__text") == "Missing materials for Copper Bar")
+run('__stub.bank[2770] = 0')
 run('__stub.bags[2770] = 7; __stub.bags[3576] = 7; __stub.Fire("BAG_UPDATE_DELAYED")')
-check("materials there: craft the copper bars", ev(CRAFT + ".__text") == "Craft Copper Bar, 7 times" and ev(CRAFT + ":IsEnabled()"))
+check("materials in the bags (the game's own count says 0): craft the copper bars", ev(CRAFT + ".__text") == "Craft Copper Bar, 7 times" and ev(CRAFT + ":IsEnabled()"))
 run(CRAFT + ":Click()")
 check("a click without a mouse down first crafts one (the game's quirk)", list(ev("__stub.crafted[1]").values()) == [2657, 1])
 run(CRAFT + ".__scripts.OnMouseDown(" + CRAFT + ")")

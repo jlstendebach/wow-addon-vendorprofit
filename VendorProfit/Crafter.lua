@@ -6,7 +6,8 @@
 -- the open window can make, and otherwise says which profession to open.
 --
 -- The next step is the first one in the plan's craft list (deepest first)
--- that belongs to the open profession and that you have the materials for.
+-- that belongs to the open profession and that you have the materials for in
+-- your bags (or reagent bank).
 -- It crafts as many as that step needs, up to as many as you can make now.
 --
 -- Crafting more than one at a time only works if the button was pressed
@@ -16,6 +17,7 @@
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
 local Shopper = VendorProfit.Shopper
+local Inventory = VendorProfit.Inventory
 
 local Crafter = {}
 VendorProfit.Crafter = Crafter
@@ -34,14 +36,24 @@ local function OpenProfession()
     return info and info.professionName
 end
 
--- How many times the open profession can craft a recipe now, or nil if it's
--- not in the open profession.
-local function NumAvailable(recipeID)
-    local info = recipeID and C_TradeSkillUI.GetRecipeInfo(recipeID)
-    if info == nil or not info.learned then
-        return nil
+-- How many times a step can be crafted with what's in your bags (and reagent
+-- bank) now. Counted here rather than asking the game: its recipe info's
+-- numAvailable isn't reliable in Forever (TradeSkillMaster counts them itself
+-- too). A slot that several items can fill counts the one you have most of.
+function Crafter.CanCraft(step)
+    local reagents = step.reagents
+    if reagents == nil or #reagents == 0 then
+        return 0
     end
-    return info.numAvailable or 0
+    local crafts = math.huge
+    for _, slot in ipairs(reagents) do
+        local have = 0
+        for _, itemID in ipairs(slot.items) do
+            have = math.max(have, Inventory.ForCrafting(itemID))
+        end
+        crafts = math.min(crafts, math.floor(have / slot.quantity))
+    end
+    return crafts
 end
 
 -- The next craft:
@@ -60,8 +72,8 @@ function Crafter.Next()
     if open then
         for _, step in ipairs(plan.crafts) do
             if step.profession == open then
-                local available = NumAvailable(step.recipeID)
-                if available and available > 0 then
+                local available = Crafter.CanCraft(step)
+                if available > 0 then
                     return { step = step, crafts = math.min(step.crafts, available) }
                 end
             end

@@ -16,7 +16,7 @@
 --   buy[itemID]   { itemID, quantity, source, unitPrice }: source is
 --                 "auction", "vendor" or nil (no price anywhere)
 --   buyOrder      the buy entries in the order they were first needed
---   crafts        { itemID, recipeID, profession, crafts, makes, depth }
+--   crafts        { itemID, recipeID, profession, crafts, makes, depth, reagents }
 --                 deepest first, so each step's reagents come before it
 --   uses[itemID]  how many of what you have the plan uses (not counting spares
 --                 its own crafts make)
@@ -66,11 +66,14 @@ function Plan.Build(entries, available, getBuyPrices)
         return amount - fromSpare - fromOwned
     end
 
-    local function AddCraft(itemID, recipeID, profession, crafts, makes, depth)
+    local function AddCraft(itemID, recipeID, profession, crafts, makes, depth, reagents)
         local key = recipeID or ("item:" .. itemID)
         local step = craftsByRecipe[key]
         if step == nil then
-            step = { itemID = itemID, recipeID = recipeID, profession = profession, crafts = 0, makes = makes, depth = depth }
+            step = {
+                itemID = itemID, recipeID = recipeID, profession = profession,
+                crafts = 0, makes = makes, depth = depth, reagents = reagents,
+            }
             craftsByRecipe[key] = step
             plan.crafts[#plan.crafts + 1] = step
         end
@@ -99,7 +102,7 @@ function Plan.Build(entries, available, getBuyPrices)
         if node.source == "craft" then
             local recipe = node.recipe
             local crafts = math.ceil(amount / recipe.count)
-            AddCraft(node.itemID, recipe.recipeID, recipe.profession, crafts, recipe.count, depth)
+            AddCraft(node.itemID, recipe.recipeID, recipe.profession, crafts, recipe.count, depth, recipe.reagents)
             local spare = crafts * recipe.count - amount
             if spare > 0 then
                 local entry = Pool(node.itemID)
@@ -115,7 +118,7 @@ function Plan.Build(entries, available, getBuyPrices)
 
     for _, entry in ipairs(entries) do
         local route = Route.ForRecipe(entry.itemID, entry.reagents, getBuyPrices)
-        AddCraft(entry.itemID, entry.recipeID, entry.profession, entry.crafts, entry.count, 0)
+        AddCraft(entry.itemID, entry.recipeID, entry.profession, entry.crafts, entry.count, 0, entry.reagents)
         for _, child in ipairs(route.children) do
             Require(child.node, child.quantity * entry.crafts, 1)
         end

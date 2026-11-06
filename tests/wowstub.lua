@@ -266,14 +266,8 @@ C_TradeSkillUI = {
     GetRecipeInfo = function(recipeID)
         local r = FindRecipe(recipeID)
         if r == nil then return nil end
-        -- How many can be made from what's in the bags.
-        local available = math.huge
-        for _, reagent in ipairs(r.reagents) do
-            if not reagent.optional then
-                available = math.min(available, math.floor((stub.bags[reagent.itemID] or 0) / reagent.quantity))
-            end
-        end
-        if available == math.huge then available = 0 end
+        -- Forever reports 0 here even with the materials in your bags.
+        local available = 0
         return { recipeID = recipeID, learned = r.learned ~= false, isEnchantingRecipe = r.isEnchant or false, numAvailable = available }
     end,
     CraftRecipe = function(recipeID, count)
