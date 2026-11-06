@@ -3,13 +3,13 @@
 An addon for World of Warcraft: Forever that adds two lines under Auctionator's **To Craft** and **Profit** lines in the professions window:
 
 - **Vendor Profit:** what you make by crafting the item and selling it to a vendor instead of on the auction house.
-- **Route Profit:** what you make if you get every reagent the cheapest way, crafting reagents yourself where that's cheaper than buying them, all the way down. Hover it to see the route.
+- **Vendor Profit (route):** the same, but getting every reagent the cheapest way, crafting reagents yourself where that's cheaper than buying them, all the way down. Hover it to see the route.
 
 ```
 To Craft: 12s 39c
 Profit: -6s                     <- Auctionator: sell on the auction house
 Vendor Profit: -10s 92c         <- sell to a vendor
-Route Profit: 7s 97c (auction)  <- cheapest route, sold where it pays more
+Vendor Profit (route): -2s 91c  <- same, crafting reagents where it's cheaper
 ```
 
 Requires [Auctionator](https://www.curseforge.com/wow/addons/auctionator).
@@ -47,9 +47,9 @@ What the line shows:
 - **can't be sold to vendors** in grey: the item has no vendor price.
 - No line: the recipe doesn't make an item (enchants, for example), or Auctionator's crafting info is hidden.
 
-## Route Profit
+## Vendor Profit (route)
 
-Auctionator prices a Bronze Bar at what a Bronze Bar costs. Route Profit also checks whether smelting it from Copper and Tin Bars is cheaper, and whether those bars are cheaper to smelt from ore, and takes the cheapest option at every step.
+Auctionator prices a Bronze Bar at what a Bronze Bar costs. This line also checks whether smelting it from Copper and Tin Bars is cheaper, and whether those bars are cheaper to smelt from ore, and takes the cheapest option at every step.
 
 For each reagent, the cheapest of:
 
@@ -57,11 +57,11 @@ For each reagent, the cheapest of:
 - **buy (auction):** its auction price from Auctionator's last scan
 - **craft:** one of your recipes, its reagents priced the same way
 
-**Route Profit = sale price x number made - route cost**, sold wherever pays more: the auction house (after its 5% cut) or a vendor. The line says which.
+**Vendor Profit (route) = vendor sell price x number made - route cost**
 
 **Your recipes.** The game only shares recipe details for the profession window that's open, so the addon saves each profession's learned recipes when you open it, per character. **Open each of your professions once** (Smelting included) so routes can use them. Until then, those reagents can only be bought. The tooltip lists which professions are saved. Each window updates its saved recipes whenever you open it.
 
-**The tooltip** shows the route as a tree. Each crafted item has what goes into it indented under it, with where to get it and what it costs. Below the tree: the route's crafting cost, Auctionator's To Craft cost and how much the route saves, and both the auction house and vendor profit.
+**The tooltip** shows the route as a tree. Each crafted item has what goes into it indented under it, with where to get it and what it costs. Below the tree: the route's crafting cost, Auctionator's To Craft cost, how much the route saves, and the vendor profit.
 
 ```
 Cheapest Route
@@ -76,6 +76,7 @@ How costs are worked out:
 
 - **Per item, averaged over what a craft makes.** A smelt that makes 2 Bronze Bars from 1 Copper Bar and 1 Tin Bar costs half of that per bar, so 7 bars show 3.5 of each. In practice you'd smelt 4 times and keep a spare bar, which the cost treats as worth what it cost to make.
 - **A complete price beats a cheaper one with a gap.** A route that counts a reagent as free (no price anywhere) is only used when nothing else has a price, and then the line warns with **(missing reagent prices)**.
+- If vendors won't buy the item, the line says **can't be sold to vendors**, and the tooltip still shows the route and its cost.
 - **Loops are skipped.** An item is never made from itself, such as a Greater Essence made from Lesser Essences made from a Greater Essence.
 - On a tie, buying wins over crafting.
 
@@ -88,7 +89,7 @@ What it can't know:
 ## How it works
 
 - Auctionator makes its crafting info frame (`AuctionatorCraftingInfoProfessionsFrame`) the first time the professions window opens. The addon hooks the function that makes it, attaches right after, and retries on the next frame in case it sees the event first.
-- It adds its lines to that frame, anchored under Auctionator's text, so they show and hide with Auctionator's lines. A mouse-enabled frame over the Route Profit line shows its tooltip.
+- It adds its lines to that frame, anchored under Auctionator's text, so they show and hide with Auctionator's lines. A mouse-enabled frame over the route line shows its tooltip.
 - It post-hooks the frame's `UpdateTotal`, which Auctionator calls whenever the recipe, reagents or prices change, and refreshes right after. Saving a profession's recipes refreshes too.
 - Prices come from Auctionator's public API (`Auctionator.API.v1`). Vendor Profit's cost to craft calls `Auctionator.CraftingInfo.CalculateCraftCost` so it matches To Craft exactly, with its own reagent total as a fallback.
 - It only reads from Auctionator. It never changes Auctionator's text, settings or data, and an error in this addon is reported without breaking Auctionator's refresh.
@@ -102,7 +103,7 @@ Files:
 | `VendorLine.lua` | The Vendor Profit line |
 | `Recipes.lua` | Saving and looking up this character's recipes |
 | `Route.lua` | Finding the cheapest route |
-| `RouteLine.lua` | The Route Profit line and its tooltip |
+| `RouteLine.lua` | The Vendor Profit (route) line and its tooltip |
 
 Saved data, per character: `VendorProfitCharDB.professions[professionID] = { name, recipes = { [recipeID] = { item, count, reagents } } }`.
 

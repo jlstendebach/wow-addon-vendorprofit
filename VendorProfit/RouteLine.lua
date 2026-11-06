@@ -1,8 +1,11 @@
--- The Route Profit line: profit using the cheapest route to every reagent
--- (Route.lua), sold wherever pays more, auction house or vendor. Hovering it
--- shows the route as a tree with the crafting cost and both profits.
+-- The Vendor Profit (route) line: vendor profit using the cheapest route to
+-- every reagent (Route.lua):
+--
+--     vendor sell price x number made - route cost
+--
+-- Hovering it shows the route as a tree with its crafting cost and profit.
 
-local ADDON_NAME, ns = ...
+local _, ns = ...
 local VendorProfit = ns.VendorProfit
 local Route = VendorProfit.Route
 local Recipes = VendorProfit.Recipes
@@ -18,42 +21,28 @@ local function Round(copper)
 end
 
 -- Works out the line's numbers for a VendorProfit.Calculate result:
---   route          Route.ForResult's route
---   cost           crafting cost of one craft along the route
---   auctionProfit  after the auction house cut, or nil with no auction price
---   vendorProfit   nil if vendors won't buy it
---   best, bestBy   the higher of the two and "auction" or "vendor"; nil if
---                  there's nowhere to sell
+--   route         Route.ForResult's route
+--   cost          crafting cost of one craft along the route
+--   vendorProfit  nil if vendors won't buy the item
 function RouteLine.Calculate(result)
     local route = Route.ForResult(result)
     local cost = Round(route.cost)
     local info = { route = route, cost = cost, result = result }
-
-    local auctionPrice = Auctionator.API.v1.GetAuctionPriceByItemLink(ADDON_NAME, result.itemLink)
-    if auctionPrice then
-        info.auctionProfit = math.floor(auctionPrice * result.count * VendorProfit.GetAfterAHCut()) - cost
-    end
     if result.sellPrice and result.sellPrice > 0 then
         info.vendorProfit = result.sellPrice * result.count - cost
-    end
-
-    if info.auctionProfit and (info.vendorProfit == nil or info.auctionProfit > info.vendorProfit) then
-        info.best, info.bestBy = info.auctionProfit, "auction"
-    elseif info.vendorProfit then
-        info.best, info.bestBy = info.vendorProfit, "vendor"
     end
     return info
 end
 
 function RouteLine.Format(info)
-    local text
-    if info.best == nil then
-        text = L.ROUTE_PROFIT .. " " .. GRAY_FONT_COLOR:WrapTextInColorCode(L.NO_SALE_PRICE)
+    local value
+    if info.vendorProfit == nil then
+        value = GRAY_FONT_COLOR:WrapTextInColorCode(L.NO_SELL_PRICE)
     else
-        local by = info.bestBy == "auction" and L.BY_AUCTION or L.BY_VENDOR
-        text = L.ROUTE_PROFIT .. " " .. VendorProfit.FormatMoney(info.best) .. " " .. GRAY_FONT_COLOR:WrapTextInColorCode("(" .. by .. ")")
+        value = VendorProfit.FormatMoney(info.vendorProfit)
     end
-    if info.route.missing then
+    local text = L.ROUTE_PROFIT .. " " .. value
+    if info.route.missing and info.vendorProfit then
         text = text .. " " .. RED_FONT_COLOR:WrapTextInColorCode(L.MISSING_PRICES)
     end
     return text
@@ -145,7 +134,6 @@ function RouteLine.FillTooltip(tooltip, info, showTooltip)
     if saves > 0 then
         AddMoneyRow(tooltip, L.SAVES, saves)
     end
-    AddMoneyRow(tooltip, L.AUCTION_PROFIT, info.auctionProfit, L.NO_AUCTION_PRICE)
     AddMoneyRow(tooltip, L.VENDOR_PROFIT_SHORT, info.vendorProfit, L.NO_SELL_PRICE)
     if info.route.missing then
         tooltip:AddLine(L.MISSING_PRICES, RED_FONT_COLOR.r, RED_FONT_COLOR.g, RED_FONT_COLOR.b)

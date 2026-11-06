@@ -1,10 +1,12 @@
 -- Vendor Profit for Auctionator: adds lines under Auctionator's crafting info
 -- (To Craft / Profit) in the professions window.
 --
---   Vendor Profit  what the craft makes sold to a vendor (VendorLine.lua)
---   Route Profit   what it makes using the cheapest way to get every reagent,
---                  crafting them from your own recipes where that's cheaper
---                  (Recipes.lua, Route.lua, RouteLine.lua)
+--   Vendor Profit          what the craft makes sold to a vendor
+--                          (VendorLine.lua)
+--   Vendor Profit (route)  the same, using the cheapest way to get every
+--                          reagent, crafting them from your own recipes where
+--                          that's cheaper (Recipes.lua, Route.lua,
+--                          RouteLine.lua)
 --
 -- This file holds what the lines share: prices, working out the recipe being
 -- shown, and attaching to Auctionator's frame. The addon only reads from
@@ -24,17 +26,11 @@ VendorProfit.VERSION = C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version")
 -- window. It's created the first time the professions window opens.
 VendorProfit.AUCTIONATOR_FRAME = "AuctionatorCraftingInfoProfessionsFrame"
 
--- What a seller keeps of an auction sale, if Auctionator doesn't say.
-VendorProfit.DEFAULT_AFTER_AH_CUT = 0.95
-
 VendorProfit.L = {
     VENDOR_PROFIT = "Vendor Profit:",
-    ROUTE_PROFIT = "Route Profit:",
+    ROUTE_PROFIT = "Vendor Profit (route):",
     NO_SELL_PRICE = "can't be sold to vendors",
-    NO_SALE_PRICE = "no price to sell at",
     MISSING_PRICES = "(missing reagent prices)",
-    BY_AUCTION = "auction",
-    BY_VENDOR = "vendor",
     ROUTE_TITLE = "Cheapest Route",
     SOURCE_VENDOR = "buy (vendor)",
     SOURCE_AUCTION = "buy (auction)",
@@ -44,9 +40,7 @@ VendorProfit.L = {
     CRAFTING_COST = "Crafting cost",
     AUCTIONATOR_COST = "Auctionator's To Craft",
     SAVES = "Saves",
-    AUCTION_PROFIT = "Auction house profit",
     VENDOR_PROFIT_SHORT = "Vendor profit",
-    NO_AUCTION_PRICE = "no auction price",
     RECIPES_FROM = "Uses your recipes from: %s.",
     NO_RECIPES = "No recipes saved yet.",
     OPEN_PROFESSIONS = "Open each profession once to add its recipes.",
@@ -67,11 +61,6 @@ end
 function VendorProfit.GetReagentPrice(itemID)
     local vendor, auction = VendorProfit.GetBuyPrices(itemID)
     return vendor or auction
-end
-
-function VendorProfit.GetAfterAHCut()
-    local constants = Auctionator.Constants
-    return constants and constants.AfterAHCut or VendorProfit.DEFAULT_AFTER_AH_CUT
 end
 
 -- Walks the required reagents. Returns their total cost, cheapest option per

@@ -1,5 +1,5 @@
 """Loads VendorProfit into a stubbed WoW client + Auctionator (real Lua 5.1)
-and checks the Vendor Profit and Route Profit lines.
+and checks the Vendor Profit and Vendor Profit (route) lines.
 
 The stub mirrors how Auctionator's crafting info frame is created and
 refreshed, but it is not the real client: anything here still needs checking
@@ -162,7 +162,7 @@ run2('__stub.RunTimers()')
 check("attached on the next frame", ev2("VendorProfit.IsAttached()"))
 
 # =============================================================================
-# Route Profit
+# Vendor Profit (route)
 # =============================================================================
 # Mining: Copper Ore -> Copper Bar, Tin Ore -> Tin Bar, Copper Bar + Tin Bar ->
 # 2 Bronze Bars. Blacksmithing: 7 Bronze Bars -> Rough Bronze Cuirass.
@@ -219,10 +219,8 @@ run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
 run('__stub.SetRecipe(%s)' % CUIRASS)
 r = ev("VendorProfit.RouteLine.Calculate(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm))")
 check("route cost: 7 bronze bars at 62.5c = 438c", r.cost == 438)
-check("auction profit: 1300 x 0.95 - 438 = 797", r.auctionProfit == 797)
 check("vendor profit: 147 - 438 = -291", r.vendorProfit == -291)
-check("line shows the better of the two",
-      ev(ROUTE + ":GetText()") == "Route Profit: |cffffffff7s 97c|r |cff808080(auction)|r")
+check("line shows the route's vendor profit", ev(ROUTE + ":GetText()") == "Vendor Profit (route): |cffff2020-2s 91c|r")
 
 bronze = r.route.children[1].node
 check("bronze bars crafted", bronze.source == "craft" and bronze.itemID == BRONZE_BAR)
@@ -245,8 +243,8 @@ check("tooltip: tin bars bought", "        |Ticon3576:0|t Tin Bar x3.5 | buy (au
 check("tooltip: crafting cost", "Crafting cost | |cffffffff4s 38c|r" in tip)
 check("tooltip: Auctionator's cost and the saving",
       "Auctionator's To Craft | |cffffffff12s 39c|r" in tip and "Saves | |cffffffff8s 1c|r" in tip)
-check("tooltip: both profits",
-      "Auction house profit | |cffffffff7s 97c|r" in tip and "Vendor profit | |cffff2020-2s 91c|r" in tip)
+check("tooltip: vendor profit, no auction profit",
+      "Vendor profit | |cffff2020-2s 91c|r" in tip and "Auction" not in tip.replace("Auctionator", ""))
 check("tooltip: which professions it used", "Uses your recipes from: Blacksmithing, Mining." in tip)
 run('AuctionatorCraftingInfoProfessionsFrame.VendorProfitRouteHover.__scripts.OnLeave()')
 check("tooltip hides on leave", not ev("GameTooltip.shown"))
@@ -259,15 +257,15 @@ check("cheaper copper bars bought instead", r.route.children[1].node.children[1]
 check("route cost: 7 x (40 + 75) / 2 = 402.5 -> 403", r.cost == 403)
 run('__stub.auctionPrices[2840] = 70')
 
-# --- Vendor wins -------------------------------------------------------------
-run('__stub.auctionPrices[2866] = nil')
+# --- Profit and items vendors won't buy ----------------------------------------
+run('__stub.items["item:2866"].sellPrice = 500')
 run('AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
-check("no auction price: vendor profit shown", ev(ROUTE + ":GetText()") == "Route Profit: |cffff2020-2s 91c|r |cff808080(vendor)|r")
+check("route profit in white: 500 - 438 = 62c", ev(ROUTE + ":GetText()") == "Vendor Profit (route): |cffffffff62c|r")
 run('__stub.items["item:2866"].sellPrice = 0')
 run('AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
-check("nowhere to sell: says so", ev(ROUTE + ":GetText()") == "Route Profit: |cff808080no price to sell at|r")
+check("can't be vendored: says so", ev(ROUTE + ":GetText()") == "Vendor Profit (route): |cff808080can't be sold to vendors|r")
+check("...and the route tooltip still works", "Crafting cost | |cffffffff4s 38c|r" in ev("__stub.HoverRoute()"))
 run('__stub.items["item:2866"].sellPrice = 147')
-run('__stub.auctionPrices[2866] = 1300')
 
 # --- Missing prices ------------------------------------------------------------
 run('__stub.auctionPrices[2771] = nil; __stub.auctionPrices[3576] = nil')  # no tin prices at all
@@ -345,7 +343,7 @@ check("saved data holds only plain recipe fields", "profession" not in dump.repl
 run3, ev3 = route_client("VendorProfitCharDB = " + dump)
 check("saved recipes load in a new session", len(list(ev3("VendorProfit.Recipes.ForItem(2841)").values())) == 1)
 run3('__stub.SetRecipe(%s)' % CUIRASS)
-check("and the route uses them without opening Mining", "7s 97c" in ev3(ROUTE + ":GetText()"))
+check("and the route uses them without opening Mining", "-2s 91c" in ev3(ROUTE + ":GetText()"))
 
 # --- Loops ---------------------------------------------------------------------
 # Lesser <-> Greater essence: 3 lesser make 1 greater, 1 greater makes 3 lesser.
