@@ -110,7 +110,7 @@ What it can't know:
 29 smelts need 29 Copper Bars (you have 5, so 24 to smelt from 24 Copper Ore) and 29 Tin Bars.
 ```
 
-It lists **To buy**, **From your bags and bank** (with how many are in the bank or still in the mail), **Then craft** in order (deepest first), and the order's **Profit**. Several queued recipes share your items, so nothing is counted twice.
+It lists **To buy**; what it uses of yours, split into **From your bags**, **From your mailbox** (purchases not collected yet, only when there are any) and **From your bank**; **Then craft** in order (deepest first); and the order's **Profit**. Your items are used from your bags first, then the mailbox, then the bank, so **From your bank** is exactly what to fetch. Bags include the reagent bank, since crafting uses it directly. Several queued recipes share your items, so nothing is counted twice.
 
 **Profit** is what finishing the order makes from where you stand: what everything still queued sells to vendors for, minus what the items you have are worth, minus what's still to buy. Items you have count at the cheapest way to get them now, whether you had them already or bought them for this order. What you've paid is spent either way, so it doesn't change whether finishing is worth it. It's shown below Profit as **Spent on this order so far**, but not taken off. That way an order you've partly shopped for and crafted gives the same answer as clearing it and queuing what's left.
 

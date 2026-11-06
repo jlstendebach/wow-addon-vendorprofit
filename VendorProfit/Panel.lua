@@ -143,13 +143,34 @@ local function BuyLineRight(line)
     return L.SOURCE_AUCTION .. "  " .. Money(line.total)
 end
 
-local function SortedUses(uses)
-    local list = {}
-    for itemID, quantity in pairs(uses) do
-        list[#list + 1] = { itemID = itemID, quantity = quantity }
+-- Splits what the plan uses of your items by where they are: bags first
+-- (with the reagent bank, which crafting uses directly), then purchases still
+-- in the mailbox, then the bank, so the bank list is what you need to fetch.
+-- Returns three lists of { itemID, quantity }, sorted by item.
+function Panel.SplitUses(uses)
+    local fromBags, fromMail, fromBank = {}, {}, {}
+    local itemIDs = {}
+    for itemID in pairs(uses) do
+        itemIDs[#itemIDs + 1] = itemID
     end
-    table.sort(list, function(a, b) return a.itemID < b.itemID end)
-    return list
+    table.sort(itemIDs)
+    for _, itemID in ipairs(itemIDs) do
+        local left = uses[itemID]
+        local carried = Inventory.ForCrafting(itemID)
+        local bank = math.max(Inventory.Total(itemID) - carried, 0)
+        for _, place in ipairs({
+            { list = fromBags, have = carried },
+            { list = fromMail, have = Order.InMail(itemID) },
+            { list = fromBank, have = bank },
+        }) do
+            local take = math.min(left, place.have)
+            if take > 0 then
+                place.list[#place.list + 1] = { itemID = itemID, quantity = take }
+                left = left - take
+            end
+        end
+    end
+    return fromBags, fromMail, fromBank
 end
 
 local function AddContent()
@@ -178,21 +199,17 @@ local function AddContent()
         AddRow("row", ItemLabel(line.itemID, line.quantity), BuyLineRight(line))
     end
 
-    local uses = SortedUses(plan.uses)
-    if #uses > 0 then
-        AddRow("heading", L.HEAD_HAVE)
-        for _, use in ipairs(uses) do
-            local _, bank = Inventory.Count(use.itemID)
-            local notes = {}
-            if bank > 0 then
-                notes[#notes + 1] = string.format(L.IN_BANK, bank)
+    local fromBags, fromMail, fromBank = Panel.SplitUses(plan.uses)
+    for _, section in ipairs({
+        { heading = L.HEAD_BAGS, list = fromBags },
+        { heading = L.HEAD_MAIL, list = fromMail },
+        { heading = L.HEAD_BANK, list = fromBank },
+    }) do
+        if #section.list > 0 then
+            AddRow("heading", section.heading)
+            for _, use in ipairs(section.list) do
+                AddRow("row", ItemLabel(use.itemID, use.quantity))
             end
-            local inMail = Order.InMail(use.itemID)
-            if inMail > 0 then
-                notes[#notes + 1] = string.format(L.IN_MAIL, inMail)
-            end
-            local right = #notes > 0 and Gray(table.concat(notes, ", ")) or nil
-            AddRow("row", ItemLabel(use.itemID, use.quantity), right)
         end
     end
 

@@ -412,6 +412,22 @@ def lines(ev):
     return list(ev("VendorProfit.Panel.Lines()").values())
 
 
+HEADINGS = {"Queued", "To buy", "From your bags", "From your mailbox", "From your bank", "Then craft", "Profit"}
+
+
+def section(ev, heading):
+    """The panel rows under a heading, up to the next heading."""
+    ls = lines(ev)
+    if heading not in ls:
+        return None
+    out = []
+    for l in ls[ls.index(heading) + 1:]:
+        if l in HEADINGS:
+            break
+        out.append(l)
+    return out
+
+
 def has_line(ev, *parts):
     return any(all(p in l for p in parts) for l in lines(ev))
 
@@ -445,7 +461,10 @@ check("uses the 12 bronze bars and 5 copper bars you have",
 s_ = ev("VendorProfit.Shopper.Summary()")
 check("estimate: 6000 - 1000 had - 3375 to buy = 1625", s_.revenue == 6000 and s_.ownedValue == 1000 and s_.remaining == 3375 and s_.profit == 1625)
 check("panel lists what to buy", has_line(ev, "Copper Ore x24", "buy (auction)") and has_line(ev, "Tin Bar x29"))
-check("panel lists what you have, with the bank", has_line(ev, "Copper Bar x5", "2 in bank") and has_line(ev, "Bronze Bar x12"))
+check("from your bags: 12 bronze bars, 3 copper bars",
+      section(ev, "From your bags") == ["|Ticon2840:0|t Copper Bar x3", "|Ticon2841:0|t Bronze Bar x12"])
+check("from your bank: the other 2 copper bars, to fetch", section(ev, "From your bank") == ["|Ticon2840:0|t Copper Bar x2"])
+check("no mailbox section with nothing in the mail", section(ev, "From your mailbox") is None)
 check("panel lists the crafts", has_line(ev, "Copper Bar x24", "Mining, 24 crafts")
       and has_line(ev, "Bronze Bar x58", "Mining, 29 crafts") and has_line(ev, "Rough Bronze Cuirass x10", "Blacksmithing, 10 crafts"))
 check("panel says prices are Auctionator's until the AH opens", has_line(ev, "Auctionator's last scan"))
@@ -587,7 +606,8 @@ click(run, "buy"); run('__stub.Advance(0.5)'); click(run, "buy"); run('__stub.Ad
 check("ore in the mail, not the bags", ev("__stub.bags[2770]") is None and ev("__stub.mail[2770]") == 24)
 check("still counted: not bought twice", ev("VendorProfit.Shopper.Summary().plan.buy[2770]") is None
       and ev("VendorProfit.Panel.Buttons().buy.__text").startswith("Buy 29 Tin Bar"))
-check("counted as in the mail", ev("VendorProfit.Order.InMail(2770)") == 24 and has_line(ev, "Copper Ore x24", "24 in the mail"))
+check("counted as in the mail", ev("VendorProfit.Order.InMail(2770)") == 24
+      and section(ev, "From your mailbox") == ["|Ticon2770:0|t Copper Ore x24"])
 check("forget mail available while something's in the mail", ev("VendorProfit.Panel.Buttons().recount:IsEnabled()"))
 run('__stub.bags[2770] = 24; __stub.mail[2770] = 0; __stub.Fire("BAG_UPDATE_DELAYED")')
 check("collected from the mail: no longer counted as in the mail", ev("VendorProfit.Order.InMail(2770)") == 0)
