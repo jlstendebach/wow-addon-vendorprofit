@@ -1184,8 +1184,12 @@ check("scan off away from the auction house", not ev(B + ".scan:IsEnabled()")
       and ev(B + ".scan.tooltip") == "Open the auction house to look up live prices.")
 
 # Show and Queue.
-run("VendorProfit.BestPanel.Row(2).show:Click()")
-check("Show selects the recipe in the professions window", ev("__stub.openedRecipe") == 3328)
+run("__stub.professionsTab = 2; VendorProfit.BestPanel.Row(2).show:Click()")
+check("Show selects the recipe in the professions window directly, on its recipes tab, without asking the server",
+      ev("__stub.selectedRecipe") == 3328 and ev("__stub.professionsTab") == 1 and ev("__stub.openedRecipe") is None)
+run("ProfessionsFrame.CraftingPage.SelectRecipe = nil; VendorProfit.BestPanel.Row(2).show:Click()")
+check("...falling back to opening it through the game", ev("__stub.openedRecipe") == 3328)
+run("function ProfessionsFrame.CraftingPage:SelectRecipe(info) __stub.selectedRecipe = info.recipeID end; __stub.openedRecipe = nil")
 run("VendorProfit.BestPanel.Row(1).queue:Click()")
 check("Queue adds one craft to the shopping order",
       ev("VendorProfit.Order.Entries()[1].recipeID") == 2670 and ev("VendorProfit.Order.Entries()[1].crafts") == 1
@@ -1257,7 +1261,7 @@ run('__stub.CloseProfession()')
 check("stays open when the professions window closes", ev("VendorProfit.BestPanel.IsShown()"))
 check("...still listing the last profession's best crafts", len(best()) == 3)
 run('__stub.openedRecipe = nil; VendorProfit.BestPanel.Row(1).show:Click()')
-check("Show off with the professions window closed, saying to open it", ev("__stub.openedRecipe") is None
+check("Show off with the professions window closed, saying to open it", ev("__stub.openedRecipe") is None and ev("__stub.selectedRecipe") == 3328
       and not ev("VendorProfit.BestPanel.Row(1).show:IsEnabled()"))
 run('VendorProfit.BestPanel.Row(1).show:GetScript("OnEnter")(VendorProfit.BestPanel.Row(1).show)')
 check("...in its tooltip", ev("GameTooltip.lines[1].left") == "Open Blacksmithing to see this recipe.")

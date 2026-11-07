@@ -359,6 +359,10 @@ function stub.CloseProfession()
 end
 ProfessionsFrame.CloseButton = CreateFrame("Button", nil, ProfessionsFrame)
 ProfessionsFrame.CraftingPage = { SchematicForm = CreateFrame("Frame", nil, ProfessionsFrame) }
+function ProfessionsFrame.CraftingPage:SelectRecipe(info) stub.selectedRecipe = info.recipeID end
+ProfessionsFrame.recipesTabID, stub.professionsTab = 1, 1
+function ProfessionsFrame:GetTab() return stub.professionsTab end
+function ProfessionsFrame:SetTab(id) stub.professionsTab = id end
 local form = ProfessionsFrame.CraftingPage.SchematicForm
 function form:GetRecipeInfo()
     local r = stub.recipe
