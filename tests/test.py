@@ -1038,7 +1038,10 @@ check("side tabs on the window's right edge, Best Crafts checked",
       and ev("VendorProfitPanel.tabs.shopping.__point[3]") == "TOPRIGHT"
       and ev("VendorProfitPanel.tabs.shopping.label") == "Shopping List" and ev("VendorProfitPanel.tabs.best.label") == "Best Crafts")
 check("only the Best Crafts page shows", ev(B + ":IsShown()") and not ev("VendorProfitPanel.tabs ~= nil and VendorProfit.Panel.FindButton('Remove')"))
+run('VendorProfit.Order.Clear()')
 run("VendorProfitPanel.tabs.shopping:Click()")
+check("short page: the window is still tall enough for both side tabs",
+      ev("VendorProfitPanel:GetHeight()") >= ev("VendorProfitPanel.tabs.best.__point[5] * -1") + 32)
 check("Shopping List tab switches pages", ev("VendorProfit.Panel.ActiveTab()") == "shopping" and not ev(B + ":IsShown()")
       and ev("VendorProfitPanel.tabs.shopping:GetChecked()") and not ev("VendorProfit.BestPanel.IsShown()"))
 run(TITLEBTN + ":Click()")

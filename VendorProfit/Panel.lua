@@ -528,10 +528,19 @@ function Panel.ActiveTab()
     return activeTab
 end
 
+local TAB_TOP = 36
+local TAB_SPACING = 48
+local TAB_SIZE = 32
+
+-- Tall enough for every side tab, so none hang below the window.
+local function MinHeight()
+    return TAB_TOP + (#pageDefs - 1) * TAB_SPACING + TAB_SIZE + 12
+end
+
 local function CreateSideTab(index, def)
     local tab = CreateFrame("CheckButton", nil, frame)
-    tab:SetSize(32, 32)
-    tab:SetPoint("TOPLEFT", frame, "TOPRIGHT", 0, -36 - (index - 1) * 48)
+    tab:SetSize(TAB_SIZE, TAB_SIZE)
+    tab:SetPoint("TOPLEFT", frame, "TOPRIGHT", 0, -TAB_TOP - (index - 1) * TAB_SPACING)
     local border = tab:CreateTexture(nil, "BACKGROUND")
     border:SetTexture("Interface\\SpellBook\\SpellBook-SkillLineTab")
     border:SetSize(64, 64)
@@ -643,7 +652,7 @@ local function Refresh()
     end
     for _, def in ipairs(pageDefs) do
         if def.name == activeTab then
-            frame:SetHeight(def.refresh(pages[def.name]))
+            frame:SetHeight(math.max(def.refresh(pages[def.name]), MinHeight()))
         end
     end
 end
@@ -738,7 +747,7 @@ end
 
 Panel.AddPage({
     name = "shopping",
-    icon = "Interface\\Icons\\INV_Misc_Bag_10",
+    icon = "Interface\\Icons\\INV_Misc_Bag_08",
     label = L.TAB_SHOPPING,
     create = function(page) content = page end,
     refresh = function() return RefreshShopping() end,
