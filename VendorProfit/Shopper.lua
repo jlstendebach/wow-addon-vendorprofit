@@ -50,6 +50,7 @@ local SORTS = { { sortOrder = 0, reverseSort = false } } -- by price, cheapest f
 --   "confirm"   quote is within budget; waiting for Confirm
 --   "buying"    waiting for the purchase to go through
 local status = "closed"
+local buyAfterScan = false   -- Buy clicked before scanning: buy once scanned
 local message, messageIsError
 local listings = {}     -- itemID -> { commodity = bool, rows = { { unitPrice, quantity }, ... } }
 local scanQueue = {}    -- itemIDs waiting to be scanned
@@ -373,6 +374,12 @@ function ScanNext()
         end
         status = "ready"
         Changed()
+        -- Buy was clicked before a scan: go straight on to the first purchase
+        -- (Buy stops there itself if the order loses money).
+        if buyAfterScan then
+            buyAfterScan = false
+            Shopper.Buy()
+        end
         return
     end
 
@@ -385,6 +392,14 @@ function ScanNext()
             SendSearch()
         end
     end)
+end
+
+-- Buy before a scan: scans first, then starts the first purchase.
+function Shopper.ScanAndBuy()
+    if status == "idle" then
+        buyAfterScan = true
+        Shopper.Scan()
+    end
 end
 
 -- Scans every item the order buys at auction.
@@ -623,6 +638,7 @@ local function Closed()
         C_AuctionHouse.CancelCommoditiesPurchase()
     end
     status = "closed"
+    buyAfterScan = false
     purchase, scanning = nil, nil
     scanQueue = {}
     listings = {}

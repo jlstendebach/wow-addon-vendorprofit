@@ -333,7 +333,9 @@ local function BuyButton(plan)
     if status == "closed" then
         button.text, button.tooltip = L.BUY_OPEN_AH, L.BUY_OPEN_AH_HELP
     elseif status == "idle" then
-        button.text, button.tooltip = L.BUY_BUY, L.SCAN_FIRST
+        -- Not scanned yet: Buy scans first, then buys.
+        button.text, button.tooltip, button.enabled = L.BUY_BUY, L.BUY_SCAN_FIRST, true
+        button.onClick = Shopper.ScanAndBuy
     elseif status == "scanning" then
         local done, total = Shopper.ScanProgress()
         button.text, button.tooltip = L.BUY_SCANNING, string.format(L.BUTTON_SCANNING, math.min(done + 1, total), total)

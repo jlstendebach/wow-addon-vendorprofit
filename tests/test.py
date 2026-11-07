@@ -518,8 +518,8 @@ run('''
 ''')
 run('__stub.OpenAH()')
 check("panel docks beside the auction house", ev("VendorProfitPanel.__point[2] == AuctionHouseFrame"))
-check("Buy waits for a scan", ev("VendorProfit.Shopper.Status()") == "idle" and ev(BUY + ".__text") == "Buy"
-      and not ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip") == "Scan prices first: Scan is on the Profit heading.")
+check("Buy on before a scan: it scans first", ev("VendorProfit.Shopper.Status()") == "idle" and ev(BUY + ".__text") == "Buy"
+      and ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip") == "Scans prices, then starts buying. You confirm each purchase.")
 check("Scan is on the Profit heading", ev(SCAN + ".__text") == "Scan" and ev(SCAN + ":IsEnabled()"))
 click(run, "scan")
 check("scanning", ev("VendorProfit.Shopper.Status()") == "scanning")
@@ -931,6 +931,34 @@ run('__stub.shift = false')
 run('__stub.CloseAH()')
 check("search hides when the auction house closes", not ev(SEARCH + ":IsShown()"))
 check("no errors from searching", ev("#__stub.errors") == 0)
+
+
+# --- Buy before scanning: scans, then goes on to buy ----------------------------------
+run, ev = shop_client()
+run('__stub.SetRecipe(%s)' % CUIRASS)
+run('__stub.createCount = 10'); run(QUEUE + ':Click()')
+run('''
+    __stub.ah.listings[2770] = { { unitPrice = 50, quantity = 10 }, { unitPrice = 55, quantity = 20 }, { unitPrice = 80, quantity = 100 } }
+    __stub.ah.listings[3576] = { { unitPrice = 75, quantity = 10 }, { unitPrice = 78, quantity = 30 } }
+''')
+run('__stub.OpenAH()')
+click(run, "buy")
+check("Buy before a scan: scans", ev("VendorProfit.Shopper.Status()") == "scanning")
+run('__stub.Advance(2)')
+check("...then asks for the first quote, no second click", ev("VendorProfit.Shopper.Status()") in ("quoting", "confirm")
+      and list(ev("__stub.ah.starts[1]").values()) == [COPPER_ORE, 24])
+run('__stub.Advance(0.5)')
+check("...and waits for you to confirm", ev("VendorProfit.Shopper.Status()") == "confirm" and ev("#__stub.ah.confirms") == 0)
+run('VendorProfit.Shopper.Cancel()')
+run('__stub.CloseAH(); __stub.ah.starts = {}')
+# Losing money: the scan stops at Buy anyway.
+run('__stub.ah.listings[2770] = { { unitPrice = 5000, quantity = 100 } }')
+run('__stub.OpenAH()')
+click(run, "buy")
+run('__stub.Advance(2)')
+check("order loses money: scanned, nothing quoted, Buy anyway offered", ev("VendorProfit.Shopper.Status()") == "ready"
+      and ev("#__stub.ah.starts") == 0 and ev(BUY + ".__text") == "Buy anyway")
+check("no errors", ev("#__stub.errors") == 0)
 
 
 # --- Buying from a vendor ------------------------------------------------------------
