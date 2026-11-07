@@ -253,6 +253,15 @@ function Panel.SplitUses(uses)
     return fromBags, fromMail, fromBank
 end
 
+-- What a scan is doing: the batch lookup, then "Scanning 2 of 5...".
+local function ScanningText()
+    if Shopper.IsLookingUp() then
+        return L.BUTTON_LOOKING_UP
+    end
+    local done, total = Shopper.ScanProgress()
+    return string.format(L.BUTTON_SCANNING, math.min(done + 1, total), total)
+end
+
 -- Whether to hold off buying: the order loses money and "Buy anyway" hasn't
 -- been clicked.
 local function Unprofitable()
@@ -337,8 +346,7 @@ local function BuyButton(plan)
         button.text, button.tooltip, button.enabled = L.BUY_BUY, L.BUY_SCAN_FIRST, true
         button.onClick = Shopper.ScanAndBuy
     elseif status == "scanning" then
-        local done, total = Shopper.ScanProgress()
-        button.text, button.tooltip = L.BUY_SCANNING, string.format(L.BUTTON_SCANNING, math.min(done + 1, total), total)
+        button.text, button.tooltip = L.BUY_SCANNING, ScanningText()
     elseif status == "quoting" then
         button.text, button.tooltip = L.BUY_PRICING, L.BUTTON_QUOTING
     elseif status == "buying" then
@@ -425,9 +433,8 @@ local function ScanButton()
     if status == "closed" then
         button.tooltip = L.SCAN_OPEN_AH
     elseif status == "scanning" then
-        local done, total = Shopper.ScanProgress()
         button.text = L.BUY_SCANNING
-        button.tooltip = string.format(L.BUTTON_SCANNING, math.min(done + 1, total), total)
+        button.tooltip = ScanningText()
     elseif status == "idle" or status == "ready" then
         button.enabled, button.tooltip = true, L.BUY_SCAN_HELP
     else

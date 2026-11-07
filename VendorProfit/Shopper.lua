@@ -1,11 +1,17 @@
 -- Shopping for the order at the auction house: scanning listings, pricing
 -- the order with them, and buying one item at a time.
 --
--- Scanning reads every listing of each item the plan buys at auction, so a
+-- Scanning starts with one batch lookup of every item in the order's
+-- crafting trees (the same as Best Crafts' Scan), which gives each item's
+-- lowest listed price, or that nothing is listed. The order is planned with
+-- those, so the route settles before the slow part. Then it reads every
+-- listing of each item the plan buys at auction, one search per item, so a
 -- purchase of 24 is priced by walking up the cheapest listings, not at the
--- single lowest price. With live prices the order is planned again: if
--- crafting something has become cheaper than buying it, or the other way
--- round, the plan changes and any new items are scanned too.
+-- single lowest price; those are the prices purchases are checked against.
+-- With them the order is planned again: if crafting something has become
+-- cheaper than buying it, or the other way round, the plan changes and any
+-- new items are scanned too. If the batch lookup can't run (Best Crafts is
+-- scanning) or fails, the scan goes on without it.
 --
 -- Buying stackable items ("commodities", such as ore, bars and cloth) takes
 -- two clicks, the same flow as Auctionator's and Blizzard's own:
@@ -58,6 +64,8 @@ local scanTotal = 0     -- items in this scan, for "Scanning 2 of 5"
 local scanDone = 0
 local scanning          -- { itemID, tries, moreRequests }; callbacks for an older scan see it changed
 local failed = {}       -- itemIDs whose scan failed this time, so they aren't retried in a loop
+local batch             -- the scan's first, batch lookup: { prices, checked } (see BestCrafts.LookUpItems)
+local lookup            -- that lookup while it runs
 local purchase          -- { itemID, quantity, budget, quote }
 local unanswered        -- a confirmed purchase that timed out; recorded if it succeeds late
 local override = false  -- Buy anyway: buy even when the order isn't profitable
@@ -141,7 +149,8 @@ end
 
 -- Prices for planning: the vendor price as usual, and for scanned stackable
 -- items the average price of buying `need` of them now (nil if none listed,
--- so the plan crafts or uses a vendor instead).
+-- so the plan crafts or uses a vendor instead). Items only in the batch
+-- lookup count at their lowest listed price (nil if none listed).
 local function LivePrices(need)
     return function(itemID)
         local vendor, auction = VendorProfit.GetBuyPrices(itemID)
@@ -149,6 +158,8 @@ local function LivePrices(need)
         if listing and listing.commodity then
             local total, got = Shopper.Walk(listing, need[itemID] or 1)
             auction = got > 0 and total / got or nil
+        elseif batch and batch.checked[itemID] then
+            auction = batch.prices[itemID]
         end
         return vendor, auction
     end
@@ -402,15 +413,9 @@ function Shopper.ScanAndBuy()
     end
 end
 
--- Scans every item the order buys at auction.
-function Shopper.Scan()
-    if status ~= "idle" and status ~= "ready" then
-        return
-    end
-    listings = {}
-    failed = {}
-    override = false
-    SetMessage(nil)
+-- The listings scan: every item the order buys at auction, planned with
+-- the batch lookup's prices when there are some.
+local function ScanListings()
     local s = Shopper.Recompute()
     scanQueue = {}
     for _, line in ipairs(s.plan.buyOrder) do
@@ -419,8 +424,63 @@ function Shopper.Scan()
         end
     end
     scanTotal, scanDone = #scanQueue, 0
-    status = "scanning"
     ScanNext()
+end
+
+-- Every item in the order's crafting trees.
+local function OrderItems()
+    local Route, Recipes = VendorProfit.Route, VendorProfit.Recipes
+    local items, seen = {}, {}
+    for _, entry in ipairs(Order.Entries()) do
+        for _, itemID in ipairs(Route.TreeItems(entry.itemID, entry.reagents)) do
+            if not seen[itemID] then
+                seen[itemID] = true
+                items[#items + 1] = itemID
+            end
+        end
+    end
+    return items
+end
+
+function Shopper.IsLookingUp()
+    return lookup ~= nil
+end
+
+-- Scans: a batch lookup of the whole order, then every item it buys at
+-- auction.
+function Shopper.Scan()
+    if status ~= "idle" and status ~= "ready" then
+        return
+    end
+    listings = {}
+    failed = {}
+    batch = nil
+    override = false
+    SetMessage(nil)
+    scanQueue = {}
+    scanTotal, scanDone = 0, 0
+    status = "scanning"
+
+    local current = {}
+    lookup = current
+    Changed()
+    local BestCrafts = VendorProfit.BestCrafts
+    local started = BestCrafts and BestCrafts.LookUpItems(OrderItems(), function(_, _, live)
+        if lookup ~= current then
+            return
+        end
+        lookup = nil
+        if live then
+            batch = { prices = live.prices, checked = live.checked }
+        end
+        if status == "scanning" then
+            ScanListings()
+        end
+    end)
+    if not started and lookup == current then
+        lookup = nil
+        ScanListings()
+    end
 end
 
 -- Scans one item again (after a price change or failed purchase).
@@ -639,6 +699,7 @@ local function Closed()
     end
     status = "closed"
     buyAfterScan = false
+    lookup, batch = nil, nil
     purchase, scanning = nil, nil
     scanQueue = {}
     listings = {}

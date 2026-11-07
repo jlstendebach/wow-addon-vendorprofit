@@ -719,6 +719,7 @@ run('''
     __stub.ah.pageSize = 1
     __stub.ah.listings[2770] = { { unitPrice = 50, quantity = 5 }, { unitPrice = 51, quantity = 5 } }
     __stub.ah.nonCommodity[3576] = true
+    __stub.ah.listings[3576] = { { unitPrice = 75, quantity = 40 } } -- what a browse shows of it
 ''')
 run('__stub.OpenAH()'); click(run, "scan"); run('__stub.Advance(3)')
 check("asks for more listings when the first page isn't enough", ev("__stub.ah.moreRequests") >= 1
@@ -958,6 +959,50 @@ click(run, "buy")
 run('__stub.Advance(2)')
 check("order loses money: scanned, nothing quoted, Buy anyway offered", ev("VendorProfit.Shopper.Status()") == "ready"
       and ev("#__stub.ah.starts") == 0 and ev(BUY + ".__text") == "Buy anyway")
+check("no errors", ev("#__stub.errors") == 0)
+
+
+# --- Scan: one batch lookup first, then listings only for what's bought ---------------
+def batch_client():
+    run, ev = shop_client()
+    run('__stub.SetRecipe(%s)' % CUIRASS)
+    run('__stub.createCount = 10'); run(QUEUE + ':Click()')
+    run('''
+        __stub.ah.listings[2770] = { { unitPrice = 50, quantity = 10 }, { unitPrice = 55, quantity = 20 }, { unitPrice = 80, quantity = 100 } }
+        __stub.ah.listings[3576] = { { unitPrice = 75, quantity = 10 }, { unitPrice = 78, quantity = 30 } }
+        __stub.auctionPrices[2841] = 10 -- Auctionator remembers cheap bronze bars, but none are listed now
+    ''')
+    run('__stub.OpenAH()')
+    return run, ev
+run, ev = batch_client()
+click(run, "scan")
+check("scan starts with a batch lookup of the whole order", ev("VendorProfit.Shopper.IsLookingUp()")
+      and ev(BUY + ".tooltip") == "Looking up prices for the whole order...")
+run('__stub.Advance(3)')
+lookups = [sorted(x.values()) for x in ev("__stub.ah.itemKeySearches").values()]
+check("one batch request with every item in the order's tree", lookups == [sorted([CUIRASS_ID, BRONZE_BAR, COPPER_BAR, TIN_BAR, COPPER_ORE, TIN_ORE])])
+check("then listings only for what's bought: nothing searched for the unlisted bronze bars",
+      list(ev("__stub.ah.searches").values()) == [COPPER_ORE, TIN_BAR] and ev("VendorProfit.Shopper.Status()") == "ready")
+check("bronze bars crafted, not bought at Auctionator's stale price", ev("VendorProfit.Shopper.Summary().plan.buy[2841]") is None)
+check("purchases still priced from the listings", ev(BUY + ".tooltip") == "Buy 24 Copper Ore for |cffffffff12s 70c|r")
+check("Best Crafts' message untouched", ev("VendorProfit.BestCrafts.Message() == nil"))
+
+# The batch lookup gets no answer: the scan goes on without it.
+run, ev = batch_client()
+run('__stub.ah.dropBrowse = true')
+click(run, "scan"); run('__stub.Advance(16)')
+run('__stub.ah.dropBrowse = false; __stub.Advance(3)')
+check("batch lookup unanswered: listings scanned anyway", ev("VendorProfit.Shopper.Status()") == "ready"
+      and COPPER_ORE in list(ev("__stub.ah.searches").values()) and ev(BUY + ".tooltip").startswith("Buy 24 Copper Ore"))
+
+# Best Crafts busy scanning: no batch lookup, same as before.
+run, ev = batch_client()
+run('__stub.ah.dropBrowse = true; VendorProfit.BestCrafts.Scan(VendorProfit.Recipes.OpenProfession())')
+click(run, "scan")
+check("Best Crafts busy: straight to the listings", not ev("VendorProfit.Shopper.IsLookingUp()"))
+run('__stub.Advance(3)')
+check("...and done", ev("VendorProfit.Shopper.Status()") == "ready" and ev(BUY + ".tooltip").startswith("Buy 24 Copper Ore"))
+run('__stub.CloseAH()')
 check("no errors", ev("#__stub.errors") == 0)
 
 

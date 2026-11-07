@@ -128,6 +128,7 @@ VendorProfit.L = {
     BUY_CONFIRM = "Confirm",
     BUY_BUYING = "Buying...",
     BUTTON_SCANNING = "Scanning %d of %d...",
+    BUTTON_LOOKING_UP = "Looking up prices for the whole order...",
     BUTTON_NOTHING = "Nothing to buy here",
     BUTTON_NOT_PROFITABLE = "Not profitable: finishing the order loses money at these prices.",
     BUTTON_BUY = "Buy %d %s for %s",

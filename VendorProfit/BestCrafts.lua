@@ -165,7 +165,7 @@ local function Finish(text, isError)
     local current = scan
     scan = nil
     if current and current.onDone then
-        current.onDone(text, isError)
+        current.onDone(text, isError, current.live)
     else
         message, messageIsError = text, isError
     end
@@ -324,8 +324,12 @@ function BestCrafts.Scan(profession)
     LookUp(BestCrafts.Items(profession), profession)
 end
 
--- Looks up live prices for some items (one recipe's tree, for Search), in
--- one batch request rather than a search per item. onDone(text, isError).
+-- Looks up live prices for some items (one recipe's tree for Search, an
+-- order's for the shopping scan), in one batch request rather than a search
+-- per item. onDone(text, isError, live): live.prices[itemID] is the lowest
+-- unit price listed, and live.checked[itemID] is true for every item looked
+-- up (so checked but no price means nothing listed). live may be nil or
+-- partial if the lookup failed.
 function BestCrafts.LookUpItems(itemIDs, onDone)
     if not BestCrafts.CanScan() then
         return false
