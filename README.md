@@ -10,14 +10,14 @@ Vendor Profit: -10s 92c            <- sell to a vendor instead
 To Craft: 4s 38c         [Search]  <- crafting reagents yourself where that's cheaper
 Profit: 7s 97c                     <- ...sold on the auction house
 Vendor Profit: -2s 91c             <- ...sold to a vendor
-[Queue] [Best Crafts]
+[Queue]
 ```
 
 - **Vendor Profit:** what you make by crafting the item and selling it to a vendor, at Auctionator's To Craft cost.
 - **Cheapest Route:** the same three numbers when every reagent is got the cheapest way, crafting reagents yourself where that's cheaper than buying them, all the way down. Hover the section to see the route.
 - **Search** (at the auction house) searches Auctionator for every item in the crafting tree.
-- **Best Crafts** shows the profession's most profitable recipes.
-- **Queue** adds the recipe to a shopping order. A shopping panel then plans it with what you already have, scans the auction house, checks the order is still profitable at live prices, buys what's missing one confirmed purchase at a time, and crafts the steps in order.
+- **Vendor Profit** in the professions window's title bar opens the Vendor Profit window on its **Best Crafts** tab: the profession's ten most profitable recipes.
+- **Queue** adds the recipe to a shopping order. The window's **Shopping List** tab then plans it with what you already have, scans the auction house, checks the order is still profitable at live prices, buys what's missing one confirmed purchase at a time, and crafts the steps in order.
 
 Requires [Auctionator](https://www.curseforge.com/wow/addons/auctionator).
 
@@ -105,24 +105,25 @@ What it can't know:
 
 ## Best Crafts
 
-**Best Crafts** (beside Queue, or `/vprofit best`) opens a panel beside the professions window (on its left if there's room, otherwise on its right, past the shopping panel if that's open; drag it anywhere, and it remembers where until `/vprofit reset`) with the open profession's top 5 recipes by profit per craft, each along its cheapest route:
+The **Vendor Profit** button in the professions window's title bar (left of TradeSkillMaster's, if you have it), or `/vprofit best`, opens the Vendor Profit window on its **Best Crafts** tab: the open profession's top 10 recipes by profit per craft, each along its cheapest route. Clicking it again closes the window. The tab closes with the professions window.
 
 ```
 Best Crafts: Blacksmithing
 [ Vendor ] [ Auction ]                              [ Scan ]
 1. Rough Bronze Cuirass           1s 62c     [Queue] [Show]
 2. Rough Bronze Shoulders            87c     [Queue] [Show]
+3. Copper Chain Vest               -2s 10c    [Queue] [Show]
 Prices from Auctionator's last scan.
 ```
 
 - **Vendor** ranks by selling to a vendor, a guaranteed sale. **Auction** ranks by Auctionator's price after the 5% cut; usually higher, but an auction might not sell.
-- Only recipes that make money are listed. Recipes with a reagent that has no price anywhere are left out, since their profit can't be trusted.
-- **Show** selects the recipe in the professions window. **Queue** adds one craft to the shopping order (click again for more).
+- Losses are listed too (in red), so a profession where nothing makes money still shows what loses least. Recipes with a reagent that has no price anywhere are left out, since their profit can't be trusted.
+- **Show** selects the recipe in the professions window. **Queue** adds one craft to the shopping order (click again for more); the window stays on Best Crafts.
 - It ranks straight away from Auctionator's prices. At the auction house, **Scan** looks up live lowest prices for everything that matters to the profession: every recipe's crafting tree, merged into one list of unique items, looked up a couple of hundred at a time with the auction house's batch lookup (the one it uses for favorites) rather than one search per item. It takes seconds. Items with nothing listed count as unavailable until the next scan, and Auctionator saves the prices it sees too. Items that bind on pickup aren't looked up.
 
 ## Shopping
 
-**1. Queue.** Set the number in the professions window's Create box (say 10) and click **Queue** under the Cheapest Route section's Vendor Profit line. Queuing a recipe already in the order adds to it. The shopping panel opens; `/vprofit` toggles it any time.
+**1. Queue.** Set the number in the professions window's Create box (say 10) and click **Queue** under the Cheapest Route section's Vendor Profit line. Queuing a recipe already in the order adds to it. The Vendor Profit window opens on its Shopping List tab; `/vprofit` toggles it any time.
 
 **2. The plan.** The panel works out, in whole numbers, what the order needs, using what you already have (bags and bank) first:
 
@@ -184,7 +185,7 @@ The buttons for each part sit on their section's heading, with short labels; hov
 
 **Mail.** Auction purchases may arrive in your mailbox rather than your bags. A purchase counts as **in the mail** until that many more of the item show up in your bags or bank, so it's counted either way and never bought twice. Opening the mailbox corrects that from what's actually in the inbox, so a purchase that arrived without the panel seeing it (say you used it up as it arrived) stops counting.
 
-**Moving the panel.** Drag it anywhere. From then on it opens where you left it (saved per character). It still opens with the auction house when something is queued, and always closes with it; `/vprofit` opens it again. `/vprofit reset` docks it beside the auction house or professions window again, and Best Crafts beside the professions window.
+**The window.** The Shopping List and Best Crafts are tabs down the right side of one Vendor Profit window. Drag it anywhere. From then on it opens where you left it (saved per character). It opens with the auction house when something is queued (on the Shopping List, unless it's already open on another tab), and closes with it if it's on the Shopping List; `/vprofit` opens it again. `/vprofit reset` docks it beside the auction house or professions window again.
 
 The order is saved per character. **Remove** takes a recipe out; removing the last one empties the order and its record.
 
@@ -215,15 +216,15 @@ Files:
 | `Crafter.lua` | The Craft button: the next step the open profession can make |
 | `OpenButton.lua` | Opening another profession from the Craft button |
 | `Banker.lua` | Take from bank: moving exactly what's needed into your bags |
-| `Panel.lua` | The shopping panel, moving it, and `/vprofit` |
+| `Panel.lua` | The Vendor Profit window and its tabs, the Shopping List tab, moving it, and `/vprofit` |
 | `BestCrafts.lua` | Ranking a profession's recipes, and the batch price lookup |
-| `BestPanel.lua` | The Best Crafts panel and button |
+| `BestPanel.lua` | The Best Crafts tab, and the button in the professions window's title bar |
 
 Saved data, per character (`VendorProfitCharDB`):
 
 - `professions[professionID] = { name, recipes = { [recipeID] = { item, count, reagents } } }`
 - `order = { entries, inMail, lastSeen, spent }`: the queued crafts, purchases not seen in bags or bank yet (and the count they're waiting to rise from), and what the panel spent.
-- `panel = { left, top }`: where you moved the shopping panel, if you did.
+- `panel = { left, top }`: where you moved the Vendor Profit window, if you did.
 
 Opening a profession uses a secure action button casting the profession's spell, as TradeSkillMaster does in Forever. It's a separate invisible button laid over the Craft button rather than part of the panel, because a secure button inside the panel would make the panel protected and the game would block showing, hiding or moving it in combat. It's only placed out of combat and hidden as combat starts.
 

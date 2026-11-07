@@ -1,11 +1,12 @@
--- The shopping panel: the queued order, what to buy, what you already have,
--- what to craft and the order's profit. Buying, crafting and taking from the
--- bank are buttons on their sections' headings.
+-- The Vendor Profit window, with a tab per page down its right side: the
+-- Shopping List (here: the queued order, its profit, the To do checklist and
+-- what's already in your bags; buying, crafting and taking from the bank are
+-- buttons on their sections' headings) and Best Crafts (BestPanel.lua).
 --
 -- It docks beside the auction house when that's open (and opens there by
 -- itself if something is queued), otherwise beside the professions window.
 -- Drag it to move it: from then on it opens where you left it, saved per
--- character, until /vprofit reset docks it (and Best Crafts) again. /vprofit or /vendorprofit
+-- character, until /vprofit reset docks it again. /vprofit or /vendorprofit
 -- toggles it.
 
 local _, ns = ...
@@ -22,6 +23,7 @@ local Panel = {}
 VendorProfit.Panel = Panel
 
 local WIDTH = 380
+Panel.WIDTH = WIDTH
 local PADDING = 16
 local TOP = -32
 local ROW_HEIGHT = 15
@@ -29,7 +31,8 @@ local HEADING_HEIGHT = 20
 
 local HEADING_BUTTON_WIDTH = 120
 
-local frame
+local frame              -- the window
+local content            -- the Shopping List page, where the rows below go
 local rows = {}
 local craftCover        -- { button, profession } when Then craft's button opens a profession
 local usedRows = 0
@@ -70,13 +73,13 @@ local function GetRow(index)
     local row = rows[index]
     if row == nil then
         row = {}
-        row.left = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.left = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         row.left:SetJustifyH("LEFT")
         row.left:SetWordWrap(false)
-        row.right = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.right = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         row.right:SetJustifyH("RIGHT")
         row.right:SetWordWrap(false)
-        row.button = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        row.button = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
         row.button:SetSize(60, 16)
         -- Disabled buttons still show their tooltip, to say why.
         row.button:SetMotionScriptsWhileDisabled(true)
@@ -91,7 +94,7 @@ local function GetRow(index)
         -- Lines either side of a divider's title.
         row.lines = {}
         for side = 1, 2 do
-            local line = frame:CreateTexture(nil, "ARTWORK")
+            local line = content:CreateTexture(nil, "ARTWORK")
             line:SetColorTexture(1, 0.82, 0, 0.35)
             line:SetHeight(1)
             line:Hide()
@@ -108,7 +111,7 @@ local function AddDivider(row, title)
     y = y - 10
     row.left:SetFontObject("GameFontNormalSmall")
     row.left:ClearAllPoints()
-    row.left:SetPoint("TOP", frame, "TOP", 0, y)
+    row.left:SetPoint("TOP", content, "TOP", 0, y)
     row.left:SetWidth(0)
     row.left:SetWordWrap(false)
     row.left:SetText(title)
@@ -117,11 +120,11 @@ local function AddDivider(row, title)
     row.button:Hide()
     local left, right = row.lines[1], row.lines[2]
     left:ClearAllPoints()
-    left:SetPoint("LEFT", frame, "TOPLEFT", PADDING, y - 6)
+    left:SetPoint("LEFT", content, "TOPLEFT", PADDING, y - 6)
     left:SetPoint("RIGHT", row.left, "LEFT", -6, 0)
     right:ClearAllPoints()
     right:SetPoint("LEFT", row.left, "RIGHT", 6, 0)
-    right:SetPoint("RIGHT", frame, "TOPRIGHT", -PADDING, y - 6)
+    right:SetPoint("RIGHT", content, "TOPRIGHT", -PADDING, y - 6)
     left:Show()
     right:Show()
     y = y - HEADING_HEIGHT
@@ -154,7 +157,7 @@ local function AddRow(kind, left, right, button)
 
     row.left:SetFontObject(kind == "heading" and "GameFontNormal" or "GameFontHighlightSmall")
     row.left:ClearAllPoints()
-    row.left:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y)
+    row.left:SetPoint("TOPLEFT", content, "TOPLEFT", PADDING, y)
     -- Notes are gray unless they bring their own color.
     local plain = kind == "note" and not left:find("^|c")
     row.left:SetText(plain and Gray(left) or left)
@@ -164,13 +167,13 @@ local function AddRow(kind, left, right, button)
     row.left:Show()
 
     row.right:ClearAllPoints()
-    row.right:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING - (button and buttonWidth + 4 or 0), y)
+    row.right:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PADDING - (button and buttonWidth + 4 or 0), y)
     row.right:SetText(right or "")
     row.right:SetShown(right ~= nil)
 
     row.button:ClearAllPoints()
     if button then
-        row.button:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING, y + 2)
+        row.button:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PADDING, y + 2)
         row.button:SetWidth(buttonWidth)
         row.button:SetText(button.text)
         row.button:SetScript("OnClick", button.onClick)
@@ -498,8 +501,6 @@ local function FinishLayout()
         end
     end
 
-    frame:SetHeight(-y + PADDING)
-
     -- With the Craft button in place, cover it to open the profession, or
     -- uncover.
     if craftCover and not Order.IsEmpty() then
@@ -507,9 +508,50 @@ local function FinishLayout()
     else
         OpenButton.Hide()
     end
+    return -y + PADDING
 end
 
 -- Frame ------------------------------------------------------------------------
+
+-- Pages, in tab order: { name, icon, label, create(page), refresh(page) ->
+-- height }. Other files add theirs with Panel.AddPage before the window is
+-- first shown.
+local pageDefs = {}
+local pages = {}
+local activeTab = "shopping"
+
+function Panel.AddPage(def)
+    pageDefs[#pageDefs + 1] = def
+end
+
+function Panel.ActiveTab()
+    return activeTab
+end
+
+local function CreateSideTab(index, def)
+    local tab = CreateFrame("CheckButton", nil, frame)
+    tab:SetSize(32, 32)
+    tab:SetPoint("TOPLEFT", frame, "TOPRIGHT", 0, -36 - (index - 1) * 48)
+    local border = tab:CreateTexture(nil, "BACKGROUND")
+    border:SetTexture("Interface\\SpellBook\\SpellBook-SkillLineTab")
+    border:SetSize(64, 64)
+    border:SetPoint("TOPLEFT", tab, "TOPLEFT", -3, 11)
+    tab:SetNormalTexture(def.icon)
+    tab:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+    tab:SetCheckedTexture("Interface\\Buttons\\CheckButtonHilight", "ADD")
+    tab:SetScript("OnClick", function()
+        activeTab = def.name
+        Panel.Refresh()
+    end)
+    tab:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(def.label)
+        GameTooltip:Show()
+    end)
+    tab:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    tab.label = def.label
+    return tab
+end
 
 local function Create()
     frame = CreateFrame("Frame", "VendorProfitPanel", UIParent, "ButtonFrameTemplate")
@@ -540,6 +582,17 @@ local function Create()
     end)
     frame:Hide()
 
+    -- One page per tab, each filling the window; side tabs down the right
+    -- edge, like the professions window's.
+    frame.tabs = {}
+    for index, def in ipairs(pageDefs) do
+        local page = CreateFrame("Frame", nil, frame)
+        page:SetAllPoints(frame)
+        page:Hide()
+        pages[def.name] = page
+        def.create(page)
+        frame.tabs[def.name] = CreateSideTab(index, def)
+    end
 end
 
 -- Where you moved the panel to: { left, top } from the screen's bottom left.
@@ -569,13 +622,30 @@ local function Dock()
     end
 end
 
-local function Refresh()
+local function RefreshShopping()
     usedRows = 0
     y = TOP
     craftCover = nil
     AddContent()
-    FinishLayout()
+    local height = FinishLayout()
     HideUnusedRows()
+    return height
+end
+
+local function Refresh()
+    for _, def in ipairs(pageDefs) do
+        local active = def.name == activeTab
+        pages[def.name]:SetShown(active)
+        frame.tabs[def.name]:SetChecked(active)
+    end
+    if activeTab ~= "shopping" then
+        OpenButton.Hide()
+    end
+    for _, def in ipairs(pageDefs) do
+        if def.name == activeTab then
+            frame:SetHeight(def.refresh(pages[def.name]))
+        end
+    end
 end
 
 function Panel.Refresh()
@@ -585,7 +655,11 @@ function Panel.Refresh()
     xpcall(Refresh, geterrorhandler())
 end
 
-function Panel.Show()
+-- Shows the window, on a tab if one is given.
+function Panel.Show(tab)
+    if tab then
+        activeTab = tab
+    end
     if frame == nil then
         Create()
     end
@@ -614,11 +688,12 @@ function Panel.IsShown()
     return frame ~= nil and frame:IsShown()
 end
 
-function Panel.Toggle()
-    if Panel.IsShown() then
+-- Shows the window on a tab, or hides it if it's already showing that tab.
+function Panel.Toggle(tab)
+    if Panel.IsShown() and (tab == nil or tab == activeTab) then
         Panel.Hide()
     else
-        Panel.Show()
+        Panel.Show(tab)
     end
 end
 
@@ -661,14 +736,23 @@ function Panel.RowButton(text)
     end
 end
 
+Panel.AddPage({
+    name = "shopping",
+    icon = "Interface\\Icons\\INV_Misc_Bag_10",
+    label = L.TAB_SHOPPING,
+    create = function(page) content = page end,
+    refresh = function() return RefreshShopping() end,
+})
+
 -- Opens with the auction house when something is queued, and closes with
 -- it wherever it's been moved. /vprofit opens it again.
 local lastStatus = Shopper.Status()
 Shopper.OnChange(function()
     local status = Shopper.Status()
     if lastStatus == "closed" and status ~= "closed" and not Order.IsEmpty() then
-        Panel.Show()
-    elseif status == "closed" and lastStatus ~= "closed" then
+        -- Already open (on Best Crafts, say): stays on its tab.
+        Panel.Show(not Panel.IsShown() and "shopping" or nil)
+    elseif status == "closed" and lastStatus ~= "closed" and activeTab == "shopping" then
         Panel.Hide()
     end
     lastStatus = status
@@ -685,10 +769,10 @@ Banker.OnChange(function()
         local _, _, fromBank = Panel.SplitUses(Shopper.Summary().plan.uses)
         if #fromBank > 0 then
             openedForBank = true
-            Panel.Show()
+            Panel.Show(not Panel.IsShown() and "shopping" or nil)
         end
     elseif not open and bankWasOpen then
-        if openedForBank then
+        if openedForBank and activeTab == "shopping" then
             Panel.Hide()
         end
         openedForBank = false
@@ -723,9 +807,8 @@ SlashCmdList.VENDORPROFIT = function(arg)
     if command == "reset" then
         Panel.ResetPosition()
         Panel.Show()
-        VendorProfit.BestPanel.ResetPosition()
     elseif command == "best" then
-        VendorProfit.BestPanel.Toggle()
+        Panel.Toggle("best")
     else
         Panel.Toggle()
     end

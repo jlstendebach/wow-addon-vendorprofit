@@ -1,13 +1,10 @@
--- The Best Crafts panel: the open profession's top recipes by profit per
--- craft (BestCrafts.lua), with Vendor and Auction tabs. Each has Show (selects
--- it in the professions window) and Queue (adds one craft to the shopping
--- order). It docks beside the professions window: on its left if there's
--- room, otherwise on its right (past the shopping panel if that's there). It
--- can be dragged, remembers where it was left (per character, until
--- /vprofit reset), stays on screen, and closes with the professions window.
+-- The Best Crafts tab of the Vendor Profit window: the open profession's top
+-- recipes by profit per craft (BestCrafts.lua), losses included, with Vendor
+-- and Auction tabs. Each has Show (selects it in the professions window) and
+-- Queue (adds one craft to the shopping order). Live prices come from Scan.
 --
--- Opened by the Best Crafts button under the Cheapest Route section, or
--- /vprofit best.
+-- Opened by the Vendor Profit button in the professions window's title bar,
+-- or /vprofit best. The tab closes with the professions window.
 
 local ADDON_NAME, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -19,11 +16,13 @@ local L = VendorProfit.L
 local BestPanel = {}
 VendorProfit.BestPanel = BestPanel
 
-local WIDTH = 400
+local Panel = VendorProfit.Panel
+
+local WIDTH = Panel.WIDTH
 local PADDING = 16
 local ROW_HEIGHT = 22
 
-local frame
+local frame              -- the page
 local tab = "vendor"
 local rows = {}
 
@@ -56,11 +55,6 @@ local function QueueRecipe(entry)
         sellPrice = select(11, C_Item.GetItemInfo(recipe.item)),
     }, 1)
     print(string.format(L.QUEUED, 1, C_Item.GetItemInfo(recipe.item) or ("item " .. recipe.item)))
-    if VendorProfit.Panel then
-        VendorProfit.Panel.Show()
-    end
-    -- The shopping panel may have opened where this one is.
-    BestPanel.Dock()
 end
 
 local function SmallButton(parent, text, width)
@@ -98,40 +92,24 @@ local function SetTab(name)
     BestPanel.Refresh()
 end
 
-local function Create()
-    frame = CreateFrame("Frame", "VendorProfitBestCrafts", UIParent, "ButtonFrameTemplate")
-    ButtonFrameTemplate_HidePortrait(frame)
-    ButtonFrameTemplate_HideButtonBar(frame)
-    if frame.Inset then
-        frame.Inset:Hide()
-    end
-    frame:SetWidth(WIDTH)
-    frame:SetHeight(200)
-    frame:EnableMouse(true)
-    frame:SetMovable(true)
-    frame:SetClampedToScreen(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", function(self)
-        self:StopMovingOrSizing()
-        -- Saved by the addon, not the game's own layout cache.
-        self:SetUserPlaced(false)
-        VendorProfitCharDB = VendorProfitCharDB or {}
-        VendorProfitCharDB.bestPanel = { left = self:GetLeft(), top = self:GetTop() }
-    end)
-    frame:Hide()
+local function Create(page)
+    frame = page
+
+    frame.heading = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    frame.heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -32)
+    frame.heading:SetJustifyH("LEFT")
 
     frame.tabs = {
         vendor = SmallButton(frame, L.BEST_TAB_VENDOR, 90),
         auction = SmallButton(frame, L.BEST_TAB_AUCTION, 90),
     }
-    frame.tabs.vendor:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -30)
+    frame.tabs.vendor:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -52)
     frame.tabs.auction:SetPoint("LEFT", frame.tabs.vendor, "RIGHT", 4, 0)
     frame.tabs.vendor:SetScript("OnClick", function() SetTab("vendor") end)
     frame.tabs.auction:SetScript("OnClick", function() SetTab("auction") end)
 
     frame.scan = SmallButton(frame, L.SCAN, 90)
-    frame.scan:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING, -30)
+    frame.scan:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING, -52)
     frame.scan:SetMotionScriptsWhileDisabled(true)
     frame.scan:SetScript("OnClick", function()
         BestCrafts.Scan(Recipes.OpenProfession())
@@ -150,7 +128,7 @@ end
 
 local function Refresh()
     local profession, name = Recipes.OpenProfession()
-    frame:SetTitle(string.format(L.BEST_TITLE, name or ""))
+    frame.heading:SetText(string.format(L.BEST_TITLE, name or ""))
 
     -- Tabs: the selected one stays lit.
     for key, button in pairs(frame.tabs) do
@@ -174,7 +152,7 @@ local function Refresh()
         scan.tooltip = BestCrafts.CanScan() and L.BEST_SCAN_HELP or L.BEST_SCAN_OPEN_AH
     end
 
-    local y = -58
+    local y = -80
     local used = 0
     local ranked = {}
     if profession then
@@ -229,81 +207,22 @@ local function Refresh()
     frame.status:ClearAllPoints()
     frame.status:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y - 8)
     frame.status:SetText(table.concat(lines, "\n"))
-    frame:SetHeight(-y + 8 + (frame.status:GetStringHeight() or 12) + PADDING)
+    return -y + 8 + (frame.status:GetStringHeight() or 12) + PADDING
 end
 
 function BestPanel.Refresh()
-    if frame == nil or not frame:IsShown() then
-        return
-    end
-    xpcall(Refresh, geterrorhandler())
-end
-
--- Where it opens: where you left it, else beside the professions window.
-function BestPanel.Dock()
-    if frame == nil then
-        return
-    end
-    frame:ClearAllPoints()
-    local saved = VendorProfitCharDB and VendorProfitCharDB.bestPanel
-    if saved and saved.left and saved.top then
-        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", saved.left, saved.top)
-        return
-    end
-    if not (ProfessionsFrame and ProfessionsFrame:IsShown()) then
-        frame:SetPoint("CENTER", UIParent, "CENTER")
-        return
-    end
-    -- Room on the left of the professions window? (It usually opens at the
-    -- left edge of the screen.)
-    local left = ProfessionsFrame:GetLeft()
-    local scale = ProfessionsFrame:GetEffectiveScale() / frame:GetEffectiveScale()
-    if left and left * scale >= WIDTH + 8 then
-        frame:SetPoint("TOPRIGHT", ProfessionsFrame, "TOPLEFT", -4, 0)
-        return
-    end
-    local shopping = VendorProfitPanel
-    if shopping and shopping:IsShown() then
-        frame:SetPoint("TOPLEFT", shopping, "TOPRIGHT", 4, 0)
-    else
-        frame:SetPoint("TOPLEFT", ProfessionsFrame, "TOPRIGHT", 4, 0)
+    if Panel.IsShown() and Panel.ActiveTab() == "best" then
+        Panel.Refresh()
     end
 end
 
--- Forgets where you moved it, so it docks again.
-function BestPanel.ResetPosition()
-    if VendorProfitCharDB then
-        VendorProfitCharDB.bestPanel = nil
-    end
-    BestPanel.Dock()
-end
-
-function BestPanel.Show()
-    if frame == nil then
-        Create()
-    end
-    BestPanel.Dock()
-    frame:Show()
-    BestPanel.Refresh()
-end
-
-function BestPanel.Hide()
-    if frame then
-        frame:Hide()
-    end
-end
-
-function BestPanel.IsShown()
-    return frame ~= nil and frame:IsShown()
-end
-
-function BestPanel.Toggle()
-    if BestPanel.IsShown() then
-        BestPanel.Hide()
-    else
-        BestPanel.Show()
-    end
-end
+Panel.AddPage({
+    name = "best",
+    icon = "Interface\\Icons\\INV_Misc_Coin_02",
+    label = L.TAB_BEST,
+    create = Create,
+    refresh = function() return Refresh() end,
+})
 
 -- The rows shown, as "left | right" text (for tests and debugging), and the
 -- tab and Scan buttons.
@@ -326,6 +245,10 @@ function BestPanel.Frame()
     return frame
 end
 
+function BestPanel.IsShown()
+    return Panel.IsShown() and Panel.ActiveTab() == "best"
+end
+
 function BestPanel.Tab()
     return tab
 end
@@ -343,36 +266,49 @@ for _, event in ipairs({ "TRADE_SKILL_CLOSE", "TRADE_SKILL_LIST_UPDATE", "AUCTIO
 end
 events:SetScript("OnEvent", function(_, event)
     if event == "TRADE_SKILL_CLOSE" then
-        BestPanel.Hide()
+        if BestPanel.IsShown() then
+            Panel.Hide()
+        end
     else
         BestPanel.Refresh()
     end
 end)
 
--- The Best Crafts button, beside Queue under the Cheapest Route section.
-local BestButton = {}
+-- The Vendor Profit button in the professions window's title bar, left of
+-- TradeSkillMaster's button there, so it reads as being about the whole
+-- profession rather than the selected recipe. Opens the Best Crafts tab.
+local titleButton
 
-function BestButton.Create(frame2, anchor)
-    local button = CreateFrame("Button", nil, frame2, "UIPanelButtonTemplate")
-    button:SetSize(96, 20)
-    button:SetText(L.BEST_BUTTON)
-    button:SetPoint("LEFT", anchor, "RIGHT", 4, 0)
-    button:SetFrameLevel(frame2:GetFrameLevel() + 5)
-    button:SetScript("OnClick", BestPanel.Toggle)
-    button:SetScript("OnEnter", function(self)
+local function CreateTitleButton()
+    if titleButton or ProfessionsFrame == nil then
+        return
+    end
+    titleButton = CreateFrame("Button", "VendorProfitProfessionsButton", ProfessionsFrame, "UIPanelButtonTemplate")
+    titleButton:SetSize(96, 20)
+    titleButton:SetText(L.BEST_BUTTON)
+    local close = ProfessionsFrame.CloseButton
+    if close then
+        titleButton:SetPoint("RIGHT", close, "LEFT", -84, 0)
+    else
+        titleButton:SetPoint("TOPRIGHT", ProfessionsFrame, "TOPRIGHT", -110, -1)
+    end
+    titleButton:SetFrameLevel(ProfessionsFrame:GetFrameLevel() + 10)
+    titleButton:SetScript("OnClick", function() Panel.Toggle("best") end)
+    titleButton:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetText(L.BEST_BUTTON)
         GameTooltip:AddLine(L.BEST_BUTTON_HELP, 1, 1, 1, true)
         GameTooltip:Show()
     end)
-    button:SetScript("OnLeave", function() GameTooltip:Hide() end)
-    button:Hide()
-    frame2.VendorProfitBestButton = button
-    return anchor
+    titleButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
-function BestButton.Refresh(frame2, result)
-    frame2.VendorProfitBestButton:SetShown(result ~= nil)
-end
+-- Made when the professions window first opens (it's load-on-demand).
+local titleEvents = CreateFrame("Frame")
+pcall(titleEvents.RegisterEvent, titleEvents, "TRADE_SKILL_SHOW")
+titleEvents:SetScript("OnEvent", CreateTitleButton)
+CreateTitleButton()
 
-VendorProfit.AddLine(BestButton)
+function BestPanel.TitleButton()
+    return titleButton
+end

@@ -78,6 +78,12 @@ function FrameMethods:SetFrameStrata(s) self.__strata = s end
 function FrameMethods:RegisterForClicks(...) self.__clicks = { ... } end
 function FrameMethods:SetHighlightTexture() end
 function FrameMethods:SetMotionScriptsWhileDisabled() end
+function FrameMethods:SetNormalTexture(t) self.__normal = t end
+function FrameMethods:SetCheckedTexture() end
+function FrameMethods:SetChecked(c) self.__checked = not not c end
+function FrameMethods:GetChecked() return self.__checked end
+function FrameMethods:GetTextWidth() return #(self.__text or "") * 6 end
+function DynamicResizeButton_Resize(button) button:SetWidth(button:GetTextWidth() + 40) end
 function FrameMethods:LockHighlight() self.__lit = true end
 function FrameMethods:UnlockHighlight() self.__lit = false end
 function FrameMethods:SetAttribute(k, v) self.__attrs = self.__attrs or {}; self.__attrs[k] = v end
@@ -95,6 +101,8 @@ function FrameMethods:CreateTexture()
     local t = setmetatable({ __shown = true, __parent = self, __text = "" }, FontMethods)
     t.SetColorTexture = function(tex, ...) tex.__color = { ... } end
     t.SetHeight = function() end
+    t.SetSize = function() end
+    t.SetTexture = function(tex, path) tex.__texture = path end
     return t
 end
 function FrameMethods:CreateFontString()
@@ -329,6 +337,7 @@ local transaction = {
 }
 
 ProfessionsFrame = CreateFrame("Frame", "ProfessionsFrame")
+ProfessionsFrame.CloseButton = CreateFrame("Button", nil, ProfessionsFrame)
 ProfessionsFrame.CraftingPage = { SchematicForm = CreateFrame("Frame", nil, ProfessionsFrame) }
 local form = ProfessionsFrame.CraftingPage.SchematicForm
 function form:GetRecipeInfo()

@@ -53,7 +53,7 @@ function QueueButton.Create(frame, anchor)
     local button = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     button:SetSize(64, 20)
     button:SetText(L.QUEUE)
-    button:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -4)
+    button:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -10)
     -- Above the frame that shows the route tooltip, so clicks reach it.
     button:SetFrameLevel(frame:GetFrameLevel() + 5)
     button:SetScript("OnClick", OnClick)

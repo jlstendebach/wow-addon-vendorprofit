@@ -467,6 +467,7 @@ QUEUE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitQueueButton"
 run, ev = shop_client()
 
 # --- Queue button --------------------------------------------------------------
+check("queue a little below the Vendor Profit line", ev(QUEUE + ".__point[5]") == -10)
 check("queue button below the route's Vendor Profit line", ev(QUEUE + ":IsShown()") and ev(QUEUE + ".__point[2] == " + ROUTE)
       and ev(QUEUE + ".__point[1]") == "TOPLEFT" and ev(QUEUE + ".__point[3]") == "BOTTOMLEFT")
 check("queue button above the tooltip area so it can be clicked",
@@ -881,6 +882,8 @@ check("search hidden while the auction house is closed", not ev(SEARCH + ":IsSho
 run('__stub.OpenAH()')
 check("search shown at the auction house, top right of the section",
       ev(SEARCH + ":IsShown()") and ev(SEARCH + ".__point[1]") == "TOPRIGHT" and ev(SEARCH + ".__point[2] == " + SECTION + ".separator"))
+check("search sized like Auctionator's: same template, 22 high, as wide as its text",
+      ev(SEARCH + ".__h") == 22 and ev(SEARCH + ".__w") == 6 * 6 + 40)
 check("search clickable over the tooltip area", ev(SEARCH + ":GetFrameLevel()") > ev(SECTION + ".hover:GetFrameLevel()"))
 tree = list(ev("VendorProfit.Route.TreeItems(2866, VendorProfit.Recipes.ReagentsFromSchematic(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm).recipeSchematic))").values())
 check("tree: the item, then reagents before what they're made from, including options the route doesn't use",
@@ -1018,42 +1021,48 @@ run('__stub.auctionPrices[2865] = 700; __stub.auctionPrices[2867] = 300')
 run('__stub.OpenProfession(186, "Mining", %s)' % MINING)
 run('__stub.OpenProfession(164, "Blacksmithing", { %s, %s, %s })' % (CUIRASS, SHOULDERS, VEST))
 run('__stub.SetRecipe(%s)' % CUIRASS)
-BESTBTN = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitBestButton"
-check("Best Crafts button beside Queue", ev(BESTBTN + ":IsShown()") and ev(BESTBTN + ".__point[2] == " + QUEUE))
-run(BESTBTN + ":Click()")
-check("no room on the left (professions window at the screen's edge): opens on its right",
-      ev("VendorProfit.BestPanel.IsShown()") and ev("VendorProfitBestCrafts.__point[1]") == "TOPLEFT"
-      and ev("VendorProfitBestCrafts.__point[2] == ProfessionsFrame") and ev("VendorProfitBestCrafts.__point[3]") == "TOPRIGHT"
-      and ev("VendorProfitBestCrafts.__title") == "Best Crafts: Blacksmithing")
-check("draggable", ev("VendorProfitBestCrafts.__movable") and ev("VendorProfitBestCrafts.__drag[1]") == "LeftButton")
-run('ProfessionsFrame.__left = 600; VendorProfit.BestPanel.Dock()')
-check("room on the left: opens there", ev("VendorProfitBestCrafts.__point[1]") == "TOPRIGHT"
-      and ev("VendorProfitBestCrafts.__point[3]") == "TOPLEFT")
-run('ProfessionsFrame.__left = nil')
-run('VendorProfit.Panel.Show(); VendorProfit.BestPanel.Dock()')
-check("shopping panel on the right: opens past it", ev("VendorProfitBestCrafts.__point[2] == VendorProfitPanel"))
-run('VendorProfit.Panel.Hide(); VendorProfit.BestPanel.Dock()')
-run('__stub.Drag(VendorProfitBestCrafts, 500, 600)')
-check("moved: position saved", ev("VendorProfitCharDB.bestPanel.left") == 500 and ev("VendorProfitCharDB.bestPanel.top") == 600)
-run('VendorProfit.BestPanel.Hide(); VendorProfit.BestPanel.Show()')
-check("reopens where it was moved", ev("VendorProfitBestCrafts.__point[2] == UIParent") and ev("VendorProfitBestCrafts.__point[4]") == 500)
-run('SlashCmdList.VENDORPROFIT("reset")')
-check("/vprofit reset docks it again", ev("VendorProfitCharDB.bestPanel") is None and ev("VendorProfitBestCrafts.__point[2] ~= UIParent"))
-run('VendorProfit.Panel.Hide(); VendorProfit.BestPanel.Show()')
+TITLEBTN = "VendorProfitProfessionsButton"
+B = "VendorProfit.BestPanel.Frame()"
+check("no Best Crafts button on the recipe", ev("AuctionatorCraftingInfoProfessionsFrame.VendorProfitBestButton") is None)
+check("Vendor Profit button in the professions title bar, left of the close button (and TSM's)",
+      ev(TITLEBTN + ".__text") == "Vendor Profit" and ev(TITLEBTN + ".__point[2] == ProfessionsFrame.CloseButton")
+      and ev(TITLEBTN + ".__point[1]") == "RIGHT" and ev(TITLEBTN + ".__point[3]") == "LEFT")
+run(TITLEBTN + ":Click()")
+check("opens the Vendor Profit window on its Best Crafts tab",
+      ev("VendorProfit.Panel.IsShown()") and ev("VendorProfit.Panel.ActiveTab()") == "best"
+      and ev("VendorProfit.BestPanel.IsShown()") and ev("VendorProfitPanel.__title") == "Vendor Profit"
+      and ev(B + ".heading:GetText()") == "Best Crafts: Blacksmithing")
+check("one window: Best Crafts is a page in it", ev(B + ":GetParent() == VendorProfitPanel") and ev("VendorProfitBestCrafts") is None)
+check("side tabs on the window's right edge, Best Crafts checked",
+      ev("VendorProfitPanel.tabs.best:GetChecked()") and not ev("VendorProfitPanel.tabs.shopping:GetChecked()")
+      and ev("VendorProfitPanel.tabs.shopping.__point[3]") == "TOPRIGHT"
+      and ev("VendorProfitPanel.tabs.shopping.label") == "Shopping List" and ev("VendorProfitPanel.tabs.best.label") == "Best Crafts")
+check("only the Best Crafts page shows", ev(B + ":IsShown()") and not ev("VendorProfitPanel.tabs ~= nil and VendorProfit.Panel.FindButton('Remove')"))
+run("VendorProfitPanel.tabs.shopping:Click()")
+check("Shopping List tab switches pages", ev("VendorProfit.Panel.ActiveTab()") == "shopping" and not ev(B + ":IsShown()")
+      and ev("VendorProfitPanel.tabs.shopping:GetChecked()") and not ev("VendorProfit.BestPanel.IsShown()"))
+run(TITLEBTN + ":Click()")
+check("title button on another tab: switches to Best Crafts", ev("VendorProfit.Panel.ActiveTab()") == "best" and ev("VendorProfit.Panel.IsShown()"))
+run(TITLEBTN + ":Click()")
+check("...and again: closes the window", not ev("VendorProfit.Panel.IsShown()"))
+run(TITLEBTN + ":Click()")
 best = lambda: list(ev("VendorProfit.BestPanel.Lines()").values())
-check("vendor tab first, ranked: cuirass 600 - 438, shoulders 400 - 313; the losing vest left out",
-      ev("VendorProfit.BestPanel.Tab()") == "vendor" and best() == [
+ranked = best()
+check("vendor tab first, ranked: cuirass 600 - 438, shoulders 400 - 313, then the losing vest in red",
+      ev("VendorProfit.BestPanel.Tab()") == "vendor" and ranked[:2] == [
           "1. |Ticon2866:0|t Rough Bronze Cuirass | |cffffffff1s 62c|r",
-          "2. |Ticon2865:0|t Rough Bronze Shoulders | |cffffffff87c|r"])
-check("vendor tab lit", ev("VendorProfitBestCrafts.tabs.vendor.__lit") and not ev("VendorProfitBestCrafts.tabs.auction.__lit"))
-run("VendorProfitBestCrafts.tabs.auction:Click()")
+          "2. |Ticon2865:0|t Rough Bronze Shoulders | |cffffffff87c|r"]
+      and len(ranked) == 3 and ranked[2].startswith("3. |Ticon2867:0|t Copper Chain Vest | |cffff2020-"))
+check("top 10", ev("VendorProfit.BestCrafts.TOP") == 10)
+check("vendor tab lit", ev(B + ".tabs.vendor.__lit") and not ev(B + ".tabs.auction.__lit"))
+run(B + ".tabs.auction:Click()")
 check("auction tab: after the cut, 1235 - 438 and 665 - 313",
-      best() == ["1. |Ticon2866:0|t Rough Bronze Cuirass | |cffffffff7s 97c|r",
-                 "2. |Ticon2865:0|t Rough Bronze Shoulders | |cffffffff3s 52c|r"])
-run("VendorProfitBestCrafts.tabs.vendor:Click()")
-check("says prices are Auctionator's", "Prices from Auctionator's last scan." in ev("VendorProfitBestCrafts.status:GetText()"))
-check("scan off away from the auction house", not ev("VendorProfitBestCrafts.scan:IsEnabled()")
-      and ev("VendorProfitBestCrafts.scan.tooltip") == "Open the auction house to look up live prices.")
+      best()[:2] == ["1. |Ticon2866:0|t Rough Bronze Cuirass | |cffffffff7s 97c|r",
+                     "2. |Ticon2865:0|t Rough Bronze Shoulders | |cffffffff3s 52c|r"])
+run(B + ".tabs.vendor:Click()")
+check("says prices are Auctionator's", "Prices from Auctionator's last scan." in ev(B + ".status:GetText()"))
+check("scan off away from the auction house", not ev(B + ".scan:IsEnabled()")
+      and ev(B + ".scan.tooltip") == "Open the auction house to look up live prices.")
 
 # Show and Queue.
 run("VendorProfit.BestPanel.Row(2).show:Click()")
@@ -1061,8 +1070,8 @@ check("Show selects the recipe in the professions window", ev("__stub.openedReci
 run("VendorProfit.BestPanel.Row(1).queue:Click()")
 check("Queue adds one craft to the shopping order",
       ev("VendorProfit.Order.Entries()[1].recipeID") == 2670 and ev("VendorProfit.Order.Entries()[1].crafts") == 1
-      and ev("VendorProfit.Order.Entries()[1].profession") == "Blacksmithing" and ev("VendorProfit.Panel.IsShown()"))
-check("...and Best Crafts moves past the shopping panel it opened", ev("VendorProfitBestCrafts.__point[2] == VendorProfitPanel"))
+      and ev("VendorProfit.Order.Entries()[1].profession") == "Blacksmithing")
+check("...and stays on Best Crafts", ev("VendorProfit.BestPanel.IsShown()"))
 run("VendorProfit.Order.Clear()")
 
 # Every unique item across the profession's trees.
@@ -1081,33 +1090,48 @@ run('''
     VendorProfit.BestCrafts.BATCH = 3
 ''')
 run('__stub.OpenAH()')
-check("scan on at the auction house", ev("VendorProfitBestCrafts.scan:IsEnabled()"))
-run("VendorProfitBestCrafts.scan:Click()")
-check("scanning", ev("VendorProfit.BestCrafts.IsScanning()") and ev("VendorProfitBestCrafts.scan.__text") == "Scanning...")
+check("scan on at the auction house", ev("" + B + ".scan:IsEnabled()"))
+run("" + B + ".scan:Click()")
+check("scanning", ev("VendorProfit.BestCrafts.IsScanning()") and ev("" + B + ".scan.__text") == "Scanning...")
 run('__stub.Advance(2)')
 lookups = [list(x.values()) for x in ev("__stub.ah.itemKeySearches").values()]
 check("looked up in batches, not one search per item", lookups == [[2866, 2841, 2840], [3576, 2770, 2771], [2867]])
 check("bind-on-pickup items not looked up", 2865 not in sum(lookups, []))
 check("no per-item searches", ev("#__stub.ah.searches") == 0)
 check("done", not ev("VendorProfit.BestCrafts.IsScanning()")
-      and "Live prices from" in ev("VendorProfitBestCrafts.status:GetText()")
-      and "Live prices updated." in ev("VendorProfitBestCrafts.status:GetText()"))
+      and "Live prices from" in ev("" + B + ".status:GetText()")
+      and "Live prices updated." in ev("" + B + ".status:GetText()"))
 check("re-ranked with live prices: bronze bars at 40c, so cuirass 600 - 280 and shoulders 400 - 200",
-      best() == ["1. |Ticon2866:0|t Rough Bronze Cuirass | |cffffffff3s 20c|r",
+      best()[:2] == ["1. |Ticon2866:0|t Rough Bronze Cuirass | |cffffffff3s 20c|r",
                  "2. |Ticon2865:0|t Rough Bronze Shoulders | |cffffffff2s|r"])
 check("items with nothing listed have no auction price now", ev("select(2, VendorProfit.BestCrafts.Prices(2771))") is None)
 
 # Results that aren't ours are ignored; no answer times out; closing the AH stops it.
-run('__stub.ah.dropBrowse = true; VendorProfitBestCrafts.scan:Click(); __stub.Advance(1)')
+run('__stub.ah.dropBrowse = true; ' + B + '.scan:Click(); __stub.Advance(1)')
 run('__stub.ah.browseResults = { { itemKey = { itemID = 99999 }, minPrice = 1, totalQuantity = 1 } }; __stub.Fire("AUCTION_HOUSE_BROWSE_RESULTS_UPDATED")')
 check("someone else's browse results ignored", ev("VendorProfit.BestCrafts.IsScanning()"))
 run('__stub.Advance(16)')
 check("no answer: stops and says so", not ev("VendorProfit.BestCrafts.IsScanning()")
-      and "didn't answer" in ev("VendorProfitBestCrafts.status:GetText()"))
-run('VendorProfitBestCrafts.scan:Click(); __stub.Advance(1); __stub.CloseAH()')
+      and "didn't answer" in ev("" + B + ".status:GetText()"))
+run(B + '.scan:Click(); __stub.Advance(1); __stub.CloseAH()')
 check("closing the auction house stops a scan", not ev("VendorProfit.BestCrafts.IsScanning()")
-      and "closed before the scan finished" in ev("VendorProfitBestCrafts.status:GetText()"))
+      and "closed before the scan finished" in ev("" + B + ".status:GetText()"))
 run('__stub.ah.dropBrowse = false')
+
+# At the auction house with something queued, the window stays on Best Crafts,
+# and closing the auction house leaves it open.
+run('VendorProfit.Order.Clear()')
+run('__stub.CloseAH()')
+check("open away from the auction house on Best Crafts", ev("VendorProfit.BestPanel.IsShown()"))
+run('VendorProfit.BestPanel.Row(1).queue:Click(); __stub.OpenAH()')
+check("auction house opens with an order: stays on Best Crafts", ev("VendorProfit.Panel.ActiveTab()") == "best" and ev("VendorProfit.Panel.IsShown()"))
+run('__stub.CloseAH()')
+check("auction house closes: Best Crafts stays open", ev("VendorProfit.BestPanel.IsShown()"))
+run('VendorProfit.Panel.Hide(); __stub.OpenAH()')
+check("window closed, auction house opens with an order: Shopping List", ev("VendorProfit.Panel.ActiveTab()") == "shopping" and ev("VendorProfit.Panel.IsShown()"))
+run('__stub.CloseAH()')
+check("...and closes with it", not ev("VendorProfit.Panel.IsShown()"))
+run('VendorProfit.Order.Clear(); VendorProfit.Panel.Show("best")')
 
 # Closing the professions window closes it; /vprofit best toggles it.
 run('__stub.Fire("TRADE_SKILL_CLOSE")')
@@ -1116,7 +1140,7 @@ run('SlashCmdList.VENDORPROFIT("best")')
 check("/vprofit best opens it", ev("VendorProfit.BestPanel.IsShown()"))
 run('__stub.tradeSkill.linked = true; VendorProfit.BestPanel.Refresh()')
 check("no profession of yours open: says to open one", best() == []
-      and "Open one of your professions" in ev("VendorProfitBestCrafts.status:GetText()"))
+      and "Open one of your professions" in ev("" + B + ".status:GetText()"))
 run('__stub.tradeSkill.linked = false')
 check("no errors from Best Crafts", ev("#__stub.errors") == 0)
 

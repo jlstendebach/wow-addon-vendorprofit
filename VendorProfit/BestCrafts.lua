@@ -19,7 +19,7 @@ local L = VendorProfit.L
 local BestCrafts = {}
 VendorProfit.BestCrafts = BestCrafts
 
-BestCrafts.TOP = 5
+BestCrafts.TOP = 10
 BestCrafts.BATCH = 200          -- items per lookup
 BestCrafts.LOOKUP_TIMEOUT = 15  -- seconds
 BestCrafts.THROTTLE_POLL = 0.2
@@ -106,7 +106,8 @@ function BestCrafts.Rank(profession, by, onLoad)
                     profit = math.floor(auction * recipe.count * VendorProfit.GetAfterAHCut()) - cost
                 end
             end
-            if profit and profit > 0 then
+            -- Losses too: a top 10 that loses money still says what's least bad.
+            if profit then
                 ranked[#ranked + 1] = { recipe = recipe, profit = profit, cost = cost, route = route }
             end
         end

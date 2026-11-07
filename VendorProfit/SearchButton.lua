@@ -80,9 +80,19 @@ local function UpdateShown(button)
 end
 
 function SearchButton.Create(frame, anchor)
-    local button = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    button:SetSize(64, 20)
+    -- The same template as Auctionator's Search button, so it's the same
+    -- size: 22 high and as wide as its text.
+    local ok, button = pcall(CreateFrame, "Button", nil, frame, "UIPanelDynamicResizeButtonTemplate")
+    if not ok then
+        button = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+    end
+    button:SetHeight(22)
     button:SetText(L.SEARCH_TREE)
+    if DynamicResizeButton_Resize then
+        DynamicResizeButton_Resize(button)
+    else
+        button:SetWidth(math.max(80, (button:GetTextWidth() or 0) + 40))
+    end
     -- Top right of the section, where Auctionator puts its own Search button.
     button:SetPoint("TOPRIGHT", frame.VendorProfitRoute.separator, "BOTTOMRIGHT", 0, -1)
     -- Above the frame that shows the route tooltip, so clicks reach it.

@@ -55,8 +55,8 @@ VendorProfit.L = {
     SEARCH_TREE_HELP = "Searches Auctionator for every item in this recipe's crafting tree: the item, its reagents and everything they could be crafted from. Auctionator saves the lowest prices it finds, so the Cheapest Route updates from them.",
 
     -- Best Crafts
-    BEST_BUTTON = "Best Crafts",
-    BEST_BUTTON_HELP = "Shows this profession's most profitable recipes, each along its cheapest route.",
+    BEST_BUTTON = "Vendor Profit",
+    BEST_BUTTON_HELP = "Shows this profession's best crafts, each along its cheapest route, in the Vendor Profit window. Your shopping list is on its other tab.",
     BEST_TITLE = "Best Crafts: %s",
     BEST_TAB_VENDOR = "Vendor",
     BEST_TAB_AUCTION = "Auction",
@@ -70,7 +70,7 @@ VendorProfit.L = {
     BEST_AH_CLOSED = "The auction house closed before the scan finished.",
     BEST_NOTHING_TO_SCAN = "Nothing in this profession can be listed on the auction house.",
     BEST_OPEN_PROFESSION = "Open one of your professions to see its best crafts.",
-    BEST_NONE = "Nothing in this profession makes money at these prices.",
+    BEST_NONE = "No prices for this profession's crafts yet. Scan at the auction house.",
     BEST_LIVE_PRICES = "Live prices from %s.",
     BEST_AUCTIONATOR_PRICES = "Prices from Auctionator's last scan.",
 
@@ -80,7 +80,9 @@ VendorProfit.L = {
     QUEUED = "|cffffd100Vendor Profit:|r queued %d x %s. Open the auction house to shop for it.",
 
     -- Shopping panel
-    PANEL_TITLE = "Vendor Profit: Shopping",
+    PANEL_TITLE = "Vendor Profit",
+    TAB_SHOPPING = "Shopping List",
+    TAB_BEST = "Best Crafts",
     HEAD_QUEUED = "Queued",
     HEAD_TODO = "To do",
     STEP_BUY = "Buy",
