@@ -5,7 +5,7 @@
 -- It docks beside the auction house when that's open (and opens there by
 -- itself if something is queued), otherwise beside the professions window.
 -- Drag it to move it: from then on it opens where you left it, saved per
--- character, until /vprofit reset docks it again. /vprofit or /vendorprofit
+-- character, until /vprofit reset docks it (and Best Crafts) again. /vprofit or /vendorprofit
 -- toggles it.
 
 local _, ns = ...
@@ -723,6 +723,7 @@ SlashCmdList.VENDORPROFIT = function(arg)
     if command == "reset" then
         Panel.ResetPosition()
         Panel.Show()
+        VendorProfit.BestPanel.ResetPosition()
     elseif command == "best" then
         VendorProfit.BestPanel.Toggle()
     else

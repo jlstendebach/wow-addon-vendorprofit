@@ -1021,9 +1021,25 @@ run('__stub.SetRecipe(%s)' % CUIRASS)
 BESTBTN = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitBestButton"
 check("Best Crafts button beside Queue", ev(BESTBTN + ":IsShown()") and ev(BESTBTN + ".__point[2] == " + QUEUE))
 run(BESTBTN + ":Click()")
-check("panel opens on the left of the professions window",
-      ev("VendorProfit.BestPanel.IsShown()") and ev("VendorProfitBestCrafts.__point[1]") == "TOPRIGHT"
-      and ev("VendorProfitBestCrafts.__point[2] == ProfessionsFrame") and ev("VendorProfitBestCrafts.__title") == "Best Crafts: Blacksmithing")
+check("no room on the left (professions window at the screen's edge): opens on its right",
+      ev("VendorProfit.BestPanel.IsShown()") and ev("VendorProfitBestCrafts.__point[1]") == "TOPLEFT"
+      and ev("VendorProfitBestCrafts.__point[2] == ProfessionsFrame") and ev("VendorProfitBestCrafts.__point[3]") == "TOPRIGHT"
+      and ev("VendorProfitBestCrafts.__title") == "Best Crafts: Blacksmithing")
+check("draggable", ev("VendorProfitBestCrafts.__movable") and ev("VendorProfitBestCrafts.__drag[1]") == "LeftButton")
+run('ProfessionsFrame.__left = 600; VendorProfit.BestPanel.Dock()')
+check("room on the left: opens there", ev("VendorProfitBestCrafts.__point[1]") == "TOPRIGHT"
+      and ev("VendorProfitBestCrafts.__point[3]") == "TOPLEFT")
+run('ProfessionsFrame.__left = nil')
+run('VendorProfit.Panel.Show(); VendorProfit.BestPanel.Dock()')
+check("shopping panel on the right: opens past it", ev("VendorProfitBestCrafts.__point[2] == VendorProfitPanel"))
+run('VendorProfit.Panel.Hide(); VendorProfit.BestPanel.Dock()')
+run('__stub.Drag(VendorProfitBestCrafts, 500, 600)')
+check("moved: position saved", ev("VendorProfitCharDB.bestPanel.left") == 500 and ev("VendorProfitCharDB.bestPanel.top") == 600)
+run('VendorProfit.BestPanel.Hide(); VendorProfit.BestPanel.Show()')
+check("reopens where it was moved", ev("VendorProfitBestCrafts.__point[2] == UIParent") and ev("VendorProfitBestCrafts.__point[4]") == 500)
+run('SlashCmdList.VENDORPROFIT("reset")')
+check("/vprofit reset docks it again", ev("VendorProfitCharDB.bestPanel") is None and ev("VendorProfitBestCrafts.__point[2] ~= UIParent"))
+run('VendorProfit.Panel.Hide(); VendorProfit.BestPanel.Show()')
 best = lambda: list(ev("VendorProfit.BestPanel.Lines()").values())
 check("vendor tab first, ranked: cuirass 600 - 438, shoulders 400 - 313; the losing vest left out",
       ev("VendorProfit.BestPanel.Tab()") == "vendor" and best() == [
@@ -1046,6 +1062,7 @@ run("VendorProfit.BestPanel.Row(1).queue:Click()")
 check("Queue adds one craft to the shopping order",
       ev("VendorProfit.Order.Entries()[1].recipeID") == 2670 and ev("VendorProfit.Order.Entries()[1].crafts") == 1
       and ev("VendorProfit.Order.Entries()[1].profession") == "Blacksmithing" and ev("VendorProfit.Panel.IsShown()"))
+check("...and Best Crafts moves past the shopping panel it opened", ev("VendorProfitBestCrafts.__point[2] == VendorProfitPanel"))
 run("VendorProfit.Order.Clear()")
 
 # Every unique item across the profession's trees.

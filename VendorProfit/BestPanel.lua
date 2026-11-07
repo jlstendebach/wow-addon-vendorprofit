@@ -1,8 +1,10 @@
 -- The Best Crafts panel: the open profession's top recipes by profit per
 -- craft (BestCrafts.lua), with Vendor and Auction tabs. Each has Show (selects
 -- it in the professions window) and Queue (adds one craft to the shopping
--- order). It docks on the left of the professions window, opposite the
--- shopping panel, and closes with it.
+-- order). It docks beside the professions window: on its left if there's
+-- room, otherwise on its right (past the shopping panel if that's there). It
+-- can be dragged, remembers where it was left (per character, until
+-- /vprofit reset), stays on screen, and closes with the professions window.
 --
 -- Opened by the Best Crafts button under the Cheapest Route section, or
 -- /vprofit best.
@@ -57,6 +59,8 @@ local function QueueRecipe(entry)
     if VendorProfit.Panel then
         VendorProfit.Panel.Show()
     end
+    -- The shopping panel may have opened where this one is.
+    BestPanel.Dock()
 end
 
 local function SmallButton(parent, text, width)
@@ -104,6 +108,17 @@ local function Create()
     frame:SetWidth(WIDTH)
     frame:SetHeight(200)
     frame:EnableMouse(true)
+    frame:SetMovable(true)
+    frame:SetClampedToScreen(true)
+    frame:RegisterForDrag("LeftButton")
+    frame:SetScript("OnDragStart", frame.StartMoving)
+    frame:SetScript("OnDragStop", function(self)
+        self:StopMovingOrSizing()
+        -- Saved by the addon, not the game's own layout cache.
+        self:SetUserPlaced(false)
+        VendorProfitCharDB = VendorProfitCharDB or {}
+        VendorProfitCharDB.bestPanel = { left = self:GetLeft(), top = self:GetTop() }
+    end)
     frame:Hide()
 
     frame.tabs = {
@@ -224,16 +239,50 @@ function BestPanel.Refresh()
     xpcall(Refresh, geterrorhandler())
 end
 
+-- Where it opens: where you left it, else beside the professions window.
+function BestPanel.Dock()
+    if frame == nil then
+        return
+    end
+    frame:ClearAllPoints()
+    local saved = VendorProfitCharDB and VendorProfitCharDB.bestPanel
+    if saved and saved.left and saved.top then
+        frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", saved.left, saved.top)
+        return
+    end
+    if not (ProfessionsFrame and ProfessionsFrame:IsShown()) then
+        frame:SetPoint("CENTER", UIParent, "CENTER")
+        return
+    end
+    -- Room on the left of the professions window? (It usually opens at the
+    -- left edge of the screen.)
+    local left = ProfessionsFrame:GetLeft()
+    local scale = ProfessionsFrame:GetEffectiveScale() / frame:GetEffectiveScale()
+    if left and left * scale >= WIDTH + 8 then
+        frame:SetPoint("TOPRIGHT", ProfessionsFrame, "TOPLEFT", -4, 0)
+        return
+    end
+    local shopping = VendorProfitPanel
+    if shopping and shopping:IsShown() then
+        frame:SetPoint("TOPLEFT", shopping, "TOPRIGHT", 4, 0)
+    else
+        frame:SetPoint("TOPLEFT", ProfessionsFrame, "TOPRIGHT", 4, 0)
+    end
+end
+
+-- Forgets where you moved it, so it docks again.
+function BestPanel.ResetPosition()
+    if VendorProfitCharDB then
+        VendorProfitCharDB.bestPanel = nil
+    end
+    BestPanel.Dock()
+end
+
 function BestPanel.Show()
     if frame == nil then
         Create()
     end
-    frame:ClearAllPoints()
-    if ProfessionsFrame and ProfessionsFrame:IsShown() then
-        frame:SetPoint("TOPRIGHT", ProfessionsFrame, "TOPLEFT", -4, 0)
-    else
-        frame:SetPoint("CENTER", UIParent, "CENTER")
-    end
+    BestPanel.Dock()
     frame:Show()
     BestPanel.Refresh()
 end

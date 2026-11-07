@@ -105,7 +105,7 @@ What it can't know:
 
 ## Best Crafts
 
-**Best Crafts** (beside Queue, or `/vprofit best`) opens a panel on the left of the professions window with the open profession's top 5 recipes by profit per craft, each along its cheapest route:
+**Best Crafts** (beside Queue, or `/vprofit best`) opens a panel beside the professions window (on its left if there's room, otherwise on its right, past the shopping panel if that's open; drag it anywhere, and it remembers where until `/vprofit reset`) with the open profession's top 5 recipes by profit per craft, each along its cheapest route:
 
 ```
 Best Crafts: Blacksmithing
@@ -184,7 +184,7 @@ The buttons for each part sit on their section's heading, with short labels; hov
 
 **Mail.** Auction purchases may arrive in your mailbox rather than your bags. A purchase counts as **in the mail** until that many more of the item show up in your bags or bank, so it's counted either way and never bought twice. Opening the mailbox corrects that from what's actually in the inbox, so a purchase that arrived without the panel seeing it (say you used it up as it arrived) stops counting.
 
-**Moving the panel.** Drag it anywhere. From then on it opens where you left it (saved per character). It still opens with the auction house when something is queued, and always closes with it; `/vprofit` opens it again. `/vprofit reset` docks it beside the auction house or professions window again.
+**Moving the panel.** Drag it anywhere. From then on it opens where you left it (saved per character). It still opens with the auction house when something is queued, and always closes with it; `/vprofit` opens it again. `/vprofit reset` docks it beside the auction house or professions window again, and Best Crafts beside the professions window.
 
 The order is saved per character. **Remove** takes a recipe out; removing the last one empties the order and its record.
 
