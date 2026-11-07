@@ -183,6 +183,16 @@ function time() return 1700000000 end
 date = os.date
 stub.inCombat = false
 function InCombatLockdown() return stub.inCombat end
+function IsShiftKeyDown() return stub.shift end
+-- Chat output, kept for tests.
+stub.printed = {}
+local rawPrint = print
+function print(...)
+    local parts = {}
+    for i = 1, select("#", ...) do parts[i] = tostring((select(i, ...))) end
+    stub.printed[#stub.printed + 1] = table.concat(parts, " ")
+    rawPrint(...)
+end
 function GetCVarBool() return false end
 C_Spell = { GetSpellName = function(id) return ({ [2575] = "Mining", [2656] = "Smelting" })[id] end }
 stub.casting = nil
@@ -636,6 +646,10 @@ C_AuctionHouse.SearchForItemKeys = function(keys)
             if min then results[#results + 1] = { itemKey = { itemID = id }, minPrice = min, totalQuantity = total } end
         end
         stub.ah.browseResults = results
+        -- Auctionator saving browse results to its prices (when a test asks).
+        if stub.ah.auctionatorSaves then
+            for _, r in ipairs(results) do stub.auctionPrices[r.itemKey.itemID] = r.minPrice end
+        end
         stub.Fire("AUCTION_HOUSE_BROWSE_RESULTS_UPDATED")
     end)
 end

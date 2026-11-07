@@ -2,7 +2,7 @@
 ## Title: Vendor Profit for Auctionator
 ## Notes: Shows what a craft is worth sold to a vendor, also along the cheapest crafting route, and shops the auction house for it. Unofficial: not made by Auctionator's authors.
 ## Author: Josh
-## Version: 1.15.4
+## Version: 1.16.0
 ## Dependencies: Auctionator
 ## SavedVariablesPerCharacter: VendorProfitCharDB
 ## IconTexture: Interface\Icons\INV_Misc_Coin_02

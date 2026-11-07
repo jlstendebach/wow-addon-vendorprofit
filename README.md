@@ -15,7 +15,7 @@ Vendor Profit: -2s 91c             <- ...sold to a vendor
 
 - **Vendor Profit:** what you make by crafting the item and selling it to a vendor, at Auctionator's To Craft cost.
 - **Cheapest Route:** the same three numbers when every reagent is got the cheapest way, crafting reagents yourself where that's cheaper than buying them, all the way down. Hover the section to see the route.
-- **Search** (at the auction house) searches Auctionator for every item in the crafting tree.
+- **Search** (at the auction house) looks up live prices for every item in the crafting tree in one request.
 - **Vendor Profit** in the professions window's title bar opens the Vendor Profit window on its **Best Crafts** tab: the profession's ten most profitable recipes.
 - **Queue** adds the recipe to a shopping order. The window's **Shopping List** tab then plans it with what you already have, scans the auction house, checks the order is still profitable at live prices, buys what's missing one confirmed purchase at a time, and crafts the steps in order.
 
@@ -83,7 +83,7 @@ Rough Bronze Cuirass x1                                  4s 38c
         Tin Bar x3.5       buy (auction)                 2s 63c
 ```
 
-**Search.** At the auction house, **Search** at the top right of the section (where Auctionator puts its own) searches Auctionator for every item in the crafting tree: the item, its reagents, and everything your saved recipes could make them from, including options the current route doesn't use, since any of those prices can change it. Items that bind on pickup are left out. Auctionator saves the lowest price of anything its searches find (they're browse queries, which it records while the auction house is open), so the section updates from what the search turns up.
+**Search.** At the auction house, **Search** at the top right of the section (where Auctionator puts its own) looks up live lowest prices for every item in the crafting tree: the item, its reagents, and everything your saved recipes could make them from, including options the current route doesn't use, since any of those prices can change it. Items that bind on pickup are left out. It's the same batch lookup as Best Crafts' Scan: one request for the whole tree instead of a search per item, so it takes about a second. Auctionator saves the lowest price of anything the lookup returns (browse results, which it records while the auction house is open), so the section updates from what it finds. **Shift-click** runs Auctionator's own search for every item instead, when you want to see the listings.
 
 **saves** on a crafted step is how much crafting it saves over buying that many outright, with everything under it done the cheapest way. It's what skipping that step would cost: here, buying Copper Bars instead of smelting them costs 70c more per cuirass. Steps that can't be bought show no saving.
 

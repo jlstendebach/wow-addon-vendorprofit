@@ -157,7 +157,7 @@ local function Refresh()
 
     -- Scan button.
     local scan = frame.scan
-    if BestCrafts.IsScanning() then
+    if BestCrafts.IsScanning() and BestCrafts.Scanning() ~= "items" then
         local batch, batches = BestCrafts.Progress()
         scan:SetText(L.BUY_SCANNING)
         scan:SetEnabled(false)

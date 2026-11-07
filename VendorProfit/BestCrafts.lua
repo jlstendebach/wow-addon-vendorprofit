@@ -9,6 +9,8 @@
 -- requests instead of one per item. The results are browse results, which
 -- Auctionator also saves to its own prices while the auction house is open.
 -- Items with nothing listed have no auction price until the next scan.
+--
+-- The crafting screen's Search uses the same lookup for one recipe's tree.
 
 local ADDON_NAME, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -134,9 +136,16 @@ function BestCrafts.CanScan()
     return scan == nil and AuctionHouseOpen() and C_AuctionHouse.SearchForItemKeys ~= nil
 end
 
+-- Ends the scan. A profession scan's outcome shows on Best Crafts; a lookup
+-- for one recipe's tree (Search) reports to its caller instead.
 local function Finish(text, isError)
+    local current = scan
     scan = nil
-    message, messageIsError = text, isError
+    if current and current.onDone then
+        current.onDone(text, isError)
+    else
+        message, messageIsError = text, isError
+    end
     Changed()
 end
 
@@ -149,8 +158,10 @@ local function BatchDone()
     end
     current.batch = current.batch + 1
     if current.batch > #current.batches then
-        current.live.time = time()
-        live = current.live
+        if current.profession then
+            current.live.time = time()
+            live = current.live
+        end
         Finish(L.BEST_SCANNED)
         return
     end
@@ -229,13 +240,14 @@ local function OnResults(event, added)
 end
 
 -- Scan button: looks up live lowest prices for a profession's items.
-function BestCrafts.Scan(profession)
-    if not BestCrafts.CanScan() or profession == nil then
-        return
+-- Looks up live lowest prices for itemIDs in batches. With a profession,
+-- they become Best Crafts' live prices; with onDone(text, isError) instead,
+-- the caller hears how it went (Auctionator saves what's found either way).
+local function LookUp(itemIDs, profession, onDone)
+    if profession then
+        message = nil
     end
-    local itemIDs = BestCrafts.Items(profession)
-    message = nil
-    scan = { profession = profession, loading = true }
+    scan = { profession = profession, onDone = onDone, loading = true }
     Changed()
     local current = scan
     local pending = #itemIDs
@@ -252,7 +264,7 @@ function BestCrafts.Scan(profession)
             end
         end
         if #listable == 0 then
-            Finish(L.BEST_NOTHING_TO_SCAN, true)
+            Finish(current.profession and L.BEST_NOTHING_TO_SCAN or L.SEARCH_NOTHING, true)
             return
         end
         current.batches = {}
@@ -280,6 +292,28 @@ function BestCrafts.Scan(profession)
             end
         end)
     end
+end
+
+function BestCrafts.Scan(profession)
+    if not BestCrafts.CanScan() or profession == nil then
+        return
+    end
+    LookUp(BestCrafts.Items(profession), profession)
+end
+
+-- Looks up live prices for some items (one recipe's tree, for Search), in
+-- one batch request rather than a search per item. onDone(text, isError).
+function BestCrafts.LookUpItems(itemIDs, onDone)
+    if not BestCrafts.CanScan() then
+        return false
+    end
+    LookUp(itemIDs, nil, onDone)
+    return true
+end
+
+-- What's being scanned: a profession's key, or "items" for LookUpItems.
+function BestCrafts.Scanning()
+    return scan and (scan.profession or "items")
 end
 
 -- Scan progress: batch, batches (nil while item info loads).

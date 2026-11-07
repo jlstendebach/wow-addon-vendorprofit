@@ -889,16 +889,45 @@ tree = list(ev("VendorProfit.Route.TreeItems(2866, VendorProfit.Recipes.Reagents
 check("tree: the item, then reagents before what they're made from, including options the route doesn't use",
       tree == [CUIRASS_ID, BRONZE_BAR, COPPER_BAR, TIN_BAR, COPPER_ORE, TIN_ORE])
 run('__stub.items["item:2866"].bind = 1')  # the cuirass binds on pickup
+run('''
+    __stub.ah.listings[2841] = { { unitPrice = 40, quantity = 50 } }
+    __stub.ah.listings[2840] = { { unitPrice = 70, quantity = 50 } }
+    __stub.ah.auctionatorSaves = true
+''')
+toCraftBefore = ev(SECTION + ".toCraft:GetText()")
+run(SEARCH + ':Click()')
+check("click: looking up, button off until done", ev("VendorProfit.BestCrafts.Scanning()") == "items" and not ev(SEARCH + ":IsEnabled()"))
+run('__stub.Advance(1)')
+lookups = [list(x.values()) for x in ev("__stub.ah.itemKeySearches").values()]
+check("one batch request for the whole tree, not a search per item",
+      lookups == [[BRONZE_BAR, COPPER_BAR, TIN_BAR, COPPER_ORE, TIN_ORE]] and ev("__stub.searched") is None
+      and ev("#__stub.ah.searches") == 0)
+check("bind-on-pickup items left out", CUIRASS_ID not in lookups[0])
+check("done: button back on", not ev("VendorProfit.BestCrafts.IsScanning()") and ev(SEARCH + ":IsEnabled()"))
+check("route updates from the prices Auctionator saved", ev(SECTION + ".toCraft:GetText()") != toCraftBefore)
+check("Best Crafts' message untouched", ev("VendorProfit.BestCrafts.Message() == nil"))
+run('__stub.ah.auctionatorSaves = false')
+run(SEARCH + ':GetScript("OnEnter")(' + SEARCH + ')')
+check("tooltip says shift-click lists them in Auctionator", any("Shift-click" in (l.left or "") for l in ev("GameTooltip.lines").values()))
+
+# No answer: says so in chat.
+run('__stub.ah.dropBrowse = true; ' + SEARCH + ':Click(); __stub.Advance(16); __stub.ah.dropBrowse = false')
+check("no answer: stops, button back on, says so", not ev("VendorProfit.BestCrafts.IsScanning()") and ev(SEARCH + ":IsEnabled()")
+      and any("Try Search again" in str(m) for m in ev("__stub.printed or {}").values()))
+
+# Shift-click: Auctionator's own search, listing every item.
+run('__stub.shift = true')
 run(SEARCH + ':Click()')
 names = [t.searchString for t in ev("__stub.searched").values()]
-check("searches every item in the tree, exact names", names == ["Bronze Bar", "Copper Bar", "Tin Bar", "Copper Ore", "Tin Ore"]
+check("shift-click searches Auctionator for every item in the tree, exact names", names == ["Bronze Bar", "Copper Bar", "Tin Bar", "Copper Ore", "Tin Ore"]
       and all(t.isExact for t in ev("__stub.searched").values()))
-check("bind-on-pickup items left out", "Rough Bronze Cuirass" not in names)
+check("...leaving out bind-on-pickup items", "Rough Bronze Cuirass" not in names)
 run('__stub.items["item:2771"].cached = false; __stub.searched = nil')
 run(SEARCH + ':Click()')
 check("waits for item names to load", ev("__stub.searched") is None)
 run('__stub.LoadItem("item:2771")')
 check("...then searches", len(list(ev("__stub.searched").values())) == 5)
+run('__stub.shift = false')
 run('__stub.CloseAH()')
 check("search hides when the auction house closes", not ev(SEARCH + ":IsShown()"))
 check("no errors from searching", ev("#__stub.errors") == 0)

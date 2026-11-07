@@ -52,7 +52,12 @@ VendorProfit.L = {
 
     -- Search button
     SEARCH_TREE = "Search",
-    SEARCH_TREE_HELP = "Searches Auctionator for every item in this recipe's crafting tree: the item, its reagents and everything they could be crafted from. Auctionator saves the lowest prices it finds, so the Cheapest Route updates from them.",
+    SEARCH_TREE_HELP = "Looks up live lowest prices for every item in this recipe's crafting tree (the item, its reagents and everything they could be crafted from) in one request. Auctionator saves them, so the Cheapest Route updates.",
+    SEARCH_TREE_SHIFT = "Shift-click to list them in Auctionator's search instead.",
+    SEARCH_BUSY = "Looking up prices...",
+    SEARCH_NOTHING = "Nothing in this recipe's tree can be listed on the auction house.",
+    SEARCH_FAILED = "|cffffd100Vendor Profit:|r %s",
+    SEARCH_NO_ANSWER = "The auction house didn't answer. Try Search again.",
 
     -- Best Crafts
     BEST_BUTTON = "Vendor Profit",
