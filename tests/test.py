@@ -467,7 +467,8 @@ QUEUE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitQueueButton"
 run, ev = shop_client()
 
 # --- Queue button --------------------------------------------------------------
-check("queue button beside the route's Vendor Profit line", ev(QUEUE + ":IsShown()") and ev(QUEUE + ".__point[2] == " + ROUTE))
+check("queue button below the route's Vendor Profit line", ev(QUEUE + ":IsShown()") and ev(QUEUE + ".__point[2] == " + ROUTE)
+      and ev(QUEUE + ".__point[1]") == "TOPLEFT" and ev(QUEUE + ".__point[3]") == "BOTTOMLEFT")
 check("queue button above the tooltip area so it can be clicked",
       ev(QUEUE + ":GetFrameLevel()") > ev(SECTION + ".hover:GetFrameLevel()"))
 run('__stub.createCount = 10')

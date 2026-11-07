@@ -9,7 +9,8 @@ Vendor Profit: -10s 92c            <- sell to a vendor instead
 ------------ Cheapest Route ------------
 To Craft: 4s 38c         [Search]  <- crafting reagents yourself where that's cheaper
 Profit: 7s 97c                     <- ...sold on the auction house
-Vendor Profit: -2s 91c   [Queue]   <- ...sold to a vendor
+Vendor Profit: -2s 91c             <- ...sold to a vendor
+[Queue]
 ```
 
 - **Vendor Profit:** what you make by crafting the item and selling it to a vendor, at Auctionator's To Craft cost.
@@ -103,7 +104,7 @@ What it can't know:
 
 ## Shopping
 
-**1. Queue.** Set the number in the professions window's Create box (say 10) and click **Queue** beside the Cheapest Route section's Vendor Profit line. Queuing a recipe already in the order adds to it. The shopping panel opens; `/vprofit` toggles it any time.
+**1. Queue.** Set the number in the professions window's Create box (say 10) and click **Queue** under the Cheapest Route section's Vendor Profit line. Queuing a recipe already in the order adds to it. The shopping panel opens; `/vprofit` toggles it any time.
 
 **2. The plan.** The panel works out, in whole numbers, what the order needs, using what you already have (bags and bank) first:
 

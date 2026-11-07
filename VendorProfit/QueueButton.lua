@@ -1,4 +1,4 @@
--- The Queue button beside the Cheapest Route section's Vendor Profit line:
+-- The Queue button under the Cheapest Route section's Vendor Profit line:
 -- adds the shown recipe to the order
 -- (Order.lua), as many crafts as the number in the Create box, and opens the
 -- shopping panel.
@@ -53,7 +53,7 @@ function QueueButton.Create(frame, anchor)
     local button = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     button:SetSize(64, 20)
     button:SetText(L.QUEUE)
-    button:SetPoint("LEFT", anchor, "RIGHT", 8, 0)
+    button:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -4)
     -- Above the frame that shows the route tooltip, so clicks reach it.
     button:SetFrameLevel(frame:GetFrameLevel() + 5)
     button:SetScript("OnClick", OnClick)
@@ -61,8 +61,7 @@ function QueueButton.Create(frame, anchor)
     button:SetScript("OnLeave", function() GameTooltip:Hide() end)
     button:Hide()
     frame.VendorProfitQueueButton = button
-    -- Sits beside the line, so anything after still goes under it.
-    return anchor
+    return button
 end
 
 function QueueButton.Refresh(frame, result)

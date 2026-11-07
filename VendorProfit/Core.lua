@@ -9,7 +9,8 @@
 --     ----- Cheapest Route -----   crafting reagents yourself where that's
 --     To Craft: ...                cheaper (RouteSection.lua, using
 --     Profit: ...                  Recipes.lua and Route.lua)
---     Vendor Profit: ...  [Queue]  QueueButton.lua, for the shopping panel
+--     Vendor Profit: ...
+--     [Queue]                      QueueButton.lua, for the shopping panel
 --
 -- This file holds what they share: prices, working out the recipe being
 -- shown, and attaching to Auctionator's frame. The addon only reads from
