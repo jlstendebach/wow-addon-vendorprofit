@@ -40,18 +40,16 @@ local function Gray(text)
     return GRAY_FONT_COLOR:WrapTextInColorCode(text)
 end
 
--- The profession whose window is open. The game keeps reporting the last
--- profession after its window closes, and opening a recipe then shows an
--- empty professions window, so this goes by the window itself.
-local function OpenProfession()
-    if ProfessionsFrame and ProfessionsFrame:IsShown() then
-        return Recipes.OpenProfession()
-    end
+-- The list stays up after the professions window closes (the game keeps
+-- reporting the last profession), so you can scan and queue at the auction
+-- house without it. Only Show needs the window open.
+local function ProfessionsWindowOpen()
+    return ProfessionsFrame ~= nil and ProfessionsFrame:IsShown()
 end
 
 -- Shows a recipe in the professions window, if it's open.
 local function ShowRecipe(recipeID)
-    if OpenProfession() and C_TradeSkillUI.OpenRecipe then
+    if ProfessionsWindowOpen() and C_TradeSkillUI.OpenRecipe then
         C_TradeSkillUI.OpenRecipe(recipeID)
     end
 end
@@ -85,6 +83,15 @@ local function GetRow(index)
         row.right:SetJustifyH("RIGHT")
         row.queue = SmallButton(frame, L.QUEUE, 56)
         row.show = SmallButton(frame, L.BEST_SHOW, 50)
+        row.show:SetMotionScriptsWhileDisabled(true)
+        row.show:SetScript("OnEnter", function(self)
+            if not self:IsEnabled() then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(string.format(L.BEST_SHOW_CLOSED, self.profession or ""), 1, 1, 1, 1, true)
+                GameTooltip:Show()
+            end
+        end)
+        row.show:SetScript("OnLeave", function() GameTooltip:Hide() end)
         row.queue:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetText(L.BEST_QUEUE_HELP, 1, 1, 1, 1, true)
@@ -121,7 +128,7 @@ local function Create(page)
     frame.scan:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING, -52)
     frame.scan:SetMotionScriptsWhileDisabled(true)
     frame.scan:SetScript("OnClick", function()
-        BestCrafts.Scan(OpenProfession())
+        BestCrafts.Scan(Recipes.OpenProfession())
     end)
     frame.scan:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -136,7 +143,7 @@ local function Create(page)
 end
 
 local function Refresh()
-    local profession, name = OpenProfession()
+    local profession, name = Recipes.OpenProfession()
     frame.heading:SetText(string.format(L.BEST_TITLE, name or ""))
 
     -- Tabs: the selected one stays lit.
@@ -177,6 +184,8 @@ local function Refresh()
         row.show:ClearAllPoints()
         row.show:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING, y)
         row.show:SetScript("OnClick", function() ShowRecipe(entry.recipe.recipeID) end)
+        row.show:SetEnabled(ProfessionsWindowOpen())
+        row.show.profession = name
         row.show:Show()
         row.queue:ClearAllPoints()
         row.queue:SetPoint("RIGHT", row.show, "LEFT", -4, 0)

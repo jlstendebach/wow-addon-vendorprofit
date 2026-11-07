@@ -61,6 +61,7 @@ VendorProfit.L = {
     BEST_TAB_VENDOR = "Vendor",
     BEST_TAB_AUCTION = "Auction",
     BEST_SHOW = "Show",
+    BEST_SHOW_CLOSED = "Open %s to see this recipe.",
     BEST_QUEUE_HELP = "Adds one craft to your shopping order.",
     BEST_SCAN_HELP = "Looks up live lowest prices for every item in this profession's recipes, in a few batches. Auctionator saves them too.",
     BEST_SCAN_OPEN_AH = "Open the auction house to look up live prices.",

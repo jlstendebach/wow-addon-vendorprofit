@@ -105,7 +105,7 @@ What it can't know:
 
 ## Best Crafts
 
-The **Vendor Profit** button in the professions window's title bar (left of TradeSkillMaster's, if you have it), or `/vprofit best`, opens the Vendor Profit window on its **Best Crafts** tab: the open profession's top 10 recipes by profit per craft, each along its cheapest route. Clicking it again closes the window. Closing the professions window leaves it open, saying to open a profession.
+The **Vendor Profit** button in the professions window's title bar (left of TradeSkillMaster's, if you have it), or `/vprofit best`, opens the Vendor Profit window on its **Best Crafts** tab: the open profession's top 10 recipes by profit per craft, each along its cheapest route. Clicking it again closes the window. Closing the professions window leaves it open, still listing that profession, so you can scan and queue at the auction house without it.
 
 ```
 Best Crafts: Blacksmithing
@@ -118,7 +118,7 @@ Prices from Auctionator's last scan.
 
 - **Vendor** ranks by selling to a vendor, a guaranteed sale. **Auction** ranks by Auctionator's price after the 5% cut; usually higher, but an auction might not sell.
 - Losses are listed too (in red), so a profession where nothing makes money still shows what loses least. Recipes with a reagent that has no price anywhere are left out, since their profit can't be trusted.
-- **Show** selects the recipe in the professions window. **Queue** adds one craft to the shopping order (click again for more); the window stays on Best Crafts.
+- **Show** selects the recipe in the professions window (it's off while that window is closed). **Queue** adds one craft to the shopping order (click again for more); the window stays on Best Crafts.
 - It ranks straight away from Auctionator's prices. At the auction house, **Scan** looks up live lowest prices for everything that matters to the profession: every recipe's crafting tree, merged into one list of unique items, looked up a couple of hundred at a time with the auction house's batch lookup (the one it uses for favorites) rather than one search per item. It takes seconds. Items with nothing listed count as unavailable until the next scan, and Auctionator saves the prices it sees too. Items that bind on pickup aren't looked up.
 
 ## Shopping
