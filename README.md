@@ -10,12 +10,13 @@ Vendor Profit: -10s 92c            <- sell to a vendor instead
 To Craft: 4s 38c         [Search]  <- crafting reagents yourself where that's cheaper
 Profit: 7s 97c                     <- ...sold on the auction house
 Vendor Profit: -2s 91c             <- ...sold to a vendor
-[Queue]
+[Queue] [Best Crafts]
 ```
 
 - **Vendor Profit:** what you make by crafting the item and selling it to a vendor, at Auctionator's To Craft cost.
 - **Cheapest Route:** the same three numbers when every reagent is got the cheapest way, crafting reagents yourself where that's cheaper than buying them, all the way down. Hover the section to see the route.
 - **Search** (at the auction house) searches Auctionator for every item in the crafting tree.
+- **Best Crafts** shows the profession's most profitable recipes.
 - **Queue** adds the recipe to a shopping order. A shopping panel then plans it with what you already have, scans the auction house, checks the order is still profitable at live prices, buys what's missing one confirmed purchase at a time, and crafts the steps in order.
 
 Requires [Auctionator](https://www.curseforge.com/wow/addons/auctionator).
@@ -82,7 +83,7 @@ Rough Bronze Cuirass x1                                  4s 38c
         Tin Bar x3.5       buy (auction)                 2s 63c
 ```
 
-**Search.** At the auction house, **Search** at the top right of the section (where Auctionator puts its own) searches Auctionator for every item in the crafting tree: the item, its reagents, and everything your saved recipes could make them from, including options the current route doesn't use, since any of those prices can change it. Items that bind on pickup are left out. On this auction house Auctionator's searches show current listings but don't save prices (only its scans do), so the section keeps using Auctionator's last scan until you scan again.
+**Search.** At the auction house, **Search** at the top right of the section (where Auctionator puts its own) searches Auctionator for every item in the crafting tree: the item, its reagents, and everything your saved recipes could make them from, including options the current route doesn't use, since any of those prices can change it. Items that bind on pickup are left out. Auctionator saves the lowest price of anything its searches find (they're browse queries, which it records while the auction house is open), so the section updates from what the search turns up.
 
 **saves** on a crafted step is how much crafting it saves over buying that many outright, with everything under it done the cheapest way. It's what skipping that step would cost: here, buying Copper Bars instead of smelting them costs 70c more per cuirass. Steps that can't be bought show no saving.
 
@@ -101,6 +102,23 @@ What it can't know:
 - **Recipes in professions you haven't opened** on this character, or on your other characters.
 
 **Money** is shown with silver and copper always two digits after a larger coin, like a clock: **5s 07c**, so it can't be misread as 5s 70c. That's everywhere this addon shows money; Auctionator's own lines are left as they are.
+
+## Best Crafts
+
+**Best Crafts** (beside Queue, or `/vprofit best`) opens a panel on the left of the professions window with the open profession's top 5 recipes by profit per craft, each along its cheapest route:
+
+```
+Best Crafts: Blacksmithing
+[ Vendor ] [ Auction ]                              [ Scan ]
+1. Rough Bronze Cuirass           1s 62c     [Queue] [Show]
+2. Rough Bronze Shoulders            87c     [Queue] [Show]
+Prices from Auctionator's last scan.
+```
+
+- **Vendor** ranks by selling to a vendor, a guaranteed sale. **Auction** ranks by Auctionator's price after the 5% cut; usually higher, but an auction might not sell.
+- Only recipes that make money are listed. Recipes with a reagent that has no price anywhere are left out, since their profit can't be trusted.
+- **Show** selects the recipe in the professions window. **Queue** adds one craft to the shopping order (click again for more).
+- It ranks straight away from Auctionator's prices. At the auction house, **Scan** looks up live lowest prices for everything that matters to the profession: every recipe's crafting tree, merged into one list of unique items, looked up a couple of hundred at a time with the auction house's batch lookup (the one it uses for favorites) rather than one search per item. It takes seconds. Items with nothing listed count as unavailable until the next scan, and Auctionator saves the prices it sees too. Items that bind on pickup aren't looked up.
 
 ## Shopping
 
@@ -198,6 +216,8 @@ Files:
 | `OpenButton.lua` | Opening another profession from the Craft button |
 | `Banker.lua` | Take from bank: moving exactly what's needed into your bags |
 | `Panel.lua` | The shopping panel, moving it, and `/vprofit` |
+| `BestCrafts.lua` | Ranking a profession's recipes, and the batch price lookup |
+| `BestPanel.lua` | The Best Crafts panel and button |
 
 Saved data, per character (`VendorProfitCharDB`):
 

@@ -52,7 +52,27 @@ VendorProfit.L = {
 
     -- Search button
     SEARCH_TREE = "Search",
-    SEARCH_TREE_HELP = "Searches Auctionator for every item in this recipe's crafting tree: the item, its reagents and everything they could be crafted from. The Cheapest Route uses Auctionator's last scan, so run a scan to update it.",
+    SEARCH_TREE_HELP = "Searches Auctionator for every item in this recipe's crafting tree: the item, its reagents and everything they could be crafted from. Auctionator saves the lowest prices it finds, so the Cheapest Route updates from them.",
+
+    -- Best Crafts
+    BEST_BUTTON = "Best Crafts",
+    BEST_BUTTON_HELP = "Shows this profession's most profitable recipes, each along its cheapest route.",
+    BEST_TITLE = "Best Crafts: %s",
+    BEST_TAB_VENDOR = "Vendor",
+    BEST_TAB_AUCTION = "Auction",
+    BEST_SHOW = "Show",
+    BEST_QUEUE_HELP = "Adds one craft to your shopping order.",
+    BEST_SCAN_HELP = "Looks up live lowest prices for every item in this profession's recipes, in a few batches. Auctionator saves them too.",
+    BEST_SCAN_OPEN_AH = "Open the auction house to look up live prices.",
+    BEST_SCANNING = "Looking up prices: batch %d of %d",
+    BEST_SCANNED = "Live prices updated.",
+    BEST_SCAN_FAILED = "The auction house didn't answer. Try Scan again.",
+    BEST_AH_CLOSED = "The auction house closed before the scan finished.",
+    BEST_NOTHING_TO_SCAN = "Nothing in this profession can be listed on the auction house.",
+    BEST_OPEN_PROFESSION = "Open one of your professions to see its best crafts.",
+    BEST_NONE = "Nothing in this profession makes money at these prices.",
+    BEST_LIVE_PRICES = "Live prices from %s.",
+    BEST_AUCTIONATOR_PRICES = "Prices from Auctionator's last scan.",
 
     -- Queue button
     QUEUE = "Queue",

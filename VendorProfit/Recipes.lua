@@ -102,16 +102,47 @@ local function IsOwnProfessionReady()
     return true
 end
 
--- Saves the open profession's learned recipes. Returns true if it saved.
-function Recipes.Scan()
-    if db == nil or not IsOwnProfessionReady() then
-        return false
+-- The open profession window's key (how its recipes are saved) and name, or
+-- nil if it isn't this character's own profession or isn't ready.
+function Recipes.OpenProfession()
+    if not IsOwnProfessionReady() then
+        return nil
     end
     local info = C_TradeSkillUI.GetBaseProfessionInfo()
     local key = info and (info.professionID or info.professionName)
     if key == nil then
+        return nil
+    end
+    return key, info.professionName or tostring(key)
+end
+
+-- The saved recipes of one profession: { recipeID, item, count, reagents,
+-- profession }, sorted by recipeID.
+function Recipes.ForProfession(key)
+    local list = {}
+    local saved = db and db.professions[key]
+    if saved then
+        for recipeID, recipe in pairs(saved.recipes) do
+            list[#list + 1] = {
+                recipeID = recipeID, item = recipe.item, count = recipe.count,
+                reagents = recipe.reagents, profession = saved.name,
+            }
+        end
+    end
+    table.sort(list, function(a, b) return a.recipeID < b.recipeID end)
+    return list
+end
+
+-- Saves the open profession's learned recipes. Returns true if it saved.
+function Recipes.Scan()
+    if db == nil then
         return false
     end
+    local key, name = Recipes.OpenProfession()
+    if key == nil then
+        return false
+    end
+    local info = { professionName = name }
 
     -- The full list when the game offers it. Otherwise the list as filtered
     -- in the window, which may be missing some recipes, so it's merged into

@@ -719,9 +719,12 @@ end)
 SLASH_VENDORPROFIT1 = "/vprofit"
 SLASH_VENDORPROFIT2 = "/vendorprofit"
 SlashCmdList.VENDORPROFIT = function(arg)
-    if arg and arg:lower():match("^%s*reset%s*$") then
+    local command = arg and arg:lower():match("^%s*(%S*)") or ""
+    if command == "reset" then
         Panel.ResetPosition()
         Panel.Show()
+    elseif command == "best" then
+        VendorProfit.BestPanel.Toggle()
     else
         Panel.Toggle()
     end

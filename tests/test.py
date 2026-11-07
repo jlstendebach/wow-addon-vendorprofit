@@ -56,7 +56,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Panel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Panel.lua", "BestCrafts.lua", "BestPanel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
 run('__stub.Fire("TRADE_SKILL_SHOW")')
@@ -1004,6 +1004,104 @@ for copper, text in [(507, "5s 07c"), (570, "5s 70c"), (7, "7c"), (500, "5s"), (
                      (10007, "1g 07c"), (10000, "1g"), (0, "0c"), (-507, "5s 07c")]:
     check("coins: %d -> %s" % (copper, text), ev("VendorProfit.FormatCoins(%d)" % copper) == text)
 check("loss in red with a minus", ev("VendorProfit.FormatMoney(-507)") == "|cffff2020-5s 07c|r")
+
+
+# --- Best Crafts ------------------------------------------------------------------------
+# Blacksmithing: cuirass (7 bronze), shoulders (5 bronze), copper vest (8 copper bars).
+SHOULDERS = """{ recipeID = 3328, itemLink = "item:2865", quantityMin = 1, reagents = { { itemID = 2841, quantity = 5 } } }"""
+VEST = """{ recipeID = 2671, itemLink = "item:2867", quantityMin = 1, reagents = { { itemID = 2840, quantity = 8 } } }"""
+run, ev = route_client()
+run('__stub.items["item:2866"].sellPrice = 600')
+run('__stub.items["item:2865"] = { name = "Rough Bronze Shoulders", cached = true, sellPrice = 400 }')
+run('__stub.items["item:2867"] = { name = "Copper Chain Vest", cached = true, sellPrice = 150 }')
+run('__stub.auctionPrices[2865] = 700; __stub.auctionPrices[2867] = 300')
+run('__stub.OpenProfession(186, "Mining", %s)' % MINING)
+run('__stub.OpenProfession(164, "Blacksmithing", { %s, %s, %s })' % (CUIRASS, SHOULDERS, VEST))
+run('__stub.SetRecipe(%s)' % CUIRASS)
+BESTBTN = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitBestButton"
+check("Best Crafts button beside Queue", ev(BESTBTN + ":IsShown()") and ev(BESTBTN + ".__point[2] == " + QUEUE))
+run(BESTBTN + ":Click()")
+check("panel opens on the left of the professions window",
+      ev("VendorProfit.BestPanel.IsShown()") and ev("VendorProfitBestCrafts.__point[1]") == "TOPRIGHT"
+      and ev("VendorProfitBestCrafts.__point[2] == ProfessionsFrame") and ev("VendorProfitBestCrafts.__title") == "Best Crafts: Blacksmithing")
+best = lambda: list(ev("VendorProfit.BestPanel.Lines()").values())
+check("vendor tab first, ranked: cuirass 600 - 438, shoulders 400 - 313; the losing vest left out",
+      ev("VendorProfit.BestPanel.Tab()") == "vendor" and best() == [
+          "1. |Ticon2866:0|t Rough Bronze Cuirass | |cffffffff1s 62c|r",
+          "2. |Ticon2865:0|t Rough Bronze Shoulders | |cffffffff87c|r"])
+check("vendor tab lit", ev("VendorProfitBestCrafts.tabs.vendor.__lit") and not ev("VendorProfitBestCrafts.tabs.auction.__lit"))
+run("VendorProfitBestCrafts.tabs.auction:Click()")
+check("auction tab: after the cut, 1235 - 438 and 665 - 313",
+      best() == ["1. |Ticon2866:0|t Rough Bronze Cuirass | |cffffffff7s 97c|r",
+                 "2. |Ticon2865:0|t Rough Bronze Shoulders | |cffffffff3s 52c|r"])
+run("VendorProfitBestCrafts.tabs.vendor:Click()")
+check("says prices are Auctionator's", "Prices from Auctionator's last scan." in ev("VendorProfitBestCrafts.status:GetText()"))
+check("scan off away from the auction house", not ev("VendorProfitBestCrafts.scan:IsEnabled()")
+      and ev("VendorProfitBestCrafts.scan.tooltip") == "Open the auction house to look up live prices.")
+
+# Show and Queue.
+run("VendorProfit.BestPanel.Row(2).show:Click()")
+check("Show selects the recipe in the professions window", ev("__stub.openedRecipe") == 3328)
+run("VendorProfit.BestPanel.Row(1).queue:Click()")
+check("Queue adds one craft to the shopping order",
+      ev("VendorProfit.Order.Entries()[1].recipeID") == 2670 and ev("VendorProfit.Order.Entries()[1].crafts") == 1
+      and ev("VendorProfit.Order.Entries()[1].profession") == "Blacksmithing" and ev("VendorProfit.Panel.IsShown()"))
+run("VendorProfit.Order.Clear()")
+
+# Every unique item across the profession's trees.
+items = list(ev("VendorProfit.BestCrafts.Items(164)").values())
+check("unique items of every recipe's tree, merged",
+      items == [CUIRASS_ID, BRONZE_BAR, COPPER_BAR, TIN_BAR, COPPER_ORE, TIN_ORE, 2867, 2865])
+
+# Scan at the auction house: bronze bars listed at 40c (cheaper than smelting).
+run('''
+    __stub.ah.listings[2841] = { { unitPrice = 40, quantity = 50 }, { unitPrice = 45, quantity = 50 } }
+    __stub.ah.listings[2840] = { { unitPrice = 70, quantity = 50 } }
+    __stub.ah.listings[3576] = { { unitPrice = 75, quantity = 50 } }
+    __stub.ah.listings[2770] = { { unitPrice = 50, quantity = 50 } }
+    __stub.ah.listings[2866] = { { unitPrice = 1300, quantity = 3 } }
+    __stub.items["item:2865"].bind = 1
+    VendorProfit.BestCrafts.BATCH = 3
+''')
+run('__stub.OpenAH()')
+check("scan on at the auction house", ev("VendorProfitBestCrafts.scan:IsEnabled()"))
+run("VendorProfitBestCrafts.scan:Click()")
+check("scanning", ev("VendorProfit.BestCrafts.IsScanning()") and ev("VendorProfitBestCrafts.scan.__text") == "Scanning...")
+run('__stub.Advance(2)')
+lookups = [list(x.values()) for x in ev("__stub.ah.itemKeySearches").values()]
+check("looked up in batches, not one search per item", lookups == [[2866, 2841, 2840], [3576, 2770, 2771], [2867]])
+check("bind-on-pickup items not looked up", 2865 not in sum(lookups, []))
+check("no per-item searches", ev("#__stub.ah.searches") == 0)
+check("done", not ev("VendorProfit.BestCrafts.IsScanning()")
+      and "Live prices from" in ev("VendorProfitBestCrafts.status:GetText()")
+      and "Live prices updated." in ev("VendorProfitBestCrafts.status:GetText()"))
+check("re-ranked with live prices: bronze bars at 40c, so cuirass 600 - 280 and shoulders 400 - 200",
+      best() == ["1. |Ticon2866:0|t Rough Bronze Cuirass | |cffffffff3s 20c|r",
+                 "2. |Ticon2865:0|t Rough Bronze Shoulders | |cffffffff2s|r"])
+check("items with nothing listed have no auction price now", ev("select(2, VendorProfit.BestCrafts.Prices(2771))") is None)
+
+# Results that aren't ours are ignored; no answer times out; closing the AH stops it.
+run('__stub.ah.dropBrowse = true; VendorProfitBestCrafts.scan:Click(); __stub.Advance(1)')
+run('__stub.ah.browseResults = { { itemKey = { itemID = 99999 }, minPrice = 1, totalQuantity = 1 } }; __stub.Fire("AUCTION_HOUSE_BROWSE_RESULTS_UPDATED")')
+check("someone else's browse results ignored", ev("VendorProfit.BestCrafts.IsScanning()"))
+run('__stub.Advance(16)')
+check("no answer: stops and says so", not ev("VendorProfit.BestCrafts.IsScanning()")
+      and "didn't answer" in ev("VendorProfitBestCrafts.status:GetText()"))
+run('VendorProfitBestCrafts.scan:Click(); __stub.Advance(1); __stub.CloseAH()')
+check("closing the auction house stops a scan", not ev("VendorProfit.BestCrafts.IsScanning()")
+      and "closed before the scan finished" in ev("VendorProfitBestCrafts.status:GetText()"))
+run('__stub.ah.dropBrowse = false')
+
+# Closing the professions window closes it; /vprofit best toggles it.
+run('__stub.Fire("TRADE_SKILL_CLOSE")')
+check("closes with the professions window", not ev("VendorProfit.BestPanel.IsShown()"))
+run('SlashCmdList.VENDORPROFIT("best")')
+check("/vprofit best opens it", ev("VendorProfit.BestPanel.IsShown()"))
+run('__stub.tradeSkill.linked = true; VendorProfit.BestPanel.Refresh()')
+check("no profession of yours open: says to open one", best() == []
+      and "Open one of your professions" in ev("VendorProfitBestCrafts.status:GetText()"))
+run('__stub.tradeSkill.linked = false')
+check("no errors from Best Crafts", ev("#__stub.errors") == 0)
 
 print()
 failed = [label for label, ok in results if not ok]

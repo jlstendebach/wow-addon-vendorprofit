@@ -4,9 +4,9 @@
 -- reagents and everything they could be crafted from, not just what the
 -- current route uses, since any of those prices can change the route.
 --
--- Auctionator's searches show current listings but don't save prices on this
--- auction house (only its scans do), so the route still uses Auctionator's
--- last scan.
+-- Auctionator's searches are browse queries, and Auctionator saves the lowest
+-- price of anything a browse query returns while the auction house is open,
+-- so the route updates from what the search finds.
 
 local ADDON_NAME, ns = ...
 local VendorProfit = ns.VendorProfit

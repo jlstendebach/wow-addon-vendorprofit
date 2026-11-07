@@ -78,6 +78,8 @@ function FrameMethods:SetFrameStrata(s) self.__strata = s end
 function FrameMethods:RegisterForClicks(...) self.__clicks = { ... } end
 function FrameMethods:SetHighlightTexture() end
 function FrameMethods:SetMotionScriptsWhileDisabled() end
+function FrameMethods:LockHighlight() self.__lit = true end
+function FrameMethods:UnlockHighlight() self.__lit = false end
 function FrameMethods:SetAttribute(k, v) self.__attrs = self.__attrs or {}; self.__attrs[k] = v end
 function FrameMethods:GetAttribute(k) return self.__attrs and self.__attrs[k] end
 function stub.Drag(f, left, top)
@@ -169,6 +171,8 @@ SlashCmdList = {}
 stub.money = 1000000
 function GetMoney() return stub.money end
 function GetTime() return stub.now end
+function time() return 1700000000 end
+date = os.date
 stub.inCombat = false
 function InCombatLockdown() return stub.inCombat end
 function GetCVarBool() return false end
@@ -341,7 +345,7 @@ stub.vendorPrices = {}   -- itemID -> copper (what a vendor sells it for)
 stub.craftCostOverride = nil
 
 Auctionator = { API = { v1 = {} }, CraftingInfo = {}, Constants = { AfterAHCut = 0.95 } }
-local function verify(callerID)
+function verify(callerID)
     if type(callerID) ~= "string" or callerID == "" then error("Invalid callerID. Use the name of your add-on.") end
 end
 function Auctionator.API.v1.GetAuctionPriceByItemID(callerID, itemID) verify(callerID) return stub.auctionPrices[itemID] end
@@ -593,3 +597,35 @@ function GetInboxItem(index, attachment)
     local m = Mails()[index]
     if m and attachment == 1 then return "item", m[1], "icon", m[2] end
 end
+
+-- Batch lookups (browse results): one result per listed item, lowest price and
+-- how many are listed, from ah.listings.
+stub.ah.itemKeySearches = {}
+stub.ah.dropBrowse = false
+C_AuctionHouse.SearchForItemKeys = function(keys)
+    local ids = {}
+    for _, key in ipairs(keys) do ids[#ids + 1] = key.itemID end
+    stub.ah.itemKeySearches[#stub.ah.itemKeySearches + 1] = ids
+    if stub.ah.dropBrowse then return end
+    C_Timer.After(0.1, function()
+        local results = {}
+        for _, id in ipairs(ids) do
+            local min, total
+            for _, row in ipairs(stub.ah.listings[id] or {}) do
+                local n = row.quantity - (row.own or 0)
+                if n > 0 then
+                    min = math.min(min or row.unitPrice, row.unitPrice)
+                    total = (total or 0) + n
+                end
+            end
+            if min then results[#results + 1] = { itemKey = { itemID = id }, minPrice = min, totalQuantity = total } end
+        end
+        stub.ah.browseResults = results
+        stub.Fire("AUCTION_HOUSE_BROWSE_RESULTS_UPDATED")
+    end)
+end
+C_AuctionHouse.GetBrowseResults = function() return stub.ah.browseResults or {} end
+C_AuctionHouse.HasFullBrowseResults = function() return true end
+C_AuctionHouse.RequestMoreBrowseResults = function() end
+C_TradeSkillUI.OpenRecipe = function(recipeID) stub.openedRecipe = recipeID end
+function Auctionator.API.v1.RegisterForDBUpdate(callerID, fn) verify(callerID) stub.dbUpdate = fn end

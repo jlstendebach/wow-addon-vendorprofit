@@ -64,30 +64,42 @@ function Order.Spent()
     return DB().spent
 end
 
--- Queues crafts of the recipe in a VendorProfit.Calculate result. Queuing a
--- recipe already in the order adds to it.
-function Order.Add(result, crafts, profession)
+-- Queues crafts of a recipe: fields = { itemID, recipeID, profession, count,
+-- reagents (Recipes format), sellPrice }. Queuing a recipe already in the
+-- order adds to it.
+function Order.AddRecipe(fields, crafts)
     local order = DB()
-    local recipeID = result.recipeSchematic.recipeID
     for _, entry in ipairs(order.entries) do
-        if entry.recipeID == recipeID then
+        if entry.recipeID == fields.recipeID then
             entry.crafts = entry.crafts + crafts
             Changed()
             return entry
         end
     end
     local entry = {
-        itemID = result.itemID,
-        recipeID = recipeID,
-        profession = profession,
-        count = result.count,
+        itemID = fields.itemID,
+        recipeID = fields.recipeID,
+        profession = fields.profession,
+        count = fields.count,
         crafts = crafts,
-        reagents = VendorProfit.Recipes.ReagentsFromSchematic(result.recipeSchematic),
-        sellPrice = result.sellPrice,
+        reagents = fields.reagents,
+        sellPrice = fields.sellPrice,
     }
     order.entries[#order.entries + 1] = entry
     Changed()
     return entry
+end
+
+-- Queues crafts of the recipe in a VendorProfit.Calculate result.
+function Order.Add(result, crafts, profession)
+    return Order.AddRecipe({
+        itemID = result.itemID,
+        recipeID = result.recipeSchematic.recipeID,
+        profession = profession,
+        count = result.count,
+        reagents = VendorProfit.Recipes.ReagentsFromSchematic(result.recipeSchematic),
+        sellPrice = result.sellPrice,
+    }, crafts)
 end
 
 function Order.Remove(index)
