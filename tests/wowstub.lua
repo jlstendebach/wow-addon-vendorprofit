@@ -326,6 +326,7 @@ function stub.OpenProfession(id, name, recipes)
     stub.profession = { professionID = id, professionName = name }
     stub.recipes = {}
     for _, r in ipairs(recipes) do stub.recipes[r.recipeID] = r end
+    if ProfessionsFrame then ProfessionsFrame:Show() end
     stub.Fire("TRADE_SKILL_SHOW")
     stub.Fire("TRADE_SKILL_LIST_UPDATE")
     stub.RunTimers()
@@ -337,6 +338,11 @@ local transaction = {
 }
 
 ProfessionsFrame = CreateFrame("Frame", "ProfessionsFrame")
+-- Closing the window: the game still reports the last profession afterwards.
+function stub.CloseProfession()
+    ProfessionsFrame:Hide()
+    stub.Fire("TRADE_SKILL_CLOSE")
+end
 ProfessionsFrame.CloseButton = CreateFrame("Button", nil, ProfessionsFrame)
 ProfessionsFrame.CraftingPage = { SchematicForm = CreateFrame("Frame", nil, ProfessionsFrame) }
 local form = ProfessionsFrame.CraftingPage.SchematicForm

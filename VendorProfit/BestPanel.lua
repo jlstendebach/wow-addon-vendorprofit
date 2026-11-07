@@ -40,9 +40,18 @@ local function Gray(text)
     return GRAY_FONT_COLOR:WrapTextInColorCode(text)
 end
 
--- Shows a recipe in the professions window.
+-- The profession whose window is open. The game keeps reporting the last
+-- profession after its window closes, and opening a recipe then shows an
+-- empty professions window, so this goes by the window itself.
+local function OpenProfession()
+    if ProfessionsFrame and ProfessionsFrame:IsShown() then
+        return Recipes.OpenProfession()
+    end
+end
+
+-- Shows a recipe in the professions window, if it's open.
 local function ShowRecipe(recipeID)
-    if C_TradeSkillUI.OpenRecipe then
+    if OpenProfession() and C_TradeSkillUI.OpenRecipe then
         C_TradeSkillUI.OpenRecipe(recipeID)
     end
 end
@@ -112,7 +121,7 @@ local function Create(page)
     frame.scan:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING, -52)
     frame.scan:SetMotionScriptsWhileDisabled(true)
     frame.scan:SetScript("OnClick", function()
-        BestCrafts.Scan(Recipes.OpenProfession())
+        BestCrafts.Scan(OpenProfession())
     end)
     frame.scan:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -127,7 +136,7 @@ local function Create(page)
 end
 
 local function Refresh()
-    local profession, name = Recipes.OpenProfession()
+    local profession, name = OpenProfession()
     frame.heading:SetText(string.format(L.BEST_TITLE, name or ""))
 
     -- Tabs: the selected one stays lit.

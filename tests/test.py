@@ -1137,8 +1137,15 @@ check("...and stays open when it closes", ev("VendorProfit.Panel.IsShown()"))
 run('VendorProfit.Order.Clear(); VendorProfit.Panel.Show("best")')
 
 # Closing the professions window leaves it open; /vprofit best toggles it.
-run('__stub.Fire("TRADE_SKILL_CLOSE")')
+run('__stub.CloseProfession()')
 check("stays open when the professions window closes", ev("VendorProfit.BestPanel.IsShown()"))
+check("...with no recipes to Show (that would open an empty professions window)", best() == []
+      and "Open one of your professions" in ev(B + ".status:GetText()"))
+run('__stub.openedRecipe = nil')
+run('__stub.OpenProfession(164, "Blacksmithing", { %s, %s, %s })' % (CUIRASS, SHOULDERS, VEST))
+check("reopening the profession lists them again", len(best()) == 3)
+run('ProfessionsFrame:Hide(); VendorProfit.BestPanel.Row(1).show:Click(); ProfessionsFrame:Show()')
+check("Show does nothing with the professions window closed", ev("__stub.openedRecipe") is None)
 run('SlashCmdList.VENDORPROFIT("best")')
 check("/vprofit best closes it", not ev("VendorProfit.Panel.IsShown()"))
 run('SlashCmdList.VENDORPROFIT("best")')
