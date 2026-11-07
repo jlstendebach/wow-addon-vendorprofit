@@ -37,8 +37,10 @@ local function OnClick(button)
     Order.Add(result, crafts, CurrentProfession())
     local name = C_Item.GetItemInfo(result.itemID) or ("item " .. result.itemID)
     print(string.format(L.QUEUED, crafts, name))
+    -- On the Shopping List tab, even if the window was on Best Crafts
+    -- (queuing from there leaves it be).
     if VendorProfit.Panel then
-        VendorProfit.Panel.Show()
+        VendorProfit.Panel.Show("shopping")
     end
 end
 

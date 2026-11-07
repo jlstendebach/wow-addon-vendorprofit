@@ -124,7 +124,7 @@ Prices from Auctionator's last scan.
 
 ## Shopping
 
-**1. Queue.** Set the number in the professions window's Create box (say 10) and click **Queue** under the Cheapest Route section's Vendor Profit line. Queuing a recipe already in the order adds to it. The Vendor Profit window opens on its Shopping List tab; `/vprofit` toggles it any time.
+**1. Queue.** Set the number in the professions window's Create box (say 10) and click **Queue** under the Cheapest Route section's Vendor Profit line. Queuing a recipe already in the order adds to it. The Vendor Profit window opens on its Shopping List tab (switching to it if the window was on Best Crafts); `/vprofit` toggles it any time.
 
 **2. The plan.** The panel works out, in whole numbers, what the order needs, using what you already have (bags and bank) first:
 

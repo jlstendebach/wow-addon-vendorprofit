@@ -507,7 +507,9 @@ check("Open AH says prices are Auctionator's until you scan", "Auctionator's las
 check("buy button waits for the auction house",
       ev(BUY + ".__text") == "Open AH" and not ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip").startswith("Talk to an auctioneer to buy."))
 
+run('VendorProfit.Panel.Show("best")')
 run(QUEUE + ':Click()')
+check("queuing from the crafting screen switches the window to the Shopping List", ev("VendorProfit.Panel.ActiveTab()") == "shopping")
 check("queuing again adds to the same entry", ev("#VendorProfit.Order.Entries()") == 1 and ev("VendorProfit.Order.Entries()[1].crafts") == 20)
 run('VendorProfit.Order.Entries()[1].crafts = 10; VendorProfit.Order.Changed()')
 
