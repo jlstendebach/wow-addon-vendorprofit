@@ -1147,7 +1147,32 @@ check("vendor tab first, ranked: cuirass 600 - 438, shoulders 400 - 313, then th
           "1. |Ticon2866:0|t Rough Bronze Cuirass | |cffffffff1s 62c|r",
           "2. |Ticon2865:0|t Rough Bronze Shoulders | |cffffffff87c|r"]
       and len(ranked) == 3 and ranked[2].startswith("3. |Ticon2867:0|t Copper Chain Vest | |cffff2020-"))
-check("top 10", ev("VendorProfit.BestCrafts.TOP") == 10)
+# Every saved recipe is listed: ones with no profit to rank go last, saying why.
+HELM = """{ recipeID = 9101, itemLink = "item:2901", quantityMin = 1, reagents = { { itemID = 7777, quantity = 1 } } }"""
+RING = """{ recipeID = 9102, itemLink = "item:2902", quantityMin = 1, reagents = { { itemID = 2841, quantity = 1 } } }"""
+run('__stub.items["item:2901"] = { name = "Mystery Helm", cached = true, sellPrice = 900 }')
+run('__stub.items["item:2902"] = { name = "Plain Ring", cached = true, sellPrice = 0 }')
+run('__stub.items["item:7777"] = { name = "Strange Ore", cached = true }')
+run('__stub.OpenProfession(164, "Blacksmithing", { %s, %s, %s, %s, %s }); __stub.Advance(1)' % (CUIRASS, SHOULDERS, VEST, HELM, RING))
+every = best()
+check("all recipes listed, not just the top 10: priced ones ranked, then the rest unnumbered",
+      len(every) == 5 and every[0].startswith("1. ") and every[2].startswith("3. ")
+      and every[3] == "|cff808080-  |r|Ticon2901:0|t Mystery Helm | |cff808080no price: Strange Ore|r"
+      and every[4] == "|cff808080-  |r|Ticon2902:0|t Plain Ring | |cff808080no vendor price|r")
+check("unpriced ones can still be queued and shown", ev("VendorProfit.BestPanel.Row(4).queue:IsShown()") and ev("VendorProfit.BestPanel.Row(4).show:IsShown()"))
+check("the list scrolls: a scroll frame holding the rows", ev(B + ".scroll.__scrollChild == " + B + ".list")
+      and ev(B + ".scroll:GetHeight()") == 5 * 22 and ev(B + ".list:GetHeight()") == 5 * 22)
+run(B + '.scroll:SetVerticalScroll(40)')
+run(B + '.tabs.auction:Click()')
+check("auction tab: no auction price for the ring; scrolled back to the top", best()[4].endswith("no auction price|r")
+      and ev(B + ".scroll:GetVerticalScroll()") == 0)
+run(B + '.tabs.vendor:Click()')
+# Many recipes: the list shows 14 at a time.
+many = ", ".join('{ recipeID = %d, itemLink = "item:2866", quantityMin = 1, reagents = { { itemID = 2841, quantity = 7 } } }' % (20000 + i) for i in range(20))
+run('__stub.OpenProfession(164, "Blacksmithing", { %s }); __stub.Advance(1)' % many)
+check("20 recipes: all there, 14 rows tall, the rest scrolls", len(best()) == 20
+      and ev(B + ".scroll:GetHeight()") == 14 * 22 and ev(B + ".list:GetHeight()") == 20 * 22)
+run('__stub.OpenProfession(164, "Blacksmithing", { %s, %s, %s }); __stub.Advance(1)' % (CUIRASS, SHOULDERS, VEST))
 check("vendor tab lit", ev(B + ".tabs.vendor.__lit") and not ev(B + ".tabs.auction.__lit"))
 run(B + ".tabs.auction:Click()")
 check("auction tab: after the cut, 1235 - 438 and 665 - 313",

@@ -76,6 +76,9 @@ function FrameMethods:GetWidth() return self.__w or 100 end
 function FrameMethods:GetEffectiveScale() return 1 end
 function FrameMethods:SetFrameStrata(s) self.__strata = s end
 function FrameMethods:SetToplevel(t) self.__toplevel = t end
+function FrameMethods:SetScrollChild(child) self.__scrollChild = child end
+function FrameMethods:SetVerticalScroll(v) self.__scroll = v end
+function FrameMethods:GetVerticalScroll() return self.__scroll or 0 end
 function FrameMethods:RegisterForClicks(...) self.__clicks = { ... } end
 function FrameMethods:SetHighlightTexture() end
 function FrameMethods:SetMotionScriptsWhileDisabled() end

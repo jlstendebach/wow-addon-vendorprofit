@@ -16,7 +16,7 @@ Vendor Profit: -2s 91c             <- ...sold to a vendor
 - **Vendor Profit:** what you make by crafting the item and selling it to a vendor, at Auctionator's To Craft cost.
 - **Cheapest Route:** the same three numbers when every reagent is got the cheapest way, crafting reagents yourself where that's cheaper than buying them, all the way down. Hover the section to see the route.
 - **Search** (at the auction house) looks up live prices for every item in the crafting tree in one request.
-- **Vendor Profit** in the professions window's title bar opens the Vendor Profit window on its **Best Crafts** tab: the profession's ten most profitable recipes.
+- **Vendor Profit** in the professions window's title bar opens the Vendor Profit window on its **Best Crafts** tab: every recipe of the profession, most profitable first.
 - **Queue** adds the recipe to a shopping order. The window's **Shopping List** tab then plans it with what you already have, scans the auction house, checks the order is still profitable at live prices, buys what's missing one confirmed purchase at a time, and crafts the steps in order.
 
 Requires [Auctionator](https://www.curseforge.com/wow/addons/auctionator).
@@ -105,7 +105,7 @@ What it can't know:
 
 ## Best Crafts
 
-The **Vendor Profit** button in the professions window's title bar (left of TradeSkillMaster's, if you have it), or `/vprofit best`, opens the Vendor Profit window on its **Best Crafts** tab: the open profession's top 10 recipes by profit per craft, each along its cheapest route. Clicking it again closes the window. Closing the professions window leaves it open, still listing that profession, so you can scan and queue at the auction house without it.
+The **Vendor Profit** button in the professions window's title bar (left of TradeSkillMaster's, if you have it), or `/vprofit best`, opens the Vendor Profit window on its **Best Crafts** tab: every saved recipe of the open profession, ranked by profit per craft, each along its cheapest route. The list shows 14 at a time and scrolls for the rest. Clicking it again closes the window. Closing the professions window leaves it open, still listing that profession, so you can scan and queue at the auction house without it.
 
 ```
 Best Crafts: Blacksmithing
@@ -113,11 +113,12 @@ Best Crafts: Blacksmithing
 1. Rough Bronze Cuirass           1s 62c     [Queue] [Show]
 2. Rough Bronze Shoulders            87c     [Queue] [Show]
 3. Copper Chain Vest               -2s 10c    [Queue] [Show]
+-  Mystery Helm    no price: Strange Ore      [Queue] [Show]
 Prices from Auctionator's last scan.
 ```
 
 - **Vendor** ranks by selling to a vendor, a guaranteed sale. **Auction** ranks by Auctionator's price after the 5% cut; usually higher, but an auction might not sell.
-- Losses are listed too (in red), so a profession where nothing makes money still shows what loses least. Recipes with a reagent that has no price anywhere are left out, since their profit can't be trusted.
+- Losses are listed too (in red), below the crafts that make money. Recipes with no profit to rank by come last, unnumbered, saying why: a reagent with no price anywhere (*no price: Strange Ore*, so their profit can't be trusted), or no vendor (or auction) price for what they make.
 - **Show** selects the recipe in the professions window (it's off while that window is closed). **Queue** adds one craft to the shopping order (click again for more); the window stays on Best Crafts.
 - It ranks straight away from Auctionator's prices. At the auction house, **Scan** looks up live lowest prices for everything that matters to the profession: every recipe's crafting tree, merged into one list of unique items, looked up a couple of hundred at a time with the auction house's batch lookup (the one it uses for favorites) rather than one search per item. It takes seconds. Items with nothing listed count as unavailable until the next scan, and Auctionator saves the prices it sees too. Items that bind on pickup aren't looked up.
 

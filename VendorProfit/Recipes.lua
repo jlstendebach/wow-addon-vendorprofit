@@ -176,6 +176,10 @@ function Recipes.Scan()
     }
     RebuildIndex()
     VendorProfit.Refresh()
+    -- Best Crafts lists every saved recipe (BestPanel.lua loads later).
+    if VendorProfit.BestPanel then
+        VendorProfit.BestPanel.Refresh()
+    end
     return true
 end
 

@@ -76,7 +76,10 @@ VendorProfit.L = {
     BEST_AH_CLOSED = "The auction house closed before the scan finished.",
     BEST_NOTHING_TO_SCAN = "Nothing in this profession can be listed on the auction house.",
     BEST_OPEN_PROFESSION = "Open one of your professions to see its best crafts.",
-    BEST_NONE = "No prices for this profession's crafts yet. Scan at the auction house.",
+    BEST_NONE = "No saved recipes for this profession yet.",
+    BEST_NO_PRICE_FOR = "no price: %s",
+    BEST_NO_VENDOR_PRICE = "no vendor price",
+    BEST_NO_AUCTION_PRICE = "no auction price",
     BEST_LIVE_PRICES = "Live prices from %s.",
     BEST_AUCTIONATOR_PRICES = "Prices from Auctionator's last scan.",
 

@@ -1,7 +1,9 @@
--- The Best Crafts tab of the Vendor Profit window: the open profession's top
--- recipes by profit per craft (BestCrafts.lua), losses included, with Vendor
--- and Auction tabs. Each has Show (selects it in the professions window) and
--- Queue (adds one craft to the shopping order). Live prices come from Scan.
+-- The Best Crafts tab of the Vendor Profit window: every saved recipe of the
+-- open profession, ranked by profit per craft (BestCrafts.lua), losses
+-- included, then the ones with no price to rank by, in a scrolling list with
+-- Vendor and Auction tabs. Each has Show (selects it in the professions
+-- window) and Queue (adds one craft to the shopping order). Live prices come
+-- from Scan.
 --
 -- Opened by the Vendor Profit button in the professions window's title bar,
 -- or /vprofit best.
@@ -21,10 +23,15 @@ local Panel = VendorProfit.Panel
 local WIDTH = Panel.WIDTH
 local PADDING = 16
 local ROW_HEIGHT = 22
+local LIST_TOP = -80
+local VISIBLE_ROWS = 14
+local SCROLLBAR_WIDTH = 24
+local LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
 
 local frame              -- the page
 local tab = "vendor"
 local rows = {}
+local shownList          -- profession and tab the list was last scrolled for
 
 local function ItemLabel(itemID)
     local name = C_Item.GetItemInfo(itemID)
@@ -71,18 +78,26 @@ local function SmallButton(parent, text, width)
     return button
 end
 
+-- Rows live on the scroll child, frame.list, one ROW_HEIGHT apart.
 local function GetRow(index)
     local row = rows[index]
     if row == nil then
+        local list = frame.list
         row = {}
-        row.left = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.left = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         row.left:SetJustifyH("LEFT")
         row.left:SetWordWrap(false)
-        row.left:SetWidth(WIDTH * 0.45)
-        row.right = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.left:SetWidth(LIST_WIDTH * 0.45)
+        row.left:SetPoint("TOPLEFT", list, "TOPLEFT", 0, -(index - 1) * ROW_HEIGHT - 4)
+        row.right = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         row.right:SetJustifyH("RIGHT")
-        row.queue = SmallButton(frame, L.QUEUE, 56)
-        row.show = SmallButton(frame, L.BEST_SHOW, 50)
+        row.right:SetWordWrap(false)
+        row.queue = SmallButton(list, L.QUEUE, 56)
+        row.show = SmallButton(list, L.BEST_SHOW, 50)
+        row.show:SetPoint("TOPRIGHT", list, "TOPRIGHT", 0, -(index - 1) * ROW_HEIGHT)
+        row.queue:SetPoint("RIGHT", row.show, "LEFT", -4, 0)
+        row.right:SetPoint("RIGHT", row.queue, "LEFT", -8, 0)
+        row.right:SetPoint("LEFT", row.left, "RIGHT", 4, 0)
         row.show:SetMotionScriptsWhileDisabled(true)
         row.show:SetScript("OnEnter", function(self)
             if not self:IsEnabled() then
@@ -137,6 +152,13 @@ local function Create(page)
     end)
     frame.scan:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+    -- The list scrolls; the mouse wheel works over it.
+    frame.scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+    frame.scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, LIST_TOP)
+    frame.list = CreateFrame("Frame", nil, frame.scroll)
+    frame.list:SetSize(LIST_WIDTH, ROW_HEIGHT)
+    frame.scroll:SetScrollChild(frame.list)
+
     frame.status = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.status:SetJustifyH("LEFT")
     frame.status:SetWidth(WIDTH - 2 * PADDING)
@@ -168,42 +190,57 @@ local function Refresh()
         scan.tooltip = BestCrafts.CanScan() and L.BEST_SCAN_HELP or L.BEST_SCAN_OPEN_AH
     end
 
-    local y = -80
-    local used = 0
     local ranked = {}
     if profession then
         ranked = BestCrafts.Rank(profession, tab, function() BestPanel.Refresh() end)
     end
+    local place = 0
     for index, entry in ipairs(ranked) do
-        used = index
         local row = GetRow(index)
-        row.left:ClearAllPoints()
-        row.left:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y - 4)
-        row.left:SetText(index .. ". " .. ItemLabel(entry.recipe.item))
+        if entry.profit then
+            place = place + 1
+            row.left:SetText(place .. ". " .. ItemLabel(entry.recipe.item))
+            row.right:SetText(VendorProfit.FormatMoney(entry.profit))
+        else
+            row.left:SetText(Gray("-  ") .. ItemLabel(entry.recipe.item))
+            local unpriced = entry.unpriced
+            if unpriced.itemID then
+                row.right:SetText(Gray(string.format(L.BEST_NO_PRICE_FOR, C_Item.GetItemInfo(unpriced.itemID) or ("item " .. unpriced.itemID))))
+            elseif tab == "vendor" then
+                row.right:SetText(Gray(L.BEST_NO_VENDOR_PRICE))
+            else
+                row.right:SetText(Gray(L.BEST_NO_AUCTION_PRICE))
+            end
+        end
         row.left:Show()
-        row.show:ClearAllPoints()
-        row.show:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING, y)
+        row.right:Show()
         row.show:SetScript("OnClick", function() ShowRecipe(entry.recipe.recipeID) end)
         row.show:SetEnabled(ProfessionsWindowOpen())
         row.show.profession = name
         row.show:Show()
-        row.queue:ClearAllPoints()
-        row.queue:SetPoint("RIGHT", row.show, "LEFT", -4, 0)
         row.queue:SetScript("OnClick", function() QueueRecipe(entry) end)
         row.queue:Show()
-        row.right:ClearAllPoints()
-        row.right:SetPoint("RIGHT", row.queue, "LEFT", -8, 0)
-        row.right:SetText(VendorProfit.FormatMoney(entry.profit))
-        row.right:Show()
-        y = y - ROW_HEIGHT
     end
-    for index = used + 1, #rows do
+    for index = #ranked + 1, #rows do
         local row = rows[index]
         row.left:Hide()
         row.right:Hide()
         row.show:Hide()
         row.queue:Hide()
     end
+
+    -- The list shows up to VISIBLE_ROWS at a time and scrolls for the rest,
+    -- back to the top for another profession or tab.
+    local listHeight = math.max(math.min(#ranked, VISIBLE_ROWS), 1) * ROW_HEIGHT
+    frame.list:SetHeight(math.max(#ranked, 1) * ROW_HEIGHT)
+    frame.scroll:SetSize(LIST_WIDTH, listHeight)
+    frame.scroll:SetShown(#ranked > 0)
+    local listKey = tostring(profession) .. "/" .. tab
+    if listKey ~= shownList then
+        shownList = listKey
+        frame.scroll:SetVerticalScroll(0)
+    end
+    local y = #ranked > 0 and LIST_TOP - listHeight or LIST_TOP
 
     -- Status: why the list is empty, where prices are from, and messages.
     local lines = {}
@@ -254,9 +291,13 @@ function BestPanel.Lines()
     return lines
 end
 
--- A shown row's regions: left, right, show, queue. For tests and debugging.
+-- A row's regions: left, right, show, queue. For tests and debugging.
 function BestPanel.Row(index)
     return rows[index]
+end
+
+function BestPanel.Scroll()
+    return frame and frame.scroll
 end
 
 function BestPanel.Frame()

@@ -21,7 +21,6 @@ local L = VendorProfit.L
 local BestCrafts = {}
 VendorProfit.BestCrafts = BestCrafts
 
-BestCrafts.TOP = 10
 BestCrafts.BATCH = 200          -- items per lookup
 BestCrafts.LOOKUP_TIMEOUT = 15  -- seconds
 BestCrafts.THROTTLE_POLL = 0.2
@@ -80,48 +79,72 @@ function BestCrafts.Items(profession)
     return items
 end
 
--- Ranks a profession's recipes. by = "vendor" or "auction". Returns up to
--- BestCrafts.TOP of { recipe, profit, cost, route } that make money, best
--- first, and whether some item info is still loading (onLoad is called when
--- it arrives). Recipes with a reagent that has no price anywhere are left
--- out, since their profit can't be trusted.
-function BestCrafts.Rank(profession, by, onLoad)
-    local ranked, loading = {}, false
-    for _, recipe in ipairs(Recipes.ForProfession(profession)) do
-        local route = Route.ForRecipe(recipe.item, recipe.reagents, Prices)
-        if not route.missing then
-            local cost = math.floor(route.cost + 0.5)
-            local profit
-            if by == "vendor" then
-                local sellPrice = select(11, C_Item.GetItemInfo(recipe.item))
-                if sellPrice == nil then
-                    loading = true
-                    if onLoad then
-                        Item:CreateFromItemID(recipe.item):ContinueOnItemLoad(onLoad)
-                    end
-                elseif sellPrice > 0 then
-                    profit = sellPrice * recipe.count - cost
-                end
-            else
-                local _, auction = Prices(recipe.item)
-                if auction then
-                    profit = math.floor(auction * recipe.count * VendorProfit.GetAfterAHCut()) - cost
-                end
-            end
-            -- Losses too: a top 10 that loses money still says what's least bad.
-            if profit then
-                ranked[#ranked + 1] = { recipe = recipe, profit = profit, cost = cost, route = route }
+-- The first item somewhere in a route with no price anywhere, or nil.
+local function FirstUnpriced(children)
+    for _, child in ipairs(children or {}) do
+        local node = child.node
+        if node.source == nil then
+            return node.itemID
+        elseif node.missing then
+            local found = FirstUnpriced(node.children)
+            if found then
+                return found
             end
         end
     end
+end
+
+-- Ranks every saved recipe of a profession. by = "vendor" or "auction".
+-- Returns a list of { recipe, profit, cost, route } best first, then the
+-- recipes with no profit to rank, each with unpriced = why: { itemID = a
+-- reagent with no price anywhere } (its profit can't be trusted), or
+-- { output = true } (no vendor price, or no auction price, for what it
+-- makes). Also returns whether some item info is still loading (onLoad is
+-- called when it arrives).
+function BestCrafts.Rank(profession, by, onLoad)
+    local ranked, unranked, loading = {}, {}, false
+    for _, recipe in ipairs(Recipes.ForProfession(profession)) do
+        local route = Route.ForRecipe(recipe.item, recipe.reagents, Prices)
+        local cost = math.floor(route.cost + 0.5)
+        local entry = { recipe = recipe, cost = cost, route = route }
+        if route.missing then
+            entry.unpriced = { itemID = FirstUnpriced(route.children) }
+        elseif by == "vendor" then
+            local sellPrice = select(11, C_Item.GetItemInfo(recipe.item))
+            if sellPrice == nil then
+                loading = true
+                if onLoad then
+                    Item:CreateFromItemID(recipe.item):ContinueOnItemLoad(onLoad)
+                end
+                entry.unpriced = { output = true }
+            elseif sellPrice > 0 then
+                entry.profit = sellPrice * recipe.count - cost
+            else
+                entry.unpriced = { output = true }
+            end
+        else
+            local _, auction = Prices(recipe.item)
+            if auction then
+                entry.profit = math.floor(auction * recipe.count * VendorProfit.GetAfterAHCut()) - cost
+            else
+                entry.unpriced = { output = true }
+            end
+        end
+        if entry.profit then
+            ranked[#ranked + 1] = entry
+        else
+            unranked[#unranked + 1] = entry
+        end
+    end
+    -- Losses too: they rank below the crafts that make money.
     table.sort(ranked, function(a, b)
         if a.profit ~= b.profit then
             return a.profit > b.profit
         end
         return a.recipe.recipeID < b.recipe.recipeID
     end)
-    for index = #ranked, BestCrafts.TOP + 1, -1 do
-        ranked[index] = nil
+    for _, entry in ipairs(unranked) do
+        ranked[#ranked + 1] = entry
     end
     return ranked, loading
 end
