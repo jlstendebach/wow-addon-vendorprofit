@@ -619,6 +619,11 @@ end
 
 local function Create()
     frame = CreateFrame("Frame", "VendorProfitPanel", UIParent, "ButtonFrameTemplate")
+    -- Above the professions window, auction house, bank and vendor it sits
+    -- beside, and brought to the front when clicked. (The secure Open button
+    -- over Craft is a strata higher still.)
+    frame:SetFrameStrata("HIGH")
+    frame:SetToplevel(true)
     ButtonFrameTemplate_HidePortrait(frame)
     ButtonFrameTemplate_HideButtonBar(frame)
     if frame.Inset then

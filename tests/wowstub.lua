@@ -75,6 +75,7 @@ function FrameMethods:GetBottom() return self.__bottom or 20 end
 function FrameMethods:GetWidth() return self.__w or 100 end
 function FrameMethods:GetEffectiveScale() return 1 end
 function FrameMethods:SetFrameStrata(s) self.__strata = s end
+function FrameMethods:SetToplevel(t) self.__toplevel = t end
 function FrameMethods:RegisterForClicks(...) self.__clicks = { ... } end
 function FrameMethods:SetHighlightTexture() end
 function FrameMethods:SetMotionScriptsWhileDisabled() end
