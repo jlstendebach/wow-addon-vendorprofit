@@ -753,38 +753,28 @@ Panel.AddPage({
     refresh = function() return RefreshShopping() end,
 })
 
--- Opens with the auction house when something is queued, and closes with
--- it wherever it's been moved. /vprofit opens it again.
+-- Opens with the auction house when something is queued. It only ever
+-- closes when you close it.
 local lastStatus = Shopper.Status()
 Shopper.OnChange(function()
     local status = Shopper.Status()
     if lastStatus == "closed" and status ~= "closed" and not Order.IsEmpty() then
         -- Already open (on Best Crafts, say): stays on its tab.
         Panel.Show(not Panel.IsShown() and "shopping" or nil)
-    elseif status == "closed" and lastStatus ~= "closed" and activeTab == "shopping" then
-        Panel.Hide()
     end
     lastStatus = status
     Panel.Refresh()
 end)
 
--- Opens at the bank when there's something to take out of it, and closes
--- with the bank if it opened for it.
-local openedForBank = false
+-- Opens at the bank when there's something to take out of it.
 local bankWasOpen = Banker.IsBankOpen()
 Banker.OnChange(function()
     local open = Banker.IsBankOpen()
     if open and not bankWasOpen and not Order.IsEmpty() and not Panel.IsShown() then
         local _, _, fromBank = Panel.SplitUses(Shopper.Summary().plan.uses)
         if #fromBank > 0 then
-            openedForBank = true
-            Panel.Show(not Panel.IsShown() and "shopping" or nil)
+            Panel.Show("shopping")
         end
-    elseif not open and bankWasOpen then
-        if openedForBank and activeTab == "shopping" then
-            Panel.Hide()
-        end
-        openedForBank = false
     end
     bankWasOpen = open
     Panel.Refresh()

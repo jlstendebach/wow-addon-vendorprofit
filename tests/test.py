@@ -585,14 +585,14 @@ check("reopens where it was moved, not docked",
 
 # Closing the auction house.
 run('__stub.CloseAH()')
-check("panel closes with the auction house", not ev("VendorProfit.Panel.IsShown()"))
-run('__stub.OpenAH()')
+check("panel stays open when the auction house closes", ev("VendorProfit.Panel.IsShown()"))
+run('VendorProfit.Panel.Hide(); __stub.OpenAH()')
 check("moved panel opens with the AH where it was left", ev("VendorProfit.Panel.IsShown()") and ev("VendorProfitPanel.__point[2] == UIParent"))
 run('SlashCmdList.VENDORPROFIT("reset")')
 check("/vprofit reset docks it again", ev("VendorProfitCharDB.panel") is None and ev("VendorProfitPanel.__point[2] == AuctionHouseFrame"))
 run('__stub.CloseAH()')
-check("...and it still closes with the auction house", not ev("VendorProfit.Panel.IsShown()"))
-run('VendorProfit.Panel.Show()')
+check("...and it still stays open when the auction house closes", ev("VendorProfit.Panel.IsShown()"))
+run('VendorProfit.Panel.Hide(); VendorProfit.Panel.Show()')
 check("reopened away from the AH: docked to the professions window", ev("VendorProfitPanel.__point[2] == ProfessionsFrame"))
 run("VendorProfit.Order.Clear()")
 check("clear empties the order and its record", ev("VendorProfit.Order.IsEmpty()") and ev("VendorProfitCharDB.order.spent") == 0)
@@ -941,7 +941,7 @@ check("bank section gone, items now from bags", section(ev, "Take from bank") is
       and section(ev, "Already in your bags")[:2] == ["|Ticon2840:0|t Copper Bar x7", "|Ticon3576:0|t Tin Bar x7"]
       and headings(ev)[2:4] == ["To do", "1. Craft"])
 run('__stub.CloseBank()')
-check("closes with the bank it opened for", not ev("VendorProfit.Panel.IsShown()"))
+check("stays open when the bank closes", ev("VendorProfit.Panel.IsShown()"))
 check("no errors from the bank", ev("#__stub.errors") == 0)
 
 # Waiting for locks, full bags, missing items, bank closing.
@@ -1133,14 +1133,16 @@ check("auction house closes: Best Crafts stays open", ev("VendorProfit.BestPanel
 run('VendorProfit.Panel.Hide(); __stub.OpenAH()')
 check("window closed, auction house opens with an order: Shopping List", ev("VendorProfit.Panel.ActiveTab()") == "shopping" and ev("VendorProfit.Panel.IsShown()"))
 run('__stub.CloseAH()')
-check("...and closes with it", not ev("VendorProfit.Panel.IsShown()"))
+check("...and stays open when it closes", ev("VendorProfit.Panel.IsShown()"))
 run('VendorProfit.Order.Clear(); VendorProfit.Panel.Show("best")')
 
-# Closing the professions window closes it; /vprofit best toggles it.
+# Closing the professions window leaves it open; /vprofit best toggles it.
 run('__stub.Fire("TRADE_SKILL_CLOSE")')
-check("closes with the professions window", not ev("VendorProfit.BestPanel.IsShown()"))
+check("stays open when the professions window closes", ev("VendorProfit.BestPanel.IsShown()"))
 run('SlashCmdList.VENDORPROFIT("best")')
-check("/vprofit best opens it", ev("VendorProfit.BestPanel.IsShown()"))
+check("/vprofit best closes it", not ev("VendorProfit.Panel.IsShown()"))
+run('SlashCmdList.VENDORPROFIT("best")')
+check("...and opens it", ev("VendorProfit.BestPanel.IsShown()"))
 run('__stub.tradeSkill.linked = true; VendorProfit.BestPanel.Refresh()')
 check("no profession of yours open: says to open one", best() == []
       and "Open one of your professions" in ev("" + B + ".status:GetText()"))

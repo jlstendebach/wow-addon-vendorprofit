@@ -105,7 +105,7 @@ What it can't know:
 
 ## Best Crafts
 
-The **Vendor Profit** button in the professions window's title bar (left of TradeSkillMaster's, if you have it), or `/vprofit best`, opens the Vendor Profit window on its **Best Crafts** tab: the open profession's top 10 recipes by profit per craft, each along its cheapest route. Clicking it again closes the window. The tab closes with the professions window.
+The **Vendor Profit** button in the professions window's title bar (left of TradeSkillMaster's, if you have it), or `/vprofit best`, opens the Vendor Profit window on its **Best Crafts** tab: the open profession's top 10 recipes by profit per craft, each along its cheapest route. Clicking it again closes the window. Closing the professions window leaves it open, saying to open a profession.
 
 ```
 Best Crafts: Blacksmithing
@@ -163,7 +163,7 @@ Profit                                       [ Scan ]
 
 **To do** is a checklist in the order you'd do it: **Buy** first (prices are what can change, so you find out at the auction house before fetching or crafting anything), **Collect from mailbox** (purchases not collected yet), **Take from bank**, then **Craft**. Each step shows only while it has something left in it and they're numbered in order, so the list gets shorter as you go. Every button sits on its section's heading, with a short label; hover one for the details. There's no button bar at the bottom. Your items are used from your bags first, then the mailbox, then the bank, so **Take from bank** lists exactly what to fetch. Bags include the reagent bank, since crafting uses it directly. **Already in your bags** is just for information. Several queued recipes share your items, so nothing is counted twice.
 
-**Take from bank.** At the bank, **Take** on the **Take from bank** step moves exactly those amounts into your bags: it splits them off the bank's stacks (smallest stacks first) into empty bag slots, one move at a time, waiting for each to finish. If something isn't in the bank after all, or your bags fill up, or the bank closes, it stops and says so. The panel opens beside the bank by itself when the order has something to fetch, and closes with it.
+**Take from bank.** At the bank, **Take** on the **Take from bank** step moves exactly those amounts into your bags: it splits them off the bank's stacks (smallest stacks first) into empty bag slots, one move at a time, waiting for each to finish. If something isn't in the bank after all, or your bags fill up, or the bank closes, it stops and says so. The window opens beside the bank by itself when the order has something to fetch.
 
 **Profit** is three small groups: what everything still queued sells for (**Vendor price**, and **Auction price**: Auctionator's price after the 5% auction house cut, so it's what you'd actually get, or *no auction price*), what it costs (**Items you have**, what the items you have are worth, and **Items to buy**), and what finishing the order makes from where you stand (**Vendor profit** and **Auction profit**: each price minus both costs). Buying checks Vendor profit. Items you have count at the cheapest way to get them now, whether you had them already or bought them for this order. What you've paid is spent either way, so it doesn't change whether finishing is worth it. It's shown below the profits as **Spent on this order so far**, but not taken off. That way an order you've partly shopped for and crafted gives the same answer as clearing it and queuing what's left.
 
@@ -185,7 +185,7 @@ The buttons for each part sit on their section's heading, with short labels; hov
 
 **Mail.** Auction purchases may arrive in your mailbox rather than your bags. A purchase counts as **in the mail** until that many more of the item show up in your bags or bank, so it's counted either way and never bought twice. Opening the mailbox corrects that from what's actually in the inbox, so a purchase that arrived without the panel seeing it (say you used it up as it arrived) stops counting.
 
-**The window.** The Shopping List and Best Crafts are tabs down the right side of one Vendor Profit window. Drag it anywhere. From then on it opens where you left it (saved per character). It opens with the auction house when something is queued (on the Shopping List, unless it's already open on another tab), and closes with it if it's on the Shopping List; `/vprofit` opens it again. `/vprofit reset` docks it beside the auction house or professions window again.
+**The window.** The Shopping List and Best Crafts are tabs down the right side of one Vendor Profit window. Drag it anywhere. From then on it opens where you left it (saved per character). It opens with the auction house when something is queued (on the Shopping List, unless it's already open on another tab), but only ever closes when you close it (its close button, the title-bar button, or `/vprofit`). `/vprofit reset` docks it beside the auction house or professions window again.
 
 The order is saved per character. **Remove** takes a recipe out; removing the last one empties the order and its record.
 

@@ -4,7 +4,7 @@
 -- Queue (adds one craft to the shopping order). Live prices come from Scan.
 --
 -- Opened by the Vendor Profit button in the professions window's title bar,
--- or /vprofit best. The tab closes with the professions window.
+-- or /vprofit best.
 
 local ADDON_NAME, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -260,19 +260,12 @@ if Auctionator.API.v1.RegisterForDBUpdate then
 end
 
 local events = CreateFrame("Frame")
-for _, event in ipairs({ "TRADE_SKILL_CLOSE", "TRADE_SKILL_LIST_UPDATE", "AUCTION_HOUSE_SHOW",
-    "AUCTION_HOUSE_CLOSED", "BAG_UPDATE_DELAYED" }) do
+-- Closing the professions window leaves it open; it says to open one.
+for _, event in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE", "TRADE_SKILL_LIST_UPDATE",
+    "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "BAG_UPDATE_DELAYED" }) do
     pcall(events.RegisterEvent, events, event)
 end
-events:SetScript("OnEvent", function(_, event)
-    if event == "TRADE_SKILL_CLOSE" then
-        if BestPanel.IsShown() then
-            Panel.Hide()
-        end
-    else
-        BestPanel.Refresh()
-    end
-end)
+events:SetScript("OnEvent", BestPanel.Refresh)
 
 -- The Vendor Profit button in the professions window's title bar, left of
 -- TradeSkillMaster's button there, so it reads as being about the whole
