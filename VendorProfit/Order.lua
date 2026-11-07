@@ -155,6 +155,14 @@ local function Reconcile()
 end
 
 -- Records a purchase made by the panel.
+-- Gold spent on something that lands in your bags straight away (a vendor
+-- purchase), so there's nothing to wait for in the mail.
+function Order.AddSpent(total)
+    local order = DB()
+    order.spent = order.spent + total
+    Changed()
+end
+
 function Order.RecordPurchase(itemID, quantity, total)
     local order = DB()
     if order.lastSeen[itemID] == nil then

@@ -658,3 +658,42 @@ C_AuctionHouse.HasFullBrowseResults = function() return true end
 C_AuctionHouse.RequestMoreBrowseResults = function() end
 C_TradeSkillUI.OpenRecipe = function(recipeID) stub.openedRecipe = recipeID end
 function Auctionator.API.v1.RegisterForDBUpdate(callerID, fn) verify(callerID) stub.dbUpdate = fn end
+
+-- Merchant ---------------------------------------------------------------------
+-- stub.merchant = { { itemID, price, stackCount, numAvailable, extended } }.
+-- Buying puts the items in your bags and takes the gold.
+stub.merchant = {}
+stub.merchantBuys = {}
+MerchantFrame = CreateFrame("Frame", "MerchantFrame")
+MerchantFrame:Hide()
+function GetMerchantNumItems() return #stub.merchant end
+function GetMerchantItemID(index) return stub.merchant[index] and stub.merchant[index].itemID end
+function GetMerchantItemLink(index) local m = stub.merchant[index]; return m and ("item:" .. m.itemID) end
+function GetMerchantItemMaxStack(index) return stub.merchant[index].maxStack or 20 end
+function GetMerchantItemCostInfo(index) return stub.merchant[index].extended and 1 or 0 end
+C_MerchantFrame = {
+    GetItemInfo = function(index)
+        local m = stub.merchant[index]
+        if m == nil then return nil end
+        return { price = m.price, stackCount = m.stackCount or 1, numAvailable = m.numAvailable or -1,
+                 hasExtendedCost = m.extended or false }
+    end,
+}
+function BuyMerchantItem(index, quantity)
+    local m = stub.merchant[index]
+    local stackCount = m.stackCount or 1
+    -- No quantity: one batch. A quantity: that many items.
+    local count = quantity or stackCount
+    stub.merchantBuys[#stub.merchantBuys + 1] = { itemID = m.itemID, quantity = quantity }
+    stub.money = stub.money - m.price * count / stackCount
+    stub.bags[m.itemID] = (stub.bags[m.itemID] or 0) + count
+end
+function stub.OpenMerchant(items)
+    stub.merchant = items
+    MerchantFrame:Show()
+    stub.Fire("MERCHANT_SHOW")
+end
+function stub.CloseMerchant()
+    MerchantFrame:Hide()
+    stub.Fire("MERCHANT_CLOSED")
+end

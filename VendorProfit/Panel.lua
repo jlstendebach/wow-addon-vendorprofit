@@ -17,6 +17,7 @@ local Inventory = VendorProfit.Inventory
 local Crafter = VendorProfit.Crafter
 local OpenButton = VendorProfit.OpenButton
 local Banker = VendorProfit.Banker
+local Merchant = VendorProfit.Merchant
 local L = VendorProfit.L
 
 local Panel = {}
@@ -252,6 +253,39 @@ function Panel.SplitUses(uses)
     return fromBags, fromMail, fromBank
 end
 
+-- Whether to hold off buying: the order loses money and "Buy anyway" hasn't
+-- been clicked.
+local function Unprofitable()
+    return not Shopper.IsProfitable() and not Shopper.IsOverridden()
+end
+
+-- What clicking the To buy heading's button does at a vendor.
+local function VendorBuyClick(offers)
+    if Unprofitable() then
+        Shopper.SetOverride(true)
+    end
+    Merchant.Buy(offers)
+end
+
+-- The words for a vendor purchase: "20 Weak Flux, 5 Coarse Thread".
+local function OfferList(offers)
+    local parts = {}
+    for _, offer in ipairs(offers) do
+        parts[#parts + 1] = offer.count .. " " .. ItemName(offer.itemID)
+    end
+    return table.concat(parts, ", ")
+end
+
+-- Whether anything left to buy is planned from the auction house.
+local function AnyFromAuction(plan)
+    for _, line in ipairs(plan.buyOrder) do
+        if line.source == "auction" and line.quantity > 0 then
+            return true
+        end
+    end
+    return false
+end
+
 -- What clicking the To buy heading's button does, by status.
 local function BuyClick()
     local status = Shopper.Status()
@@ -259,7 +293,7 @@ local function BuyClick()
         Shopper.Confirm()
     elseif status == "ready" then
         -- Showing "Buy anyway": clicking it is the go-ahead.
-        if not Shopper.IsProfitable() and not Shopper.IsOverridden() then
+        if Unprofitable() then
             Shopper.SetOverride(true)
         end
         Shopper.Buy()
@@ -275,7 +309,28 @@ local function BuyButton(plan)
     local button = { onClick = BuyClick, enabled = false, width = HEADING_BUTTON_WIDTH }
     if #plan.buyOrder == 0 and status ~= "quoting" and status ~= "confirm" and status ~= "buying" then
         return nil
-    elseif status == "closed" then
+    end
+    -- At a vendor that sells some of it: buy that here.
+    local offers = Merchant.Offers(plan)
+    if #offers > 0 then
+        button.enabled = true
+        button.onClick = function() VendorBuyClick(offers) end
+        local help = string.format(L.VENDOR_BUY_HELP, OfferList(offers), Money(Merchant.Cost(offers)))
+        if Unprofitable() then
+            button.text, button.tooltip = L.BUY_ANYWAY, L.BUTTON_NOT_PROFITABLE .. " " .. help
+        else
+            button.text, button.tooltip = L.BUY_BUY, help
+        end
+        return button
+    end
+    if status == "closed" or status == "idle" or status == "ready" then
+        -- Only vendor items left: the auction house can't help.
+        if not AnyFromAuction(plan) then
+            button.text, button.tooltip = L.BUY_BUY, L.VENDOR_FIND
+            return button
+        end
+    end
+    if status == "closed" then
         button.text, button.tooltip = L.BUY_OPEN_AH, L.BUY_OPEN_AH_HELP
     elseif status == "idle" then
         button.text, button.tooltip = L.BUY_BUY, L.SCAN_FIRST
@@ -295,7 +350,7 @@ local function BuyButton(plan)
         button.text = L.BUY_BUY
         if nextPurchase == nil then
             button.tooltip = L.BUTTON_NOTHING
-        elseif not Shopper.IsProfitable() and not Shopper.IsOverridden() then
+        elseif Unprofitable() then
             button.text, button.enabled = L.BUY_ANYWAY, true
             button.tooltip = L.BUTTON_NOT_PROFITABLE .. " " .. L.BUY_ANYWAY_HELP
         else
@@ -624,6 +679,8 @@ local function Dock()
         frame:SetPoint("TOPLEFT", AuctionHouseFrame, "TOPRIGHT", 4, 0)
     elseif Banker.IsBankOpen() and BankFrame and BankFrame:IsShown() then
         frame:SetPoint("TOPLEFT", BankFrame, "TOPRIGHT", 4, 0)
+    elseif Merchant.IsOpen() and MerchantFrame and MerchantFrame:IsShown() then
+        frame:SetPoint("TOPLEFT", MerchantFrame, "TOPRIGHT", 4, 0)
     elseif ProfessionsFrame and ProfessionsFrame:IsShown() then
         frame:SetPoint("TOPLEFT", ProfessionsFrame, "TOPRIGHT", 4, 0)
     else
@@ -777,6 +834,19 @@ Banker.OnChange(function()
         end
     end
     bankWasOpen = open
+    Panel.Refresh()
+end)
+
+-- Opens at a vendor that sells something the order still needs.
+local merchantWasOpen = Merchant.IsOpen()
+Merchant.OnChange(function()
+    local open = Merchant.IsOpen()
+    if open and not merchantWasOpen and not Order.IsEmpty() and not Panel.IsShown() then
+        if #Merchant.Offers(Shopper.Summary().plan) > 0 then
+            Panel.Show("shopping")
+        end
+    end
+    merchantWasOpen = open
     Panel.Refresh()
 end)
 

@@ -56,7 +56,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Panel.lua", "BestCrafts.lua", "BestPanel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "Panel.lua", "BestCrafts.lua", "BestPanel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
 run('__stub.Fire("TRADE_SKILL_SHOW")')
@@ -931,6 +931,66 @@ run('__stub.shift = false')
 run('__stub.CloseAH()')
 check("search hides when the auction house closes", not ev(SEARCH + ":IsShown()"))
 check("no errors from searching", ev("#__stub.errors") == 0)
+
+
+# --- Buying from a vendor ------------------------------------------------------------
+# Bronze Shield: 2 Bronze Bars (in bags) and 1 Weak Flux (vendor only, 1s).
+SHIELD = """{ recipeID = 9001, itemLink = "item:2900", quantityMin = 1,
+    reagents = { { itemID = 2841, quantity = 2 }, { itemID = 2880, quantity = 1 } } }"""
+run, ev = shop_client()
+run('__stub.items["item:2900"] = { name = "Bronze Shield", cached = true, sellPrice = 900 }')
+run('__stub.items["item:2880"] = { name = "Weak Flux", cached = true, sellPrice = 25 }')
+run('__stub.vendorPrices[2880] = 100')
+run('__stub.OpenProfession(164, "Blacksmithing", { %s, %s })' % (CUIRASS, SHIELD))
+run('__stub.SetRecipe(%s)' % SHIELD)
+run('__stub.createCount = 3'); run(QUEUE + ':Click()')
+check("flux to buy from a vendor", section(ev, "Buy") == ["|Ticon2880:0|t Weak Flux x3 | vendor  |cffffffff3s|r"])
+check("away from vendors: says to find one, not the auction house",
+      ev(BUY + ".__text") == "Buy" and not ev(BUY + ":IsEnabled()") and "sold by vendors" in ev(BUY + ".tooltip"))
+run('VendorProfit.Panel.Hide()')
+run('__stub.OpenMerchant({ { itemID = 3371, price = 20, stackCount = 5 } })')
+check("a vendor that doesn't sell it: no buying, window stays shut", not ev("VendorProfit.Panel.IsShown()"))
+run('__stub.CloseMerchant()')
+run('__stub.OpenMerchant({ { itemID = 3371, price = 20 }, { itemID = 2880, price = 90 } })')
+check("a vendor that sells it: the window opens beside it", ev("VendorProfit.Panel.IsShown()")
+      and ev("VendorProfitPanel.__point[2] == MerchantFrame"))
+check("Buy on, saying what it buys here", ev(BUY + ":IsEnabled()") and ev(BUY + ".__text") == "Buy"
+      and ev(BUY + ".tooltip") == "Buy from this vendor: 3 Weak Flux, for |cffffffff2s 70c|r.")
+money = ev("__stub.money")
+run(BUY + ":Click()")
+check("bought exactly what's needed in one go", [(b.itemID, b.quantity) for b in ev("__stub.merchantBuys").values()] == [(2880, 3)]
+      and ev("__stub.money") == money - 270)
+run('__stub.Fire("BAG_UPDATE_DELAYED")')
+check("nothing left to buy: the Buy step is gone", ev(BUY) is None)
+check("spent recorded", ev("VendorProfitCharDB.order.spent") == 270)
+check("says what it bought", any("bought 3 Weak Flux from the vendor" in m for m in ev("__stub.printed").values()))
+
+# Sold in batches of 5, and limited stock; short of gold.
+run('__stub.bags[2880] = 0; __stub.merchantBuys = {}; VendorProfit.Order.Changed()')
+run('__stub.CloseMerchant(); __stub.OpenMerchant({ { itemID = 2880, price = 400, stackCount = 5 } })')
+check("batches: buys whole batches", ev(BUY + ".tooltip") == "Buy from this vendor: 5 Weak Flux, for |cffffffff4s|r.")
+run(BUY + ":Click()")
+check("one batch at a time (no quantity)", [(b.itemID, b.quantity) for b in ev("__stub.merchantBuys").values()] == [(2880, None)])
+run('__stub.bags[2880] = 0; __stub.merchantBuys = {}; __stub.money = 150; VendorProfit.Order.Changed()')
+run('__stub.CloseMerchant(); __stub.OpenMerchant({ { itemID = 2880, price = 100 } })')
+run(BUY + ":Click()")
+check("short of gold: buys what it can, and says so", [(b.itemID, b.quantity) for b in ev("__stub.merchantBuys").values()] == [(2880, 1)]
+      and any("not enough gold" in m for m in ev("__stub.printed").values()))
+run('__stub.money = 1000000; __stub.merchantBuys = {}')
+run('__stub.CloseMerchant(); __stub.OpenMerchant({ { itemID = 2880, price = 100, extended = true } })')
+check("items that cost more than gold aren't bought", not ev(BUY + ":IsEnabled()"))
+run('__stub.CloseMerchant()')
+
+# Something planned from the auction house that a vendor sells for less.
+run('__stub.bags[2880] = 5; VendorProfit.Order.Clear()')
+run('__stub.SetRecipe(%s)' % CUIRASS)
+run('__stub.createCount = 10'); run(QUEUE + ':Click()')
+run('__stub.OpenMerchant({ { itemID = 3576, price = 60 }, { itemID = 2770, price = 99 } })')
+check("vendor sells tin bars cheaper than the auction house: bought here; copper ore dearer: left for the AH",
+      ev(BUY + ".tooltip").startswith("Buy from this vendor: 29 Tin Bar,") and "Tin Bar" in ev(BUY + ".tooltip")
+      and "Copper Ore" not in ev(BUY + ".tooltip"))
+run('__stub.CloseMerchant()')
+check("no errors at the vendor", ev("#__stub.errors") == 0)
 
 
 # --- Taking things out of the bank --------------------------------------------------
