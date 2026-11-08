@@ -216,15 +216,19 @@ The order is saved per character. Each queued recipe has three small buttons: **
 
 ## Profit History
 
-The window's **Profit History** tab (or `/vprofit history`) lists every sale of something you crafted, newest first: the date, the item, whether it sold to a vendor or at auction, what it cost you, what it sold for and the profit. Totals for everything and for the last 7 days are at the top. Hover a sale to see its cost split into what you bought and your own items.
+The window's **Profit History** tab (or `/vprofit history`) shows what you've made selling things you crafted, with totals for everything and for the last 7 days at the top. Two buttons switch between views, and the search box filters both by item name as you type:
+
+- **Sales** (the default): every sale, newest first: the date (mm/dd), the item, what it cost you, what it sold for and the profit. Hover a sale to see whether it sold to a vendor or at auction, and its cost split into what you bought and your own items.
+- **Best Sellers**: one row per item: how many **Sold**, the **Avg profit** on each, and the total **Profit**, most profit first. Click a heading to sort by it (again to reverse); the sort is saved per character. Hover a row for its average cost and sale price, how many went to vendors and to the auction house, and when it last sold.
 
 ```
 Profit History
 Profit: 2s 80c from 3 sales. Last 7 days: 2s 80c.
-Date    Item          Sold to     Cost   Sold for    Profit
-Nov 08  Test Ring     Vendor       50c         2s    1s 50c
-Nov 08  Test Ring     Auction   1s 50c     1s 80c       30c
-Nov 07  Test Ring     Vendor        1s         2s        1s
+[Sales] [Best Sellers]  [🔍 Search                              ]
+Date   Item                        Cost   Sold for    Profit
+11/08  Test Ring                    50c         2s    1s 50c
+11/08  Test Ring                 1s 50c     1s 80c       30c
+11/07  Test Ring                     1s         2s        1s
 ```
 
 Costs follow the items, so each sale has its own cost, not today's prices:
@@ -241,7 +245,7 @@ Sales use up the item's costs oldest first. Vendor sales are read from the vendo
 
 ## Purchase History
 
-The **Purchase History** tab (or `/vprofit purchases`) lists your last 500 purchases, newest first, for a gut check: the date, the item and how many, whether it came from the auction house or a vendor, what you paid **each** and in **total**, and what one costs **now** (the cheaper of the vendor and auction prices). Hover a purchase for the exact time.
+The **Purchase History** tab (or `/vprofit purchases`) lists your last 500 purchases, newest first, for a gut check: the date (mm/dd), the item and how many, whether it came from the auction house or a vendor, what you paid **each** and in **total**, and what one costs **now** (the cheaper of the vendor and auction prices). Hover a purchase for the exact time.
 
 Vendor purchases show up straight away, from any vendor. Auction house purchases show up when you take them out of the mailbox, read from their mail, however you bought them. These are the same purchases whose costs feed the Profit History.
 
@@ -288,6 +292,7 @@ Saved data, per character (`VendorProfitCharDB`):
 - `order = { entries, inMail, lastSeen, spent }`: the queued crafts, purchases not seen in bags or bank yet (and the count they're waiting to rise from), and what the panel spent.
 - `panel = { left, top }`: where you moved the Vendor Profit window, if you did.
 - `bestSort = { key, ascending }` and `bestFilters`: how Best Crafts is sorted and filtered.
+- `bestSellersSort = { key, ascending }`: how Profit History's Best Sellers is sorted.
 - `auctions = { counts, time }`: how many of each item you had up for auction at your last visit to the auction house, and when.
 - `history = { stock, sales, purchases }`: what the items you have cost you, your sales, and your last 500 purchases.
 

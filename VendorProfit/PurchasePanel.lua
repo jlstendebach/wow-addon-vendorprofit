@@ -23,7 +23,7 @@ local SCROLLBAR_WIDTH = 24
 local LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
 -- Columns: Date and Item from the left; Market now, Total, Each, From from
 -- the right.
-local DATE_WIDTH, FROM_WIDTH, MONEY_WIDTH, GAP = 46, 52, 70, 6
+local DATE_WIDTH, FROM_WIDTH, MONEY_WIDTH, GAP = 34, 52, 70, 6
 local MARKET_RIGHT = 0
 local TOTAL_RIGHT = MARKET_RIGHT - MONEY_WIDTH - GAP
 local EACH_RIGHT = TOTAL_RIGHT - MONEY_WIDTH - GAP
