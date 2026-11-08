@@ -56,7 +56,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "History.lua", "Panel.lua", "BestCrafts.lua", "BestPanel.lua", "HistoryPanel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "History.lua", "Panel.lua", "BestCrafts.lua", "BestPanel.lua", "HistoryPanel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
 run('__stub.Fire("TRADE_SKILL_SHOW")')
@@ -1098,6 +1098,18 @@ check("crafted items out of your bags still count (they may be up for auction)",
 run('__stub.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 12345)')
 check("other spells aren't crafts", ev(H + ".Recorded(2903)") == 1)
 check("no errors", ev("#__stub.errors") == 0)
+
+
+# --- Known vendor prices ---------------------------------------------------------------
+run, ev = shop_client()
+run('__stub.auctionPrices[2320] = 13')
+check("Coarse Thread with no vendor price from Auctionator yet: the usual 10c", ev("(VendorProfit.GetBuyPrices(2320))") == 10
+      and ev("select(2, VendorProfit.GetBuyPrices(2320))") == 13)
+run('__stub.vendorPrices[2320] = 12')
+check("...Auctionator's recorded price wins once it has one", ev("(VendorProfit.GetBuyPrices(2320))") == 12)
+check("items vendors don't sell: no vendor price", ev("(VendorProfit.GetBuyPrices(2866))") is None)
+check("only Auctionator needed: the list is the addon's own", ev("VendorProfit.KNOWN_VENDOR_PRICES[2320]") == 10
+      and ev("TSM_API") is None)
 
 
 # --- Buying from a vendor ------------------------------------------------------------

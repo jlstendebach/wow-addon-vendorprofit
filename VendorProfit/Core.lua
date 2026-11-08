@@ -207,8 +207,13 @@ VendorProfit.L = {
 -- prices for items it has seen at a vendor) and on the auction house.
 function VendorProfit.GetBuyPrices(itemID)
     local api = Auctionator.API.v1
-    return api.GetVendorPriceByItemID(ADDON_NAME, itemID),
-        api.GetAuctionPriceByItemID(ADDON_NAME, itemID)
+    -- Auctionator's vendor price once it has seen a vendor sell the item;
+    -- until then, the usual price (VendorPrices.lua).
+    local vendor = api.GetVendorPriceByItemID(ADDON_NAME, itemID)
+    if vendor == nil and VendorProfit.KNOWN_VENDOR_PRICES then
+        vendor = VendorProfit.KNOWN_VENDOR_PRICES[itemID]
+    end
+    return vendor, api.GetAuctionPriceByItemID(ADDON_NAME, itemID)
 end
 
 -- Price of one reagent the way Auctionator prices reagents: the vendor price
