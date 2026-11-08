@@ -41,6 +41,10 @@ file; read it before changing anything.
   which parts depend on game behavior you couldn't check, and what to look
   for in game. Never claim something works in game unless it was seen there.
 - **Explain causes.** For a bug, say what actually went wrong before the fix.
+- **Keep the look consistent.** New controls match the addon's own style
+  (the red panel buttons, small icon buttons, gold headings), not whatever
+  another window uses. Borrow the game's behavior (its menus, its colors),
+  not a mismatched look.
 - **Comments say why.** Each file starts with what it's for; comments explain
   reasons and game quirks, not what the code obviously does.
 - **Short replies.** End with what changed (a few bullets at most), what to
