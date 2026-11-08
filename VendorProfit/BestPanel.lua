@@ -351,11 +351,13 @@ end
 events:SetScript("OnEvent", BestPanel.Refresh)
 
 -- The Vendor Profit button in the professions window's title bar, left of
--- TradeSkillMaster's button there (TSM puts its own 50 from the right edge),
--- so it reads as being about the whole profession rather than the selected
--- recipe. Opens the Best Crafts tab.
-local TITLE_BUTTON_RIGHT = -133
+-- TradeSkillMaster's button there (TSM's: 50 from the right edge, about 57
+-- wide, 14 high, 4 down), with the same gap and height, so it reads as
+-- being about the whole profession rather than the selected recipe. Opens
+-- the Best Crafts tab.
+local TITLE_BUTTON_RIGHT = -111
 local TITLE_BUTTON_TOP = -4
+local TITLE_BUTTON_HEIGHT = 15
 
 local titleButton
 
@@ -364,7 +366,7 @@ local function CreateTitleButton()
         return
     end
     titleButton = CreateFrame("Button", "VendorProfitProfessionsButton", ProfessionsFrame, "UIPanelButtonTemplate")
-    titleButton:SetSize(96, 18)
+    titleButton:SetSize(96, TITLE_BUTTON_HEIGHT)
     titleButton:SetText(L.BEST_BUTTON)
     titleButton:SetPoint("TOPRIGHT", ProfessionsFrame, "TOPRIGHT", TITLE_BUTTON_RIGHT, TITLE_BUTTON_TOP)
     -- The window's border and title art sit hundreds of levels above the
