@@ -748,6 +748,8 @@ end
 stub.ah.itemKeySearches = {}
 stub.ah.dropBrowse = false
 C_AuctionHouse.SearchForItemKeys = function(keys)
+    -- The server disconnects you for more than 100 item keys at once.
+    if #keys > 100 then error("disconnected: more than 100 item keys in one lookup") end
     local ids = {}
     for _, key in ipairs(keys) do ids[#ids + 1] = key.itemID end
     stub.ah.itemKeySearches[#stub.ah.itemKeySearches + 1] = ids

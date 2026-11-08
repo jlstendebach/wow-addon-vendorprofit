@@ -21,7 +21,7 @@ local L = VendorProfit.L
 local BestCrafts = {}
 VendorProfit.BestCrafts = BestCrafts
 
-BestCrafts.BATCH = 200          -- items per lookup
+BestCrafts.BATCH = 100          -- items per lookup: the server's limit, more disconnects you
 BestCrafts.LOOKUP_TIMEOUT = 15  -- seconds
 BestCrafts.THROTTLE_POLL = 0.2
 
