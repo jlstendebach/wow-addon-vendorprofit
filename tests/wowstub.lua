@@ -178,7 +178,14 @@ function FontMethods:SetFontObject() end
 function FontMethods:SetWordWrap() end
 function FontMethods:SetAllPoints(target) self.__point = { "ALL", target } end
 function FontMethods:SetDesaturated(d) self.__desaturated = d end
-function FontMethods:SetWidth() end
+function FontMethods:SetWidth(w) self.__w = w end
+function FontMethods:GetWidth() return self.__w or 0 end
+function FontMethods:GetLeft() return self.__left or 20 end
+-- Roughly 5 per character, color codes and textures left out.
+function FontMethods:GetStringWidth()
+    local plain = (self.__text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", "")
+    return #plain * 5
+end
 function FontMethods:GetStringHeight() return 12 end
 function FontMethods:ClearAllPoints() self.__point = nil end
 function FontMethods:SetShown(s) self.__shown = not not s end
@@ -214,7 +221,9 @@ function stub.RunTimers() stub.Advance(1) end
 
 -- Tooltip -------------------------------------------------------------------
 GameTooltip = { lines = {}, shown = false }
-function GameTooltip:SetOwner(owner, anchor) self.owner = owner; self.anchor = anchor; self.lines = {} end
+function GameTooltip:SetOwner(owner, anchor) self.owner = owner; self.anchor = anchor; self.point = nil; self.lines = {} end
+function GameTooltip:ClearAllPoints() self.point = nil end
+function GameTooltip:SetPoint(...) self.point = { ... } end
 function GameTooltip:SetText(t) self.lines = { { left = t } } end
 function GameTooltip:AddLine(t) self.lines[#self.lines + 1] = { left = t } end
 function GameTooltip:AddDoubleLine(l, r) self.lines[#self.lines + 1] = { left = l, right = r } end

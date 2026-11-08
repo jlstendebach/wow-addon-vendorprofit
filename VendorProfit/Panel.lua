@@ -97,10 +97,11 @@ local function GetRow(index)
         row.icons = {}
         -- Hovering the row's text, for rows that explain themselves.
         row.hit = CreateFrame("Frame", nil, content)
+        row.hit.text = row.left
         row.hit:EnableMouse(true)
         row.hit:SetScript("OnEnter", function(self)
             if self.tooltip then
-                VendorProfit.SetRowTooltipOwner(self)
+                VendorProfit.SetRowTooltipOwner(self, self.text)
                 self.tooltip(GameTooltip)
                 GameTooltip:Show()
             end
