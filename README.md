@@ -31,7 +31,7 @@ Download the latest `VendorProfit-<version>.zip` from the repository's **Release
 wow-addon-vendorprofit/
     VendorProfit/     <- the addon; copy this folder as-is
     tests/            <- stubbed-client tests
-    .github/          <- the release workflow
+    .github/          <- the test and release workflows
     README.md
 ```
 
@@ -292,15 +292,17 @@ The stub is not the real client. Anything it passes still needs checking in game
 
 ## Contributing
 
-`CLAUDE.md` holds the project's rules and the routine for every change (tests, version bump, README, commit message), for Claude sessions and people alike. Personal additions go in a `CLAUDE.local.md`, which git ignores.
+`CLAUDE.md` holds the project's rules and the routine for every change (tests, version bump, README, branch, commit message, pull request), for Claude sessions and people alike. Personal additions go in a `CLAUDE.local.md`, which git ignores.
+
+`main` is protected: every change goes through a pull request, squash-merged. `.github/workflows/test.yml` checks each pull request: the tests pass, and if the addon changed, its version is higher than `main`'s. If two pull requests bump the version at once, the second one re-bumps from `main` after the first merges.
 
 ## Releases
 
-Releases are automatic. `.github/workflows/release.yml` runs on every push to `main` that changes the addon, and reads `## Version` from `VendorProfit.toc`. If that version hasn't been released yet, it:
+Releases are automatic. `.github/workflows/release.yml` runs on every push to `main` that changes the addon (merging a pull request counts), and reads `## Version` from `VendorProfit.toc`. If that version hasn't been released yet, it:
 
 1. runs the tests (no release if any fail),
 2. checks every file the `.toc` loads is in the folder,
 3. zips the `VendorProfit` folder as `VendorProfit-<version>.zip`,
 4. publishes a GitHub release tagged `v<version>`, titled *Vendor Profit for Auctionator &lt;version&gt;*, with the commit messages since the last release as its notes.
 
-So bumping `## Version` and pushing is the whole release. A push that changes the addon without bumping the version releases nothing (the run says so). It can also be run by hand from the repository's **Actions** tab.
+So bumping `## Version` and merging is the whole release. A push that changes the addon without bumping the version releases nothing (the run says so). It can also be run by hand from the repository's **Actions** tab.
