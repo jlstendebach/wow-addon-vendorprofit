@@ -1629,8 +1629,9 @@ run('''
     __stub.ah.listings[2770] = { { unitPrice = 50, quantity = 50 } }
     __stub.ah.listings[2866] = { { unitPrice = 1300, quantity = 3 } }
     __stub.items["item:2865"].bind = 1
-    VendorProfit.BestCrafts.BATCH = 3
 ''')
+check("batches stay within the server's 100 item limit", ev("VendorProfit.BestCrafts.BATCH") <= 100)
+run("VendorProfit.BestCrafts.BATCH = 3")
 run('__stub.OpenAH()')
 check("scan on at the auction house", ev("" + B + ".scan:IsEnabled()"))
 run("" + B + ".scan:Click()")
