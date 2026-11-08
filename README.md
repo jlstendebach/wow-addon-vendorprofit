@@ -25,12 +25,13 @@ Requires [Auctionator](https://www.curseforge.com/wow/addons/auctionator).
 
 ## Install
 
-Download the latest `VendorProfit-<version>.zip` from the repository's **Releases** and unzip it into `World of Warcraft\_forever_\Interface\AddOns\`. Or copy the `VendorProfit` folder there yourself. Everything in it is the addon. Everything outside it (this README, `tests/`, `.github/`) is for development only.
+Download the latest `VendorProfit-<version>.zip` from the repository's **Releases** and unzip it into `World of Warcraft\_forever_\Interface\AddOns\`. Or copy the `VendorProfit` folder there yourself. Everything in it is the addon. Everything outside it (this README, `tests/`, `scripts/`, `.github/`) is for development only.
 
 ```
 wow-addon-vendorprofit/
     VendorProfit/     <- the addon; copy this folder as-is
     tests/            <- stubbed-client tests
+    scripts/          <- release versioning and version stamping
     .github/          <- the test and release workflows
     README.md
 ```
@@ -294,17 +295,23 @@ The stub is not the real client. Anything it passes still needs checking in game
 
 ## Contributing
 
-`CLAUDE.md` holds the project's rules and the routine for every change (tests, version bump, README, branch, commit message, pull request), for Claude sessions and people alike. Personal additions go in a `CLAUDE.local.md`, which git ignores.
+`CLAUDE.md` holds the project's rules and the routine for every change (tests, README, branch, commit message, pull request), for Claude sessions and people alike. Personal additions go in a `CLAUDE.local.md`, which git ignores.
 
-`main` is protected: every change goes through a pull request, squash-merged. `.github/workflows/test.yml` checks each pull request: the tests pass, and if the addon changed, its version is higher than `main`'s. If two pull requests bump the version at once, the second one re-bumps from `main` after the first merges.
+`main` is protected: every change goes through a pull request. `.github/workflows/test.yml` checks each one: the tests pass, every commit is a [Conventional Commit](https://www.conventionalcommits.org/) (`feat: ...`, `fix: ...`), the `.toc` still says `## Version: @project-version@`, and it notes what merging would release.
 
 ## Releases
 
-Releases are automatic. `.github/workflows/release.yml` runs on every push to `main` that changes the addon (merging a pull request counts), and reads `## Version` from `VendorProfit.toc`. If that version hasn't been released yet, it:
+Releases are automatic, and nobody sets the version by hand. `VendorProfit.toc` says `## Version: @project-version@`; the real version is worked out from the commit messages. Merging into `main` runs `.github/workflows/release.yml`, which, if anything in `VendorProfit/` changed since the last release:
 
-1. runs the tests (no release if any fail),
-2. checks every file the `.toc` loads is in the folder,
-3. zips the `VendorProfit` folder as `VendorProfit-<version>.zip`,
-4. publishes a GitHub release tagged `v<version>`, titled *Vendor Profit for Auctionator &lt;version&gt;*, with the commit messages since the last release as its notes.
+1. works out the version (`scripts/next-version.sh`) from the commits since the last release that changed the addon, the biggest wins:
+   - `feat!:` or `BREAKING CHANGE`: major (1.26.0 → 2.0.0)
+   - `feat:`: minor (1.26.0 → 1.27.0)
+   - anything else: patch (1.26.0 → 1.26.1)
+2. runs the tests (no release if any fail),
+3. stamps the version into the `.toc` inside the zip and checks every file it loads is there,
+4. zips the `VendorProfit` folder as `VendorProfit-<version>.zip`,
+5. publishes a GitHub release tagged `v<version>`, titled *Vendor Profit for Auctionator &lt;version&gt;*, with the commit messages since the last release as its notes.
 
-So bumping `## Version` and merging is the whole release. A push that changes the addon without bumping the version releases nothing (the run says so). It can also be run by hand from the repository's **Actions** tab.
+Merges that only change docs, tests or workflows release nothing. Two people merging at once can't collide: releases run one at a time, each counting up from the last tag. Squash merges count too: their message is the pull request's title, and `Feat - Scope - Title` counts as a `feat`.
+
+**Local copies.** `scripts/stamp-version.ps1` stamps the version from git into a copy of the `.toc`, for deploy scripts: `1.26.0` on a release, `1.26.0-3` three commits past it. Copied by hand, the addon shows `@project-version@`.

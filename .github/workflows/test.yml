@@ -1,8 +1,8 @@
-# Checks every pull request into main: the tests pass, and if the addon
-# changed, its version is higher than main's (so merging it releases it, and
-# two pull requests can't both claim the same version).
+# Checks every pull request into main: the tests pass, every commit is a
+# Conventional Commit (the release version is worked out from them), and the
+# .toc still says @project-version@ (the release stamps the real one).
 #
-# Make "Tests and version" a required status check in main's ruleset, so a
+# "Tests and commits" is a required status check in main's ruleset, so a
 # pull request can't merge until this passes.
 
 name: Test
@@ -13,7 +13,7 @@ on:
 
 jobs:
   test:
-    name: Tests and version
+    name: Tests and commits
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,21 +29,23 @@ jobs:
           pip install lupa
           python tests/test.py
 
-      - name: Version bumped
+      - name: Commit messages
+        # The checkout is the pull request merged into main: its first parent
+        # is main, its second the pull request's branch.
+        run: bash scripts/check-commits.sh HEAD^1 HEAD^2
+
+      - name: Version placeholder
         run: |
-          # The checkout is the pull request merged into main: its first
-          # parent is main as it is now.
-          base=$(git rev-parse HEAD^1)
-          if git diff --quiet "$base" HEAD -- VendorProfit; then
-            echo "The addon didn't change: no version bump needed."
-            exit 0
-          fi
-          read_version() { sed -n 's/^## Version:[[:space:]]*//p' | tr -d '\r[:space:]'; }
-          old=$(git show "$base:VendorProfit/VendorProfit.toc" | read_version)
-          new=$(read_version < VendorProfit/VendorProfit.toc)
-          highest=$(printf '%s\n%s\n' "$old" "$new" | sort -V | tail -n 1)
-          if [ "$new" = "$old" ] || [ "$highest" != "$new" ]; then
-            echo "::error file=VendorProfit/VendorProfit.toc::The addon changed but its version ($new) isn't higher than main's ($old). Bump it from main's version: minor for a feat, patch otherwise."
+          if ! grep -q '^## Version: @project-version@' VendorProfit/VendorProfit.toc; then
+            echo "::error file=VendorProfit/VendorProfit.toc::The version is set when releasing; keep '## Version: @project-version@'."
             exit 1
           fi
-          echo "Version $old -> $new"
+
+      - name: Next release
+        run: |
+          read -r version last < <(bash scripts/next-version.sh) || true
+          if [ -n "${version:-}" ]; then
+            echo "::notice::Merging this releases $version (last release: $last)."
+          else
+            echo "::notice::Merging this releases nothing: the addon didn't change."
+          fi
