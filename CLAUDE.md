@@ -143,8 +143,11 @@ body (except `BREAKING CHANGE: ...` for a major release). Its type decides the
 release (see above), so get it right. If a reply makes unrelated changes,
 suggest a commit for each (`git add` the files of one, commit, then the next).
 
-Then say to open the pull request from the link `git push` prints, and give
-its title and summary, each in its own copyable code block:
+Don't write a pull request with every change: a branch often collects
+several changes before it's merged. Give the pull request's title and summary
+only when the developer asks for them, or makes clear they're ready to open a
+pull request or merge. Then cover everything on the branch since `main`
+(`git log origin/main..HEAD`), each in its own copyable code block:
 
 - **Title:** `<Type> - <Scope> - <Short description>`, short (a few words
   after the scope), for example `Feat - Best Crafts - Show investment` or
