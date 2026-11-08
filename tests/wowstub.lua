@@ -181,6 +181,7 @@ function FontMethods:SetDesaturated(d) self.__desaturated = d end
 function FontMethods:SetWidth(w) self.__w = w end
 function FontMethods:GetWidth() return self.__w or 0 end
 function FontMethods:GetLeft() return self.__left or 20 end
+function FontMethods:GetRight() return self:GetLeft() + self:GetWidth() end
 -- Roughly 5 per character, color codes and textures left out.
 function FontMethods:GetStringWidth()
     local plain = (self.__text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", "")

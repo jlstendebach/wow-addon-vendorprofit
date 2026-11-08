@@ -394,9 +394,10 @@ function VendorProfit.FormatMoney(copper)
     return RED_FONT_COLOR:WrapTextInColorCode("-" .. VendorProfit.FormatCoins(-copper))
 end
 
--- Starts a list row's tooltip just above the row, at the left edge of the
--- column (one of columns, the row's text regions) under the cursor, and moves
--- it along as the cursor crosses into another column.
+-- Starts a list row's tooltip where the game puts one for a button: its
+-- bottom left at the top right of the column (one of columns, the row's text
+-- regions) under the cursor. It moves along as the cursor crosses into
+-- another column.
 function VendorProfit.SetRowTooltipOwner(owner, columns)
     GameTooltip:SetOwner(owner, "ANCHOR_NONE")
     local placedAt
@@ -421,7 +422,7 @@ function VendorProfit.SetRowTooltipOwner(owner, columns)
             end
         end
         column = column or first
-        local x = column and column:GetLeft() - ownerLeft or 0
+        local x = column and column:GetRight() - ownerLeft or 0
         if x ~= placedAt then
             placedAt = x
             GameTooltip:ClearAllPoints()

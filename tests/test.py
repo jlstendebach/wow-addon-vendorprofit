@@ -28,11 +28,11 @@ def check(label, cond):
     print(("PASS " if cond else "FAIL ") + label)
 
 def tooltip_at(owner, region):
-    """The tooltip sits on top of the row, at the left edge of region."""
+    """The tooltip sits on top of the row, from the top right of region."""
     point = ev("GameTooltip.point")
     return (ev("GameTooltip.anchor") == "ANCHOR_NONE" and point is not None
             and point[1] == "BOTTOMLEFT" and ev("GameTooltip.point[2] == %s" % owner) and point[3] == "TOPLEFT"
-            and point[4] == ev("%s:GetLeft() - %s:GetLeft()" % (region, owner)) and point[5] == 0)
+            and point[4] == ev("%s:GetRight() - %s:GetLeft()" % (region, owner)) and point[5] == 0)
 
 
 
@@ -634,7 +634,7 @@ run(Q1 + '.hit:GetScript("OnEnter")(' + Q1 + '.hit)')
 tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
 check("hover: the item, a gap, then its cost and its vendor and auction profit, nothing more",
       [t[0] for t in tip[1:]] == [" ", "Cost (cheapest route)", "Vendor profit", "Auction profit"])
-check("...above the row, at the name's left edge", tooltip_at(Q1 + ".hit", Q1 + ".left"))
+check("...above the row, from the name's top right", tooltip_at(Q1 + ".hit", Q1 + ".left"))
 check("makes money: name not red", not ev(Q1 + ".left:GetText()").startswith("|cffff2020"))
 run('__stub.items["item:2866"].sellPrice = 1; __stub.auctionPrices[2866] = 1; VendorProfit.Order.Changed()')
 check("neither vendor nor auction makes money: name in red", ev('VendorProfit.Panel.FindRow("Rough Bronze Cuirass x1").left:GetText()').startswith("|cffff2020"))
@@ -1175,7 +1175,7 @@ run('VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnEnter")()')
 tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
 check("hover: what was bought and what was your own items at market value", ("Bought", "|cffffffff0c|r") in tip
       and ("Your own items, at market value", ev('VendorProfit.FormatMoney(%d)' % round(market))) in tip)
-check("...above the row, at the left edge of the column under the cursor", tooltip_at("VendorProfit.HistoryPanel.Row(1).hit", "VendorProfit.HistoryPanel.Row(1).cost"))
+check("...above the row, from the top right of the column under the cursor", tooltip_at("VendorProfit.HistoryPanel.Row(1).hit", "VendorProfit.HistoryPanel.Row(1).cost"))
 run('__stub.cursorX = 90; VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnUpdate")(VendorProfit.HistoryPanel.Row(1).hit)')
 check("...moving along as the cursor crosses into another column", tooltip_at("VendorProfit.HistoryPanel.Row(1).hit", "VendorProfit.HistoryPanel.Row(1).item"))
 run('__stub.cursorX = 0; VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnUpdate")(VendorProfit.HistoryPanel.Row(1).hit)')
@@ -1210,7 +1210,7 @@ run('local r = VendorProfit.PurchasePanel.Row(1); r.hit.__left = 10; r.date.__le
     'r.each.__left = 340; r.total.__left = 400; r.market.__left = 460; __stub.cursorX = 120')
 run('VendorProfit.PurchasePanel.Row(1).hit:GetScript("OnEnter")()')
 check("hover: what you paid each, and the cheapest now", ("You paid each", "|cffffffff1s 50c|r") in [(l.left, l.right) for l in ev("GameTooltip.lines").values()])
-check("...above the row, at the left edge of the column under the cursor", tooltip_at("VendorProfit.PurchasePanel.Row(1).hit", "VendorProfit.PurchasePanel.Row(1).item"))
+check("...above the row, from the top right of the column under the cursor", tooltip_at("VendorProfit.PurchasePanel.Row(1).hit", "VendorProfit.PurchasePanel.Row(1).item"))
 run('VendorProfitCharDB.history.purchases = {}; VendorProfit.Panel.Refresh()')
 check("none yet: says where they come from", ev("VendorProfit.PurchasePanel.Frame().empty:IsShown()"))
 run('SlashCmdList.VENDORPROFIT("purchases")')
