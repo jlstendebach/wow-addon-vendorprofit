@@ -56,7 +56,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "Panel.lua", "BestCrafts.lua", "BestPanel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "History.lua", "Panel.lua", "BestCrafts.lua", "BestPanel.lua", "HistoryPanel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
 run('__stub.Fire("TRADE_SKILL_SHOW")')
@@ -1005,6 +1005,98 @@ check("Best Crafts busy: straight to the listings", not ev("VendorProfit.Shopper
 run('__stub.Advance(3)')
 check("...and done", ev("VendorProfit.Shopper.Status()") == "ready" and ev(BUY + ".tooltip").startswith("Buy 24 Copper Ore"))
 run('__stub.CloseAH()')
+check("no errors", ev("#__stub.errors") == 0)
+
+
+# --- Profit history ---------------------------------------------------------------------
+# Test Ring: one Copper Bar makes one, which sells to a vendor for 2s.
+RING2 = """{ recipeID = 9201, itemLink = "item:2903", quantityMin = 1, reagents = { { itemID = 2840, quantity = 1 } } }"""
+def history_client():
+    run, ev = shop_client()
+    run('__stub.items["item:2903"] = { name = "Test Ring", cached = true, sellPrice = 200 }')
+    run('__stub.items["item:2840"].name = "Copper Bar"')
+    run('__stub.bags[2840] = 0; __stub.bank[2840] = 0')
+    run('__stub.OpenProfession(164, "Blacksmithing", { %s, %s }); __stub.Advance(1)' % (CUIRASS, RING2))
+    return run, ev
+craft = lambda run: run('__stub.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 9201)')
+H = "VendorProfit.History"
+run, ev = history_client()
+run('VendorProfit.Panel.Show("history")')
+check("history tab: empty to start, saying what it tracks", ev("VendorProfit.Panel.ActiveTab()") == "history"
+      and ev("VendorProfit.HistoryPanel.Frame().empty:IsShown()") and ev("VendorProfitPanel.tabs.history.label") == "Profit History")
+
+# Day 1: buy a Copper Bar at auction for 1s (taken from its mail), craft, sell to a vendor for 2s.
+run('__stub.invoiceMails = { { itemID = 2840, n = 1, subject = "Auction won: Copper Bar", invoice = { type = "buyer", itemName = "Copper Bar", bid = 100, count = 1 } } }')
+run('__stub.Fire("MAIL_INBOX_UPDATE"); TakeInboxItem(1)')
+check("auction purchase recorded at what you paid, from its mail", ev(H + ".Recorded(2840)") == 1
+      and ev("VendorProfitCharDB.history.stock[2840][1].cost") == 100)
+run('TakeInboxItem(1)')
+check("taking the same mail twice records it once", ev(H + ".Recorded(2840)") == 1)
+craft(run)
+check("craft: the bar's cost goes into the ring", ev(H + ".Recorded(2840)") == 0 and ev(H + ".Recorded(2903)") == 1
+      and ev("VendorProfitCharDB.history.stock[2903][1].cost") == 100)
+run('__stub.bags[2903] = 1; __stub.OpenMerchant({})')
+run('__stub.SellItem(2903, 1)')
+sales = lambda: [dict(sale.items()) for sale in ev(H + ".Sales()").values()]
+check("vendor sale recorded from the buyback list: cost 1s, sold 2s", [(x["n"], x["how"], x["cost"], x["sold"], x["bought"]) for x in sales()]
+      == [(1, "vendor", 100, 200, 100)])
+
+# Day 2: the bar costs 1s 50c from a vendor; the ring sells at auction for 1s 90c less a 10c cut.
+run('__stub.CloseMerchant(); __stub.OpenMerchant({ { itemID = 2840, price = 150 } })')
+run('BuyMerchantItem(1, 1)')
+check("vendor purchase recorded at what you paid", ev(H + ".Recorded(2840)") == 1 and ev("VendorProfitCharDB.history.stock[2840][1].cost") == 150)
+run('__stub.CloseMerchant()')
+craft(run)
+run('__stub.invoiceMails = { { money = 180, subject = "Auction successful: Test Ring", invoice = { type = "seller", itemName = "Test Ring", bid = 190, consignment = 10, count = 1 } } }')
+run('__stub.Fire("MAIL_INBOX_UPDATE"); TakeInboxMoney(1)')
+check("auction sale recorded when its money is taken: 1s 90c less the 10c cut, against the 1s 50c it cost",
+      [(x["how"], x["cost"], x["sold"]) for x in sales()] == [("auction", 150, 180), ("vendor", 100, 200)])
+
+# A craft from your own bars: valued at market (Auctionator: 1s 20c), none of it bought.
+run('__stub.auctionPrices[2840] = 120')
+craft(run)
+market = ev("VendorProfit.Route.UnitCost(2840)")
+check("own reagents at market value (the cheapest way to get one now)", market > 0
+      and ev("VendorProfitCharDB.history.stock[2903][1].cost") == market and ev("VendorProfitCharDB.history.stock[2903][1].bought") == 0)
+
+# Selling and buying back: undone.
+run('__stub.bags[2903] = 1; __stub.OpenMerchant({})')
+run('__stub.SellItem(2903, 1)')
+check("sold again", len(sales()) == 3)
+run('BuybackItem(#__stub.buyback); __stub.Advance(0.1)')
+check("bought back: that sale is gone, its cost back on the ring", len(sales()) == 2 and ev(H + ".Recorded(2903)") == 1)
+run('__stub.SellItem(2903, 1)')
+check("sold once more after the buyback: one new sale", len(sales()) == 3 and sales()[0]["cost"] == round(market))
+run('__stub.bags[2903] = 1; __stub.SellItem(2903, 1)')
+check("selling one with no recorded cost (made before tracking): left out", len(sales()) == 3)
+run('__stub.CloseMerchant()')
+
+# The tab: newest first, totals, a breakdown on hover.
+run('VendorProfit.Panel.Show("history")')
+rows = list(ev("VendorProfit.HistoryPanel.Lines()").values())
+check("listed newest first: date, item, how, cost, sold for, profit", len(rows) == 3
+      and rows[1].endswith("|cffffffff1s 50c|r | |cffffffff1s 80c|r | |cffffffff30c|r") and " | Auction | " in rows[1]
+      and " | Vendor | " in rows[2] and rows[2].endswith("|cffffffff1s|r | |cffffffff2s|r | |cffffffff1s|r"))
+total = ev('VendorProfit.FormatMoney(%d)' % (100 + 30 + 200 - round(market)))
+check("totals: all of it and the last 7 days", ev("VendorProfit.HistoryPanel.Frame().total:GetText()")
+      == "Profit: %s from 3 sales. Last 7 days: %s." % (total, total))
+run('VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnEnter")()')
+tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
+check("hover: what was bought and what was your own items at market value", ("Bought", "|cffffffff0c|r") in tip
+      and ("Your own items, at market value", ev('VendorProfit.FormatMoney(%d)' % round(market))) in tip)
+check("window wider for the history's columns", ev("VendorProfitPanel:GetWidth()") == 540)
+run('SlashCmdList.VENDORPROFIT("history")')
+check("/vprofit history toggles it", not ev("VendorProfit.Panel.IsShown()"))
+
+# Bought reagents that go some other way (mailed to an alt) stop counting, once things settle.
+run('__stub.CloseMerchant(); __stub.OpenMerchant({ { itemID = 2840, price = 150 } }); BuyMerchantItem(1, 2); __stub.CloseMerchant()')
+run('__stub.bags[2840] = 0; __stub.Advance(7); __stub.Fire("BAG_UPDATE_DELAYED"); __stub.Advance(7)')
+check("reagents you no longer have stop counting", ev(H + ".Recorded(2840)") == 0)
+craft(run)
+run('__stub.bags[2903] = 0; __stub.Advance(7); __stub.Fire("BAG_UPDATE_DELAYED"); __stub.Advance(7)')
+check("crafted items out of your bags still count (they may be up for auction)", ev(H + ".Recorded(2903)") == 1)
+run('__stub.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 12345)')
+check("other spells aren't crafts", ev(H + ".Recorded(2903)") == 1)
 check("no errors", ev("#__stub.errors") == 0)
 
 

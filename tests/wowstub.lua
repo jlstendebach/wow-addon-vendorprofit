@@ -622,16 +622,63 @@ function stub.CloseBank() BankFrame:Hide(); stub.Fire("BANKFRAME_CLOSED") end
 
 -- Mailbox: one mail per item in stub.mail, the item as its only attachment.
 ATTACHMENTS_MAX_RECEIVE = 16
+-- Then stub.invoiceMails: auction mails, { itemID, n, money, invoice =
+-- { type, itemName, bid, consignment, count }, subject }, emptied by taking.
+stub.invoiceMails = {}
 local function Mails()
     local list = {}
     for id, n in pairs(stub.mail) do if n > 0 then list[#list + 1] = { id, n } end end
     table.sort(list, function(a, b) return a[1] < b[1] end)
+    for _, mail in ipairs(stub.invoiceMails) do
+        if (mail.n or 0) > 0 or (mail.money or 0) > 0 then
+            list[#list + 1] = { mail.itemID, mail.n or 0, mail = mail }
+        end
+    end
     return list
 end
 function GetInboxNumItems() local n = #Mails() return n, n end
 function GetInboxItem(index, attachment)
     local m = Mails()[index]
-    if m and attachment == 1 then return "item", m[1], "icon", m[2] end
+    if m and attachment == 1 and m[2] > 0 then return "item", m[1], "icon", m[2] end
+end
+function GetInboxHeaderInfo(index)
+    local m = Mails()[index]
+    if m == nil then return end
+    local mail = m.mail or {}
+    return nil, nil, "Auction House", mail.subject or "mail", mail.money or 0, 0, 30
+end
+function GetInboxInvoiceInfo(index)
+    local m = Mails()[index]
+    local invoice = m and m.mail and m.mail.invoice
+    if invoice == nil then return nil end
+    return invoice.type, invoice.itemName, "Someone", invoice.bid, invoice.bid, 0, invoice.consignment or 0, 0, 0, 0, invoice.count
+end
+function TakeInboxItem(index)
+    local m = Mails()[index]
+    if m == nil then return end
+    if m.mail then
+        stub.bags[m[1]] = (stub.bags[m[1]] or 0) + m[2]
+        m.mail.n = 0
+    else
+        stub.bags[m[1]] = (stub.bags[m[1]] or 0) + m[2]
+        stub.mail[m[1]] = 0
+    end
+end
+function TakeInboxMoney(index)
+    local m = Mails()[index]
+    if m and m.mail then
+        stub.money = stub.money + (m.mail.money or 0)
+        m.mail.money = 0
+    end
+end
+function AutoLootMailItem(index)
+    local m = Mails()[index]
+    if m == nil then return end
+    if m.mail and (m.mail.money or 0) > 0 then
+        stub.money = stub.money + m.mail.money
+    end
+    if m.mail then m.mail.money = 0 end
+    TakeInboxItem(index)
 end
 
 -- Batch lookups (browse results): one result per listed item, lowest price and
@@ -710,6 +757,31 @@ function BuyMerchantItem(index, quantity)
         Deliver()
         C_Timer.After(0, function() stub.Fire("BAG_UPDATE_DELAYED") end)
     end
+end
+-- The buyback list: selling puts things on it (12 at most), buying back
+-- takes them off.
+stub.buyback = {}
+function GetNumBuybackItems() return #stub.buyback end
+function GetBuybackItemInfo(index)
+    local b = stub.buyback[index]
+    if b then return "item", "icon", b.price, b.n end
+end
+function GetBuybackItemLink(index) local b = stub.buyback[index]; return b and ("item:" .. b.itemID) end
+function BuybackItem(index)
+    local b = table.remove(stub.buyback, index)
+    stub.money = stub.money - b.price
+    stub.bags[b.itemID] = (stub.bags[b.itemID] or 0) + b.n
+    -- The game says so a moment later.
+    C_Timer.After(0, function() stub.Fire("MERCHANT_UPDATE") end)
+end
+function stub.SellItem(itemID, n)
+    local price = (stub.items["item:" .. itemID].sellPrice or 0) * n
+    stub.bags[itemID] = (stub.bags[itemID] or 0) - n
+    stub.money = stub.money + price
+    stub.buyback[#stub.buyback + 1] = { itemID = itemID, n = n, price = price }
+    if #stub.buyback > 12 then table.remove(stub.buyback, 1) end
+    stub.Fire("MERCHANT_UPDATE")
+    stub.Fire("BAG_UPDATE_DELAYED")
 end
 function stub.OpenMerchant(items)
     stub.merchant = items

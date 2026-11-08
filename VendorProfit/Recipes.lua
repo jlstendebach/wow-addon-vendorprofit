@@ -28,10 +28,12 @@ Recipes.SCAN_DELAY = 0.5
 
 local db                -- VendorProfitCharDB, once loaded
 local byItem = {}       -- itemID -> { recipe, ... }: saved fields plus recipeID, profession
+local byRecipe = {}     -- recipeID -> the same entry
 local NONE = {}
 
 local function RebuildIndex()
     byItem = {}
+    byRecipe = {}
     for _, profession in pairs(db.professions) do
         for recipeID, saved in pairs(profession.recipes) do
             local list = byItem[saved.item]
@@ -39,13 +41,15 @@ local function RebuildIndex()
                 list = {}
                 byItem[saved.item] = list
             end
-            list[#list + 1] = {
+            local entry = {
                 recipeID = recipeID,
                 profession = profession.name,
                 item = saved.item,
                 count = saved.count,
                 reagents = saved.reagents,
             }
+            list[#list + 1] = entry
+            byRecipe[recipeID] = entry
         end
     end
     -- A fixed order, so ties between recipes always pick the same one.
@@ -74,6 +78,11 @@ function Recipes.ReagentsFromSchematic(recipeSchematic)
 end
 
 -- Known recipes that make an item.
+-- A saved recipe by its ID (the craft's spell ID), or nil.
+function Recipes.Get(recipeID)
+    return byRecipe[recipeID]
+end
+
 function Recipes.ForItem(itemID)
     return byItem[itemID] or NONE
 end

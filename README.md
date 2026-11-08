@@ -196,6 +196,31 @@ The buttons for each part sit on their section's heading, with short labels; hov
 
 The order is saved per character. **Remove** takes a recipe out; removing the last one empties the order and its record.
 
+## Profit History
+
+The window's **Profit History** tab (or `/vprofit history`) lists every sale of something you crafted, newest first: the date, the item, whether it sold to a vendor or at auction, what it cost you, what it sold for and the profit. Totals for everything and for the last 7 days are at the top. Hover a sale to see its cost split into what you bought and your own items.
+
+```
+Profit History
+Profit: 2s 80c from 3 sales. Last 7 days: 2s 80c.
+Date    Item          Sold to     Cost   Sold for    Profit
+Nov 08  Test Ring     Vendor       50c         2s    1s 50c
+Nov 08  Test Ring     Auction   1s 50c     1s 80c       30c
+Nov 07  Test Ring     Vendor        1s         2s        1s
+```
+
+Costs follow the items, so each sale has its own cost, not today's prices:
+
+- **Bought** items cost exactly what you paid. Auction house purchases are read from their mail when you take the item out of the mailbox, however you bought them; vendor purchases when you buy, from any vendor.
+- **Your own** items (farmed, owned before installing, from an alt or a trade) cost their market value at the moment a craft uses them: the cheapest way to get one right then, which is what using it instead of selling it cost you.
+- **Crafted** items cost what their reagents cost, used up oldest first. Bars smelted from bought ore carry the ore's exact cost into whatever they make.
+
+Sales use up the item's costs oldest first. Vendor sales are read from the vendor's buyback list, with the exact price; buying something back undoes its sale. Auction sales are read from the "Auction successful" mail when you take its money: the sale price less the auction house's cut (the deposit comes back with it, so it cancels out). So an auction sale only shows up once you've collected it.
+
+- Only crafts made since installing are tracked. Selling something made before that leaves it out rather than inventing a cost.
+- Bought reagents that leave some other way (mailed to an alt, destroyed) stop counting once you no longer have them. Crafted items out of your bags keep counting, since they may be up for auction.
+- The last 500 sales are kept, per character.
+
 ## How it works
 
 - Auctionator makes its crafting info frame (`AuctionatorCraftingInfoProfessionsFrame`) the first time the professions window opens. The addon hooks the function that makes it, attaches right after, and retries on the next frame in case it sees the event first.
@@ -227,6 +252,8 @@ Files:
 | `Panel.lua` | The Vendor Profit window and its tabs, the Shopping List tab, moving it, and `/vprofit` |
 | `BestCrafts.lua` | Ranking a profession's recipes, and the batch price lookup |
 | `BestPanel.lua` | The Best Crafts tab, and the button in the professions window's title bar |
+| `History.lua` | Profit history: what items cost you as they come in, and their sales |
+| `HistoryPanel.lua` | The Profit History tab |
 
 Saved data, per character (`VendorProfitCharDB`):
 
@@ -234,6 +261,7 @@ Saved data, per character (`VendorProfitCharDB`):
 - `order = { entries, inMail, lastSeen, spent }`: the queued crafts, purchases not seen in bags or bank yet (and the count they're waiting to rise from), and what the panel spent.
 - `panel = { left, top }`: where you moved the Vendor Profit window, if you did.
 - `bestSort = { key, ascending }`: how Best Crafts is sorted.
+- `history = { stock, sales }`: the profit history: what the items you have cost you, and your sales.
 
 Opening a profession uses a secure action button casting the profession's spell, as TradeSkillMaster does in Forever. It's a separate invisible button laid over the Craft button rather than part of the panel, because a secure button inside the panel would make the panel protected and the game would block showing, hiding or moving it in combat. It's only placed out of combat and hidden as combat starts.
 

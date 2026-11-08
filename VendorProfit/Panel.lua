@@ -898,6 +898,8 @@ SlashCmdList.VENDORPROFIT = function(arg)
         Panel.Show()
     elseif command == "best" then
         Panel.Toggle("best")
+    elseif command == "history" then
+        Panel.Toggle("history")
     else
         Panel.Toggle()
     end

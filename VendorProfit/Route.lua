@@ -116,6 +116,12 @@ function Resolve(itemID, visiting, depth, getBuyPrices)
     return best
 end
 
+-- What one of an item is worth along its cheapest route right now (buying
+-- it, or crafting it if that's cheaper), or nil if nothing prices it.
+function Route.UnitCost(itemID)
+    return Resolve(itemID, {}, 1, VendorProfit.GetBuyPrices).unitCost
+end
+
 -- The cheapest route for one craft of a recipe that makes outputItemID from
 -- reagents (Recipes.ReagentsFromSchematic format). Returns
 --   { cost = copper for one craft, children = ..., missing = bool }
