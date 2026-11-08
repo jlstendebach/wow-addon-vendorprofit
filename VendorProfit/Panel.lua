@@ -85,6 +85,14 @@ local function GetRow(index)
         -- Disabled buttons still show their tooltip, to say why.
         row.button:SetMotionScriptsWhileDisabled(true)
         row.button:SetScript("OnEnter", function(self)
+            -- The mouse only reaches the Craft button when the open-profession
+            -- cover isn't over it: the window moved under it (the professions
+            -- window it's docked to changed, or the display did), or it was
+            -- hidden without the panel redrawing. Put it back under the mouse
+            -- so the click opens the profession.
+            if craftCover and craftCover.button == self and not Order.IsEmpty() then
+                self:SetEnabled(OpenButton.Cover(self, craftCover.profession))
+            end
             if self.tooltip then
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:SetText(self.tooltip, 1, 1, 1, 1, true)
@@ -929,6 +937,9 @@ local function Refresh()
             frame:SetHeight(math.max(def.refresh(pages[def.name]), MinHeight()))
         end
     end
+    -- The cover was placed while laying out; the new height can move a
+    -- centered window.
+    OpenButton.Follow()
 end
 
 function Panel.Refresh()

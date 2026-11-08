@@ -964,6 +964,28 @@ run('__stub.bags[2840] = 0; __stub.bags[3576] = 0; __stub.bags[2841] = 14; __stu
 check("bronze made: the cuirass is in blacksmithing", ev(CRAFT + ".__text") == "Open Blacksmithing"
       and ev(CRAFT + ".tooltip") == "Open Blacksmithing to craft Rough Bronze Cuirass")
 check("cover casts Blacksmithing", ev(OPEN + ':GetAttribute("spell")') == "Blacksmithing" and ev(OPEN + ":IsShown()"))
+# The window moves under the cover without a redraw: the mouse reaches the
+# real button, which puts the cover back under it.
+run(CRAFT + '.__left = 400')
+run(CRAFT + '.__scripts.OnEnter(' + CRAFT + ')')
+check("cover left behind: hovering the button puts it back over it", ev(OPEN + ":IsShown()")
+      and ev(OPEN + ".__point[4]") == 400 and ev(CRAFT + ":IsEnabled()"))
+run(OPEN + ':Hide()')
+run(CRAFT + '.__scripts.OnEnter(' + CRAFT + ')')
+check("...and when it was hidden without a redraw", ev(OPEN + ":IsShown()"))
+run(CRAFT + '.__left = 500')
+run('__stub.Fire("DISPLAY_SIZE_CHANGED")')
+check("the display changing (alt-tab) places it again", ev(OPEN + ".__point[4]") == 500)
+run(CRAFT + '.__left = nil; VendorProfit.Panel.Refresh()')
+# The panel moves under it with no redraw (its dock moved): the cover follows.
+run(CRAFT + '.__left = 300; ' + CRAFT + '.__bottom = 200; VendorProfit.OpenButton.Follow()')
+check("the button moves: the cover follows it", ev(OPEN + ".__point[4]") == 300 and ev(OPEN + ".__point[5]") == 200)
+run(CRAFT + '.__left = nil; ' + CRAFT + '.__bottom = nil; VendorProfit.OpenButton.Follow()')
+check("...back again", ev(OPEN + ".__point[4]") == ev(CRAFT + ":GetLeft()"))
+run('__craft = ' + CRAFT + '; __craft:Hide(); VendorProfit.OpenButton.Follow()')
+check("the button gone from view: the cover goes too", not ev(OPEN + ":IsShown()"))
+run('__craft:Show(); VendorProfit.Panel.Refresh()')
+check("...and comes back with it", ev(OPEN + ":IsShown()"))
 run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
 check("blacksmithing open: craft the cuirasses", ev(CRAFT + ".tooltip") == "Craft Rough Bronze Cuirass, 2 times")
 run('VendorProfit.Order.Clear()')

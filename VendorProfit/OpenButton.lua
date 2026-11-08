@@ -20,8 +20,11 @@ VendorProfit.OpenButton = OpenButton
 local MINING_SPELL, SMELTING_SPELL = 2575, 2656
 
 local button
+local target             -- the button it's laid over
+local placed             -- where it was put: "left,bottom,width,height"
 local opening            -- { profession, expires } after a click, until it opens
 local OPENING_TIMEOUT = 3
+local FOLLOW_INTERVAL = 0.1
 
 local function SpellName(spellID)
     if C_Spell and C_Spell.GetSpellName then
@@ -86,9 +89,30 @@ function OpenButton.Opened()
     opening = nil
 end
 
--- Lays the secure button over target so clicking target opens profession.
+-- Puts the secure button exactly over over. Placed on the screen, not
+-- anchored to it: anchoring a secure frame to the panel would make the panel
+-- protected too. So it doesn't move with the panel by itself; Follow moves it.
+local function Place(over)
+    local left, bottom = over:GetLeft(), over:GetBottom()
+    if left == nil or bottom == nil then
+        return false
+    end
+    local scale = over:GetEffectiveScale() / UIParent:GetEffectiveScale()
+    local width, height = over:GetWidth() * scale, over:GetHeight() * scale
+    left, bottom = left * scale, bottom * scale
+    local where = string.format("%.1f,%.1f,%.1f,%.1f", left, bottom, width, height)
+    if where ~= placed or target ~= over then
+        button:ClearAllPoints()
+        button:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", left, bottom)
+        button:SetSize(width, height)
+        placed, target = where, over
+    end
+    return true
+end
+
+-- Lays the secure button over a button so clicking it opens profession.
 -- Does nothing in combat. Returns true if it's in place.
-function OpenButton.Cover(target, profession)
+function OpenButton.Cover(over, profession)
     if InCombatLockdown() then
         return false
     end
@@ -96,17 +120,10 @@ function OpenButton.Cover(target, profession)
         Create()
     end
     local spell = OpenButton.SpellFor(profession)
-    local left, bottom = target:GetLeft(), target:GetBottom()
-    if spell == nil or left == nil or bottom == nil then
+    if spell == nil or not Place(over) then
         button:Hide()
         return false
     end
-    -- Placed on the screen, not anchored to target: anchoring a secure frame
-    -- to the panel would make the panel protected too.
-    local scale = target:GetEffectiveScale() / UIParent:GetEffectiveScale()
-    button:ClearAllPoints()
-    button:SetPoint("BOTTOMLEFT", UIParent, "BOTTOMLEFT", left * scale, bottom * scale)
-    button:SetSize(target:GetWidth() * scale, target:GetHeight() * scale)
     button:SetAttribute("type", "spell")
     button:SetAttribute("spell", spell)
     button.profession = profession
@@ -120,14 +137,41 @@ function OpenButton.Hide()
     end
 end
 
+-- Keeps the cover over its button when the panel moves without redrawing:
+-- the window it's docked to moves (the game shifts the professions window as
+-- others open beside it), or its height changes while it's centered. Gone
+-- from view: the cover goes too.
+function OpenButton.Follow()
+    if button == nil or not button:IsShown() or target == nil or InCombatLockdown() then
+        return
+    end
+    if not target:IsVisible() or not Place(target) then
+        button:Hide()
+    end
+end
+
+local follower = CreateFrame("Frame")
+local sinceFollow = 0
+follower:SetScript("OnUpdate", function(_, elapsed)
+    sinceFollow = sinceFollow + elapsed
+    if sinceFollow >= FOLLOW_INTERVAL then
+        sinceFollow = 0
+        OpenButton.Follow()
+    end
+end)
+
 function OpenButton.IsShown()
     return button ~= nil and button:IsShown()
 end
 
 -- Combat is about to start: the last moment the secure button can be hidden.
+-- After combat, or when the screen's size or the UI scale changes (which can
+-- happen on alt-tab), the panel redraws and the cover is placed again.
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_REGEN_DISABLED")
 events:RegisterEvent("PLAYER_REGEN_ENABLED")
+pcall(events.RegisterEvent, events, "DISPLAY_SIZE_CHANGED")
+pcall(events.RegisterEvent, events, "UI_SCALE_CHANGED")
 events:SetScript("OnEvent", function(_, event)
     if event == "PLAYER_REGEN_DISABLED" then
         if button then
