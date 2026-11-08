@@ -58,6 +58,7 @@ LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 # --- Loading and attaching ---------------------------------------------------
 check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "History.lua", "Panel.lua", "BestCrafts.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
+check("the .toc keeps the placeholder; releases and deploys stamp the real version", TOC_VERSION == "@project-version@")
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
 run('__stub.Fire("TRADE_SKILL_SHOW")')
 check("attached when Auctionator makes its frame", ev("VendorProfit.IsAttached()"))

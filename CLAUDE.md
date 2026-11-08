@@ -56,49 +56,79 @@ file; read it before changing anything.
    ```
    They load the addon into a stubbed client (`tests/wowstub.lua`); extend the
    stub when the addon uses something new.
-2. **Bump the version** in `VendorProfit/VendorProfit.toc` (`## Version:`)
-   with every change to the addon, without being asked, counting up from the
-   version on `main`:
-   - `feat` (something new a player can see or do): minor, `1.24.1` -> `1.25.0`
-   - `fix`, `perf`, `refactor` and other changes to the addon: patch,
-     `1.24.1` -> `1.24.2`
-   - changes outside `VendorProfit/` only (tests, README, workflows): no bump.
+2. **Never set the version.** `VendorProfit.toc` says
+   `## Version: @project-version@`, and stays that way: the release works the
+   version out from the commit messages (see Releases). The PR check fails if
+   the line changes.
 3. **Update the README** wherever the change shows.
 4. If files were added or removed in `VendorProfit/`, say to restart WoW
    rather than `/reload` (the game only reads the file list at startup).
 5. **Suggest the commands** (see below). Don't commit, push or merge yourself;
    the developer runs them.
 
+## Releases come from commit messages
+
+Merging into `main` releases the addon if anything in `VendorProfit/` changed
+since the last release (`.github/workflows/release.yml`). The version is
+worked out from the commits that changed the addon since then
+(`scripts/next-version.sh`), the biggest wins:
+
+| Commit | Release | Example |
+|---|---|---|
+| `feat!: ...`, or `BREAKING CHANGE` in the body | major | 1.26.0 -> 2.0.0 |
+| `feat: ...` | minor | 1.26.0 -> 1.27.0 |
+| anything else that changed the addon | patch | 1.26.0 -> 1.26.1 |
+| changes outside `VendorProfit/` only | none | |
+
+So **the commit message decides the release**; choose the type with care:
+
+- `feat`: something new a player can see or do. Not a tweak to wording or
+  layout of something that exists (that's `fix` or `refactor`).
+- `fix`: something that didn't work, or worked wrong, now does.
+- `perf`: faster, same behavior. `refactor`: restructured, same behavior.
+- `docs`, `test`, `ci`, `chore`: no player-facing change. Even these release
+  a patch if they touch `VendorProfit/`, so an addon change always ships.
+- `!` after the type (`feat!:`) only for changes that break saved data or
+  how players use the addon.
+
+One commit per change: don't mix a feature and an unrelated fix in one
+commit, so each gets its own type and its own line in the release notes. The
+release notes are the commit messages, so write them for players to read.
+
+The PR check (`.github/workflows/test.yml`) runs the tests, fails any commit
+that isn't a Conventional Commit, and notes what merging would release.
+
+Deploying locally stamps the version from git (`scripts/stamp-version.ps1`):
+`1.26.0` on a release, `1.26.0-3` three commits past it.
+
 ## Branches and pull requests
 
 `main` is protected: changes reach it only through a pull request, and the
-**Test** check (`.github/workflows/test.yml`) must pass: the tests, and, if
-the addon changed, a version higher than `main`'s. Merging releases it
-(`.github/workflows/release.yml`): a zip and a GitHub release tagged with the
-version, with the commit messages as its notes.
+**Tests and commits** check must pass.
 
 - One branch per change, named after its commit: `feat/investment-column`,
-  `fix/one-click-open`.
-- **Squash-merge** pull requests, so `main` (and the release notes) get one
-  line per change: the pull request's title.
+  `fix/one-click-open`. A long-lived personal branch is fine too; merge it
+  with a merge commit so its commits (and their types) reach `main`.
+- **Squash-merge** per-change branches. The squash commit's message is the
+  pull request's title, and the release reads that format too
+  (`Feat - Best Crafts - ...` counts as a `feat`), so the title's type must
+  match the branch's biggest change.
 - **If `main` moved on** (someone else merged first), bring the branch up to
   date before merging:
   ```
   git pull --rebase origin main
-  ```
-  If `VendorProfit.toc` conflicts, both changes bumped the version: take
-  `main`'s version and bump again from it (never keep your own number), then:
-  ```
-  git add VendorProfit/VendorProfit.toc
-  git rebase --continue
   git push --force-with-lease
   ```
+- **A commit message is wrong** (the check fails, or the type is off): fix it
+  before merging with `git rebase -i origin/main` (mark it `reword`), then
+  `git push --force-with-lease`.
 
 ## The commands
 
 End every reply that changes files with one copyable code block, one command
 per line (no `&&`, which fails in Windows PowerShell 5.1). On `main`, start a
-branch first; on the change's own branch, leave that line out:
+branch first; on the change's own branch (or a personal branch), leave that
+line out:
 
 ```
 git switch -c feat/investment-column
@@ -107,21 +137,22 @@ git commit -m "feat: show investment in best crafts"
 git push -u origin HEAD
 ```
 
+The commit message is a short [Conventional Commit](https://www.conventionalcommits.org/):
+`type: what changed`, lowercase, under about 50 characters, no period, no
+body (except `BREAKING CHANGE: ...` for a major release). Its type decides the
+release (see above), so get it right. If a reply makes unrelated changes,
+suggest a commit for each (`git add` the files of one, commit, then the next).
+
 Then say to open the pull request from the link `git push` prints, and give
 its title and summary, each in its own copyable code block:
 
-- **Title:** `<Type> - <Scope> - <Short description>`, for example
-  `Feat - Best Crafts - Show investment per craft` or
-  `Fix - Shopping List - Open professions with one click`. The type is the
-  commit's, capitalized (`Feat`, `Fix`, `Perf`, `Refactor`, `Test`, `Docs`,
-  `CI`, `Chore`); the scope is the part of the addon (`Best Crafts`,
+- **Title:** `<Type> - <Scope> - <Short description>`, short (a few words
+  after the scope), for example `Feat - Best Crafts - Show investment` or
+  `Fix - Shopping List - One-click open`. The type is the biggest change's,
+  capitalized (`Feat`, `Fix`, `Perf`, `Refactor`, `Test`, `Docs`, `CI`,
+  `Chore`); the scope is the part of the addon (`Best Crafts`,
   `Shopping List`, `Profit History`, `Crafting Screen`, `Workflow`, ...).
 - **Summary:** a line on what it's for, a few bullets of what changed, and
-  the new version (or that there's none, and so no release).
-
-The commit message is a short [Conventional Commit](https://www.conventionalcommits.org/):
-`type: what changed`, lowercase, under about 50 characters, no period, no
-body. Types: `feat`, `fix`, `perf`, `refactor`, `test`, `docs`, `ci`,
-`chore`.
+  what merging releases (a minor or patch release, or none).
 
 A `CLAUDE.local.md` (not in git) may add personal steps; follow it too.
