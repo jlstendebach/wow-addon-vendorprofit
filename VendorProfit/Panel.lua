@@ -577,8 +577,8 @@ end
 
 -- Frame ------------------------------------------------------------------------
 
--- Pages, in tab order: { name, icon, label, create(page), refresh(page) ->
--- height }. Other files add theirs with Panel.AddPage before the window is
+-- Pages, in tab order: { name, icon, label, width (optional), create(page),
+-- refresh(page) -> height }. Other files add theirs with Panel.AddPage before the window is
 -- first shown.
 local pageDefs = {}
 local pages = {}
@@ -723,6 +723,7 @@ local function Refresh()
     end
     for _, def in ipairs(pageDefs) do
         if def.name == activeTab then
+            frame:SetWidth(def.width or WIDTH)
             frame:SetHeight(math.max(def.refresh(pages[def.name]), MinHeight()))
         end
     end

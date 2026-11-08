@@ -1209,6 +1209,7 @@ check("window above the professions window and the like, raised when clicked",
       ev("VendorProfitPanel.__strata") == "HIGH" and ev("VendorProfitPanel.__toplevel"))
 check("short page: the window is still tall enough for both side tabs",
       ev("VendorProfitPanel:GetHeight()") >= ev("VendorProfitPanel.tabs.best.__point[5] * -1") + 32)
+check("Shopping List back to its own width", ev("VendorProfitPanel:GetWidth()") == 380)
 check("Shopping List tab switches pages", ev("VendorProfit.Panel.ActiveTab()") == "shopping" and not ev(B + ":IsShown()")
       and ev("VendorProfitPanel.tabs.shopping:GetChecked()") and not ev("VendorProfit.BestPanel.IsShown()"))
 run(TITLEBTN + ":Click()")
@@ -1235,6 +1236,13 @@ check("all recipes listed, not just the top 10: priced ones ranked, then the res
       len(every) == 5 and every[0].startswith("1. ") and every[2].startswith("3. ")
       and every[3] == "|cff808080-  |r|Ticon2901:0|t Mystery Helm | |cff808080no price: Strange Ore|r"
       and every[4] == "|cff808080-  |r|Ticon2902:0|t Plain Ring | |cff808080no vendor price|r")
+check("investment column: what one craft's items cost along the cheapest route",
+      ev("VendorProfit.BestPanel.Row(1).investment:GetText()") == "|cffffffff4s 38c|r"
+      and ev("VendorProfit.BestPanel.Row(2).investment:GetText()") == "|cffffffff3s 13c|r"
+      and ev(B + ".investmentHeading:GetText()") == "Investment" and ev(B + ".profitHeading:GetText()") == "Profit")
+check("no investment where a reagent has no price; shown where only the sale price is missing",
+      ev("VendorProfit.BestPanel.Row(4).investment:GetText()") == "" and ev("VendorProfit.BestPanel.Row(5).investment:GetText()") != "")
+check("Best Crafts is wider than the Shopping List, for the columns", ev("VendorProfitPanel:GetWidth()") == 480)
 check("unpriced ones can still be queued and shown", ev("VendorProfit.BestPanel.Row(4).queue:IsShown()") and ev("VendorProfit.BestPanel.Row(4).show:IsShown()"))
 check("the list scrolls: a scroll frame holding the rows", ev(B + ".scroll.__scrollChild == " + B + ".list")
       and ev(B + ".scroll:GetHeight()") == 5 * 22 and ev(B + ".list:GetHeight()") == 5 * 22)

@@ -109,14 +109,16 @@ The **Vendor Profit** button in the professions window's title bar (left of Trad
 
 ```
 Best Crafts: Blacksmithing
-[ Vendor ] [ Auction ]                              [ Scan ]
-1. Rough Bronze Cuirass           1s 62c     [Queue] [Show]
-2. Rough Bronze Shoulders            87c     [Queue] [Show]
-3. Copper Chain Vest               -2s 10c    [Queue] [Show]
--  Mystery Helm    no price: Strange Ore      [Queue] [Show]
+[ Vendor ] [ Auction ]                                          [ Scan ]
+                              Investment    Profit
+1. Rough Bronze Cuirass           4s 38c    1s 62c   [Queue] [Show]
+2. Rough Bronze Shoulders         3s 13c       87c   [Queue] [Show]
+3. Copper Chain Vest              3s 60c   -2s 10c   [Queue] [Show]
+-  Mystery Helm            no price: Strange Ore     [Queue] [Show]
 Prices from Auctionator's last scan.
 ```
 
+- **Investment** is what one craft's items cost along its cheapest route: what you'd spend, counting items you already have at what they'd cost to get. **Profit** is what one craft makes after that. The tab is wider than the Shopping List to fit both.
 - **Vendor** ranks by selling to a vendor, a guaranteed sale. **Auction** ranks by Auctionator's price after the 5% cut; usually higher, but an auction might not sell.
 - Losses are listed too (in red), below the crafts that make money. Recipes with no profit to rank by come last, unnumbered, saying why: a reagent with no price anywhere (*no price: Strange Ore*, so their profit can't be trusted), or no vendor (or auction) price for what they make.
 - **Show** selects the recipe in the professions window (it's off while that window is closed). **Queue** adds one craft to the shopping order (click again for more); the window stays on Best Crafts.
