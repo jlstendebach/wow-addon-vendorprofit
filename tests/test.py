@@ -1455,6 +1455,11 @@ run(TITLEBTN + ":Click()")
 check("...and again: closes the window", not ev("VendorProfit.Panel.IsShown()"))
 run(TITLEBTN + ":Click()")
 best = lambda: list(ev("VendorProfit.BestPanel.Lines()").values())
+check("auction tab first, left of vendor", ev("VendorProfit.BestPanel.Tab()") == "auction"
+      and ev(B + ".tabs.auction.__point[1]") == "TOPLEFT" and ev(B + ".tabs.vendor.__point[2] == " + B + ".tabs.auction"))
+check("the search box fills the row up to Filter, and the red X ends it",
+      ev(B + ".search.__points.RIGHT[2] == " + B + ".filter") and ev(B + ".filterReset.__point[3]") == "TOPRIGHT")
+run(B + ".tabs.vendor:Click()")
 ranked = best()
 check("vendor tab first, ranked: cuirass 600 - 438, shoulders 400 - 313, then the losing vest in red",
       ev("VendorProfit.BestPanel.Tab()") == "vendor" and ranked[:2] == [
@@ -1502,7 +1507,77 @@ check("the sort is saved", ev("VendorProfitCharDB.bestSort.key") == "roi")
 run(B + ".profitHeading:Click()")
 check("no investment where a reagent has no price; shown where only the sale price is missing",
       ev("VendorProfit.BestPanel.Row(4).investment:GetText()") == "" and ev("VendorProfit.BestPanel.Row(5).investment:GetText()") != "")
-check("Best Crafts is wider than the Shopping List, for the columns", ev("VendorProfitPanel:GetWidth()") == 480)
+check("Best Crafts is wider than the Shopping List, for the columns", ev("VendorProfitPanel:GetWidth()") == 520)
+# Search: filters by name as you type, keeping each recipe's place.
+run(B + '.search:Type("bronze")')
+check("typing filters the list at once: only names containing it", [l.split(" | ")[0] for l in best()]
+      == ["1. |Ticon2866:0|t Rough Bronze Cuirass", "2. |Ticon2865:0|t Rough Bronze Shoulders"])
+run(B + '.search:Type("VEST")')
+check("any case; keeps its place in the ranking", [l.split(" | ")[0] for l in best()] == ["3. |Ticon2867:0|t Copper Chain Vest"])
+run(B + '.search:Type("mystery")')
+check("matches unpriced recipes too, unnumbered", [l.split(" | ")[0] for l in best()] == ["|cff808080-  |r|Ticon2901:0|t Mystery Helm"])
+run(B + '.search:Type("zzz")')
+check("nothing matches: says so", best() == [] and 'No recipes match "zzz".' in ev(B + ".status:GetText()"))
+run(B + '.search:Type("")')
+check("cleared: everything again", len(best()) == 5)
+# Filters: profitable only, and skill-up colors, from the game's filter dropdown.
+run('__stub.recipes[2670].difficulty = 0; __stub.recipes[3328].difficulty = 1; __stub.recipes[2671].difficulty = 2; __stub.recipes[9102].difficulty = 3')
+run('if __stub.recipe and __stub.recipe.recipeID == 2670 then __stub.recipe.difficulty = 0 end')
+run('VendorProfit.BestPanel.Refresh()')
+F = B + ".filter"
+def menu():
+    run(F + ':Click()')
+    items = [(i.text, i.title or False) for i in ev("__stub.Menu(nil)").values()]
+    run('__stub.menu:Hide(); __stub.Advance(1)')
+    return items
+check("a Filter button in the page's style (not the game's dropdown) opens the menu: profitable only, then skill-up colors",
+      ev(F + ".__text") == "Filter" and [t for t, _ in menu()] ==
+      ["Profitable only", "Skill up", "|cffff8040Guaranteed|r", "|cffffff00Likely|r", "|cff40bf40Unlikely|r"])
+check("names in their skill-up color, as the professions window shows them",
+      "|cffff8040Rough Bronze Cuirass|r" in best()[0] and "|cffffff00Rough Bronze Shoulders|r" in best()[1])
+check("no skill up: left white, not gray", "|Ticon2902:0|t Plain Ring |" in best()[4])
+check("the reset X stays, grayed out, while no filter is on", ev(B + ".filterReset:IsShown()")
+      and not ev(B + ".filterReset:IsEnabled()") and ev(B + ".filterReset.icon.__desaturated"))
+run(F + ':Click()')
+check("the menu opens under the button, not at the mouse", ev("__stub.menu.__point[1]") == "TOPLEFT"
+      and ev("__stub.menu.__point[2] == " + F) and ev("__stub.menu.__point[3]") == "BOTTOMLEFT")
+run(F + ':Click()')
+check("clicking Filter again closes it", not ev("__stub.menu:IsShown()"))
+run('__stub.Advance(1); ' + F + ':Click(); __stub.menu:Hide(); ' + F + ':Click()')
+check("a click that the game already used to close the menu doesn't reopen it", not ev("__stub.menu:IsShown()"))
+run('__stub.Advance(1)')
+check("Scan sits on the heading's line, apart from the list controls", ev(B + ".scan.__point[5]") == -38)
+def toggle(n):
+    run(F + ':Click()')
+    run('local items = __stub.Menu(nil); items[%d].toggle()' % n)
+    run('__stub.menu:Hide(); __stub.Advance(1)')
+toggle(1)
+check("profitable only: the losing vest and the unpriced ones go, places kept",
+      [l.split(" | ")[0].split("|t ")[0] for l in best()] == ["1. |Ticon2866:0", "2. |Ticon2865:0"])
+run(F + ':Click()')
+check("the checkbox shows it's on, and it's saved", ev("__stub.Menu(nil)[1].checked()") and ev("VendorProfitCharDB.bestFilters.profitable"))
+run('__stub.menu:Hide(); __stub.Advance(1)')
+check("the button says how many are on, and the reset X is on", ev(F + ".__text") == "Filter (1)" and ev(B + ".filterReset:IsEnabled()"))
+toggle(1)
+toggle(3)
+check("guaranteed only: just the orange recipe", len(best()) == 1 and "Rough Bronze Cuirass" in best()[0])
+toggle(5)
+check("guaranteed or unlikely: orange and green", [("Cuirass" in l, "Vest" in l) for l in best()] == [(True, False), (False, True)])
+run(B + '.filterReset:Click()')
+check("the red X resets them all, and grays out", len(best()) == 5 and ev("VendorProfitCharDB.bestFilters") is None
+      and not ev(B + ".filterReset:IsEnabled()") and ev(F + ".__text") == "Filter")
+toggle(1); toggle(5); run(B + '.search:Type("cuirass")')
+check("nothing passes: says so", best() == [] and 'No recipes match "cuirass".' in ev(B + ".status:GetText()"))
+run(B + '.search:Type("")')
+check("...and with no search text, that it's the filters", best() == [] and "No recipes pass the filters." in ev(B + ".status:GetText()"))
+run(B + '.filterReset:Click()')
+run('__stub.recipes[3328].difficulty = nil; VendorProfit.BestPanel.Refresh()')
+toggle(4)
+check("a recipe whose color isn't known can't pass a skill-up filter, and it says why",
+      best() == [] and "only known for the profession whose window is open" in ev(B + ".status:GetText()"))
+run(B + '.filterReset:Click()')
+run('for _, id in ipairs({ 2670, 3328, 2671, 9102 }) do if __stub.recipes[id] then __stub.recipes[id].difficulty = nil end end')
+run('if __stub.recipe then __stub.recipe.difficulty = nil end; VendorProfit.BestPanel.Refresh()')
 check("unpriced ones can still be queued and shown", ev("VendorProfit.BestPanel.Row(4).queue:IsShown()") and ev("VendorProfit.BestPanel.Row(4).show:IsShown()"))
 check("the list scrolls: a scroll frame holding the rows", ev(B + ".scroll.__scrollChild == " + B + ".list")
       and ev(B + ".scroll:GetHeight()") == 5 * 22 and ev(B + ".list:GetHeight()") == 5 * 22)

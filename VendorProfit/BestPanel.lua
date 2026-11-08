@@ -1,8 +1,9 @@
 -- The Best Crafts tab of the Vendor Profit window: every saved recipe of the
 -- open profession, ranked by profit per craft (BestCrafts.lua), losses
 -- included, then the ones with no price to rank by, in a scrolling list with
--- Vendor and Auction tabs and Investment, Profit and ROI columns, sortable
--- by clicking a column's heading. Each has a magnifying glass (selects it in
+-- Auction and Vendor tabs and Investment, Profit and ROI columns, sortable
+-- by clicking a column's heading, filtered by name with the search box as
+-- you type, and by profit and skill-up color with the Filter dropdown. Each has a magnifying glass (selects it in
 -- the professions window) and + (adds one craft to the shopping order). Live
 -- prices come from Scan.
 --
@@ -21,8 +22,9 @@ VendorProfit.BestPanel = BestPanel
 
 local Panel = VendorProfit.Panel
 
--- Wider than the Shopping List, for the money columns.
-local WIDTH = 480
+-- Wider than the Shopping List, for the money columns and the search and
+-- filter controls.
+local WIDTH = 520
 local PADDING = 16
 local ROW_HEIGHT = 22
 local LIST_TOP = -94
@@ -43,16 +45,25 @@ local NAME_WIDTH = LIST_WIDTH + INVESTMENT_RIGHT - MONEY_WIDTH - GAP
 local SORT_DEFAULT = { key = "profit", ascending = false }
 local SORT_STARTS_ASCENDING = { name = true }
 
-local frame              -- the page
-local tab = "vendor"
-local rows = {}
-local shownList          -- profession and tab the list was last scrolled for
+local SKILL_UP_ORDER, SKILL_UP, Filters, FiltersActive, SetFilter, ResetFilters, FilterMenu, ToggleFilterMenu
 
-local function ItemLabel(itemID)
+local frame              -- the page
+local tab = "auction"     -- auction first: it's what this tab is used for most
+local rows = {}
+local shownList          -- profession, tab and filter the list was last scrolled for
+local filter = ""        -- the search box's text, lowercased
+
+-- The item's icon and name, the name in its skill-up color if given (as the
+-- professions window colors its list).
+local function ItemLabel(itemID, skillUp)
     local name = C_Item.GetItemInfo(itemID)
     if name == nil then
         Item:CreateFromItemID(itemID):ContinueOnItemLoad(function() BestPanel.Refresh() end)
         name = "item " .. itemID
+    end
+    local skill = skillUp and SKILL_UP[skillUp]
+    if skill then
+        name = skill.color:WrapTextInColorCode(name)
     end
     local icon = select(5, C_Item.GetItemInfoInstant(itemID))
     return (icon and ("|T" .. icon .. ":0|t ") or "") .. name
@@ -224,6 +235,132 @@ local function FormatROI(roi)
     return text
 end
 
+-- Filters ---------------------------------------------------------------------
+
+
+-- Skill-up colors, as the professions window shows them.
+SKILL_UP_ORDER = { "optimal", "medium", "easy" }
+SKILL_UP = {
+    optimal = { label = L.BEST_SKILL_OPTIMAL, color = CreateColor and CreateColor(1, 0.5, 0.25) or ORANGE_FONT_COLOR },
+    medium = { label = L.BEST_SKILL_MEDIUM, color = CreateColor and CreateColor(1, 1, 0) or YELLOW_FONT_COLOR },
+    easy = { label = L.BEST_SKILL_EASY, color = CreateColor and CreateColor(0.25, 0.75, 0.25) or GREEN_FONT_COLOR },
+}
+
+-- A recipe's skill-up color key, if the game says (it only knows for the
+-- profession whose window is open).
+local function SkillUp(recipeID)
+    local info = C_TradeSkillUI.GetRecipeInfo(recipeID)
+    local difficulty = info and info.relativeDifficulty
+    if difficulty == nil then
+        return nil
+    end
+    local enum = Enum.TradeskillRelativeDifficulty or {}
+    if difficulty == (enum.Optimal or 0) then
+        return "optimal"
+    elseif difficulty == (enum.Medium or 1) then
+        return "medium"
+    elseif difficulty == (enum.Easy or 2) then
+        return "easy"
+    end
+    -- No skill up (gray in the professions window): left white here.
+    return "trivial"
+end
+
+-- The filters, saved per character: { profitable, optimal, medium, easy }.
+Filters = function()
+    local db = VendorProfitCharDB
+    return db and type(db.bestFilters) == "table" and db.bestFilters or {}
+end
+
+FiltersActive = function()
+    local filters = Filters()
+    return filters.profitable or filters.optimal or filters.medium or filters.easy or false
+end
+
+local function SkillFilterActive()
+    local filters = Filters()
+    return filters.optimal or filters.medium or filters.easy or false
+end
+
+SetFilter = function(key, value)
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    VendorProfitCharDB.bestFilters = VendorProfitCharDB.bestFilters or {}
+    VendorProfitCharDB.bestFilters[key] = value or nil
+    BestPanel.Refresh()
+end
+
+ResetFilters = function()
+    if VendorProfitCharDB then
+        VendorProfitCharDB.bestFilters = nil
+    end
+    BestPanel.Refresh()
+end
+
+-- Whether an entry passes the filters. Skill-up filters show recipes of the
+-- checked colors; a recipe whose color isn't known can't pass them.
+local function PassesFilters(entry)
+    local filters = Filters()
+    if filters.profitable and not (entry.profit and entry.profit > 0) then
+        return false
+    end
+    if SkillFilterActive() then
+        return entry.skillUp ~= nil and filters[entry.skillUp] == true
+    end
+    return true
+end
+
+-- The Filter menu: profitable only, then the skill-up colors.
+FilterMenu = function(_, root)
+    root:CreateCheckbox(L.BEST_FILTER_PROFITABLE,
+        function() return Filters().profitable == true end,
+        function() SetFilter("profitable", not Filters().profitable) end)
+    root:CreateTitle(L.BEST_FILTER_SKILL_UP)
+    for _, key in ipairs(SKILL_UP_ORDER) do
+        local skill = SKILL_UP[key]
+        root:CreateCheckbox(skill.color:WrapTextInColorCode(skill.label),
+            function() return Filters()[key] == true end,
+            function() SetFilter(key, not Filters()[key]) end)
+    end
+end
+
+-- The open Filter menu, and when it last closed: a click on the button
+-- closes the menu (the game closes menus on any click outside them) before
+-- the button hears it, so a click just after it closed was meant to close it.
+local filterMenu
+local filterMenuClosed = 0
+
+ToggleFilterMenu = function(button)
+    if filterMenu and filterMenu:IsShown() then
+        filterMenu:Hide()
+        return
+    end
+    if GetTime() - filterMenuClosed < 0.25 then
+        return
+    end
+    filterMenu = MenuUtil.CreateContextMenu(button, FilterMenu)
+    if filterMenu then
+        -- Under the button, not at the mouse.
+        filterMenu:ClearAllPoints()
+        filterMenu:SetPoint("TOPLEFT", button, "BOTTOMLEFT", 0, -2)
+        if not filterMenu.vendorProfitHooked then
+            filterMenu.vendorProfitHooked = true
+            filterMenu:HookScript("OnHide", function() filterMenuClosed = GetTime() end)
+        end
+    end
+end
+
+function BestPanel.Filters()
+    return Filters()
+end
+
+function BestPanel.SetFilter(key, value)
+    SetFilter(key, value)
+end
+
+function BestPanel.ResetFilters()
+    ResetFilters()
+end
+
 local function SetTab(name)
     tab = name
     BestPanel.Refresh()
@@ -237,16 +374,17 @@ local function Create(page)
     frame.heading:SetJustifyH("LEFT")
 
     frame.tabs = {
-        vendor = SmallButton(frame, L.BEST_TAB_VENDOR, 90),
-        auction = SmallButton(frame, L.BEST_TAB_AUCTION, 90),
+        vendor = SmallButton(frame, L.BEST_TAB_VENDOR, 76),
+        auction = SmallButton(frame, L.BEST_TAB_AUCTION, 76),
     }
-    frame.tabs.vendor:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -52)
-    frame.tabs.auction:SetPoint("LEFT", frame.tabs.vendor, "RIGHT", 4, 0)
+    frame.tabs.auction:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -52)
+    frame.tabs.vendor:SetPoint("LEFT", frame.tabs.auction, "RIGHT", 4, 0)
     frame.tabs.vendor:SetScript("OnClick", function() SetTab("vendor") end)
     frame.tabs.auction:SetScript("OnClick", function() SetTab("auction") end)
 
     frame.scan = SmallButton(frame, L.SCAN, 90)
-    frame.scan:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING, -52)
+    -- On the heading's line: it's for the whole profession, not the list.
+    frame.scan:SetPoint("RIGHT", frame, "TOPRIGHT", -PADDING, -38)
     frame.scan:SetMotionScriptsWhileDisabled(true)
     frame.scan:SetScript("OnClick", function()
         BestCrafts.Scan(Recipes.OpenProfession())
@@ -257,6 +395,61 @@ local function Create(page)
         GameTooltip:Show()
     end)
     frame.scan:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- Search: filters the list by name as you type. The game's own search
+    -- box (magnifying glass, "Search" placeholder, clear button) where it
+    -- exists, a plain input box otherwise.
+    local ok, search = pcall(CreateFrame, "EditBox", nil, frame, "SearchBoxTemplate")
+    if not ok then
+        search = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
+    end
+    -- It fills the row between the tabs and Filter (see below).
+    search:SetHeight(20)
+    search:SetPoint("LEFT", frame.tabs.vendor, "RIGHT", 14, 0)
+    search:SetAutoFocus(false)
+    -- Hooked, not set, so the template's own placeholder and clear button
+    -- keep working.
+    search:HookScript("OnTextChanged", function(self)
+        local text = (self:GetText() or ""):lower()
+        if text ~= filter then
+            filter = text
+            BestPanel.Refresh()
+        end
+    end)
+    search:HookScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    search:HookScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    frame.search = search
+
+    -- Filter: a button in the page's own style that opens the game's menu
+    -- of checkboxes under it (clicking it again closes it), and a small red
+    -- X at the row's end that clears the filters, grayed out while none are
+    -- on. Left out if this client doesn't have the game's menu system; the
+    -- search box then runs to the end of the row.
+    if MenuUtil and MenuUtil.CreateContextMenu then
+        local reset = SmallButton(frame, "", 22)
+        reset:SetPoint("RIGHT", frame, "TOPRIGHT", -PADDING, -62)
+        reset:SetMotionScriptsWhileDisabled(true)
+        reset.icon = reset:CreateTexture(nil, "OVERLAY")
+        reset.icon:SetTexture("Interface\\RaidFrame\\ReadyCheck-NotReady")
+        reset.icon:SetSize(12, 12)
+        reset.icon:SetPoint("CENTER", reset, "CENTER", 0, 0)
+        reset:SetScript("OnClick", function() ResetFilters() end)
+        reset:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(L.BEST_FILTER_RESET, 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        reset:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        frame.filterReset = reset
+
+        local button = SmallButton(frame, L.BEST_FILTER, 76)
+        button:SetPoint("RIGHT", reset, "LEFT", -4, 0)
+        button:SetScript("OnClick", function(self) ToggleFilterMenu(self) end)
+        frame.filter = button
+        search:SetPoint("RIGHT", button, "LEFT", -8, 0)
+    else
+        search:SetPoint("RIGHT", frame, "TOPRIGHT", -PADDING, -62)
+    end
 
     -- Column headings over the list; click one to sort by it.
     frame.headings = {}
@@ -298,6 +491,19 @@ local function Refresh()
     local profession, name = Recipes.OpenProfession()
     frame.heading:SetText(string.format(L.BEST_TITLE, name or ""))
 
+    -- Filter: how many are on, and the reset X while any are.
+    if frame.filter then
+        local on = 0
+        for _, value in pairs(Filters()) do
+            if value then
+                on = on + 1
+            end
+        end
+        frame.filter:SetText(on > 0 and string.format(L.BEST_FILTER_ON, on) or L.BEST_FILTER)
+        frame.filterReset:SetEnabled(on > 0)
+        frame.filterReset.icon:SetDesaturated(on == 0)
+    end
+
     -- Tabs: the selected one stays lit.
     for key, button in pairs(frame.tabs) do
         if key == tab then
@@ -331,23 +537,38 @@ local function Refresh()
         end
     end
 
-    local ranked = {}
+    local all = {}
     if profession then
-        ranked = SortEntries(BestCrafts.Rank(profession, tab, function() BestPanel.Refresh() end))
+        all = SortEntries(BestCrafts.Rank(profession, tab, function() BestPanel.Refresh() end))
     end
-    local place = 0
+    -- Numbered across the whole list, then filtered by the search box, so a
+    -- recipe keeps its place in the ranking while searching.
+    local ranked, place, unknownSkillUp = {}, 0, false
+    for _, entry in ipairs(all) do
+        if entry.profit then
+            place = place + 1
+            entry.place = place
+        end
+        entry.skillUp = SkillUp(entry.recipe.recipeID)
+        if entry.skillUp == nil then
+            unknownSkillUp = true
+        end
+        local name = (C_Item.GetItemInfo(entry.recipe.item) or ""):lower()
+        if (filter == "" or name:find(filter, 1, true)) and PassesFilters(entry) then
+            ranked[#ranked + 1] = entry
+        end
+    end
     for index, entry in ipairs(ranked) do
         local row = GetRow(index)
         local reason
         row.roi:SetText("")
         if entry.profit then
-            place = place + 1
-            row.left:SetText(place .. ". " .. ItemLabel(entry.recipe.item))
+            row.left:SetText(entry.place .. ". " .. ItemLabel(entry.recipe.item, entry.skillUp))
             row.investment:SetText(VendorProfit.FormatMoney(entry.cost))
             row.right:SetText(VendorProfit.FormatMoney(entry.profit))
             row.roi:SetText(FormatROI(entry.roi))
         else
-            row.left:SetText(Gray("-  ") .. ItemLabel(entry.recipe.item))
+            row.left:SetText(Gray("-  ") .. ItemLabel(entry.recipe.item, entry.skillUp))
             local unpriced = entry.unpriced
             if unpriced.itemID then
                 reason = string.format(L.BEST_NO_PRICE_FOR, C_Item.GetItemInfo(unpriced.itemID) or ("item " .. unpriced.itemID))
@@ -398,7 +619,7 @@ local function Refresh()
     frame.list:SetHeight(math.max(#ranked, 1) * ROW_HEIGHT)
     frame.scroll:SetSize(LIST_WIDTH, listHeight)
     frame.scroll:SetShown(#ranked > 0)
-    local listKey = tostring(profession) .. "/" .. tab
+    local listKey = tostring(profession) .. "/" .. tab .. "/" .. filter
     if listKey ~= shownList then
         shownList = listKey
         frame.scroll:SetVerticalScroll(0)
@@ -409,8 +630,15 @@ local function Refresh()
     local lines = {}
     if profession == nil then
         lines[#lines + 1] = L.BEST_OPEN_PROFESSION
-    elseif #ranked == 0 then
+    elseif #all == 0 then
         lines[#lines + 1] = L.BEST_NONE
+    elseif #ranked == 0 and filter ~= "" then
+        lines[#lines + 1] = string.format(L.BEST_NO_MATCH, frame.search:GetText() or "")
+    elseif #ranked == 0 then
+        lines[#lines + 1] = L.BEST_NO_MATCH_FILTERS
+    end
+    if SkillFilterActive() and unknownSkillUp then
+        lines[#lines + 1] = L.BEST_SKILL_UNKNOWN
     end
     local liveTime = profession and BestCrafts.LiveTime(profession)
     if liveTime then
