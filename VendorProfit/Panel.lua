@@ -100,7 +100,7 @@ local function GetRow(index)
         row.hit:EnableMouse(true)
         row.hit:SetScript("OnEnter", function(self)
             if self.tooltip then
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                VendorProfit.SetRowTooltipOwner(self)
                 self.tooltip(GameTooltip)
                 GameTooltip:Show()
             end

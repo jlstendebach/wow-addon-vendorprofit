@@ -394,6 +394,12 @@ function VendorProfit.FormatMoney(copper)
     return RED_FONT_COLOR:WrapTextInColorCode("-" .. VendorProfit.FormatCoins(-copper))
 end
 
+-- Starts a list row's tooltip beside the cursor. A row's hover area spans the
+-- row, so anchoring to it would put the tooltip at the row's far end.
+function VendorProfit.SetRowTooltipOwner(owner)
+    GameTooltip:SetOwner(owner, "ANCHOR_CURSOR_RIGHT", 16, 0)
+end
+
 -- Lines -----------------------------------------------------------------------
 
 -- Each line module has:

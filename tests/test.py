@@ -625,6 +625,7 @@ run(Q1 + '.hit:GetScript("OnEnter")(' + Q1 + '.hit)')
 tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
 check("hover: the item, a gap, then its cost and its vendor and auction profit, nothing more",
       [t[0] for t in tip[1:]] == [" ", "Cost (cheapest route)", "Vendor profit", "Auction profit"])
+check("...beside the cursor, not at the far end of the row", ev("GameTooltip.anchor") == "ANCHOR_CURSOR_RIGHT")
 check("makes money: name not red", not ev(Q1 + ".left:GetText()").startswith("|cffff2020"))
 run('__stub.items["item:2866"].sellPrice = 1; __stub.auctionPrices[2866] = 1; VendorProfit.Order.Changed()')
 check("neither vendor nor auction makes money: name in red", ev('VendorProfit.Panel.FindRow("Rough Bronze Cuirass x1").left:GetText()').startswith("|cffff2020"))
@@ -1163,6 +1164,7 @@ run('VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnEnter")()')
 tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
 check("hover: what was bought and what was your own items at market value", ("Bought", "|cffffffff0c|r") in tip
       and ("Your own items, at market value", ev('VendorProfit.FormatMoney(%d)' % round(market))) in tip)
+check("...beside the cursor", ev("GameTooltip.anchor") == "ANCHOR_CURSOR_RIGHT")
 check("window wider for the history's columns", ev("VendorProfitPanel:GetWidth()") == 540)
 run('SlashCmdList.VENDORPROFIT("history")')
 check("/vprofit history toggles it", not ev("VendorProfit.Panel.IsShown()"))
@@ -1189,6 +1191,7 @@ check("...with today's cheapest price to compare", bought[2].endswith(ev('Vendor
 check("window as wide as the history", ev("VendorProfitPanel:GetWidth()") == 540 and ev("VendorProfitPanel.tabs.purchases.label") == "Purchase History")
 run('VendorProfit.PurchasePanel.Row(1).hit:GetScript("OnEnter")()')
 check("hover: what you paid each, and the cheapest now", ("You paid each", "|cffffffff1s 50c|r") in [(l.left, l.right) for l in ev("GameTooltip.lines").values()])
+check("...beside the cursor", ev("GameTooltip.anchor") == "ANCHOR_CURSOR_RIGHT")
 run('VendorProfitCharDB.history.purchases = {}; VendorProfit.Panel.Refresh()')
 check("none yet: says where they come from", ev("VendorProfit.PurchasePanel.Frame().empty:IsShown()"))
 run('SlashCmdList.VENDORPROFIT("purchases")')

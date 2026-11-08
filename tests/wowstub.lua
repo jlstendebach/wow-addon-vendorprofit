@@ -214,7 +214,7 @@ function stub.RunTimers() stub.Advance(1) end
 
 -- Tooltip -------------------------------------------------------------------
 GameTooltip = { lines = {}, shown = false }
-function GameTooltip:SetOwner(owner) self.owner = owner; self.lines = {} end
+function GameTooltip:SetOwner(owner, anchor) self.owner = owner; self.anchor = anchor; self.lines = {} end
 function GameTooltip:SetText(t) self.lines = { { left = t } } end
 function GameTooltip:AddLine(t) self.lines[#self.lines + 1] = { left = t } end
 function GameTooltip:AddDoubleLine(l, r) self.lines[#self.lines + 1] = { left = l, right = r } end
