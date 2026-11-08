@@ -102,6 +102,20 @@ function Order.Add(result, crafts, profession)
     }, crafts)
 end
 
+-- Changes how many times an entry is crafted; at least once (Remove takes
+-- it off the order).
+function Order.SetCrafts(index, crafts)
+    local entry = DB().entries[index]
+    if entry == nil then
+        return
+    end
+    crafts = math.max(math.floor(crafts), 1)
+    if crafts ~= entry.crafts then
+        entry.crafts = crafts
+        Changed()
+    end
+end
+
 function Order.Remove(index)
     local order = DB()
     table.remove(order.entries, index)

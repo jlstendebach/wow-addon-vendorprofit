@@ -127,6 +127,44 @@ end
 
 -- The saved recipes of one profession: { recipeID, item, count, reagents,
 -- profession }, sorted by recipeID.
+-- Showing a recipe in the professions window ----------------------------------
+
+-- Whether the professions window is open (a recipe can only be shown then).
+function Recipes.WindowOpen()
+    return ProfessionsFrame ~= nil and ProfessionsFrame:IsShown()
+end
+
+-- Selects a recipe in the professions window the way clicking it in the
+-- window's own list does: instant, with no trip to the server. Only works in
+-- the profession the window is showing. Returns whether it could.
+local function SelectInWindow(recipeID, profession)
+    local _, openName = Recipes.OpenProfession()
+    local page = ProfessionsFrame.CraftingPage
+    local info = C_TradeSkillUI.GetRecipeInfo(recipeID)
+    if openName ~= profession or info == nil or page == nil or page.SelectRecipe == nil then
+        return false
+    end
+    -- On the recipes tab, not specializations or crafting orders.
+    if ProfessionsFrame.recipesTabID and ProfessionsFrame.GetTab and ProfessionsFrame.SetTab
+        and ProfessionsFrame:GetTab() ~= ProfessionsFrame.recipesTabID then
+        ProfessionsFrame:SetTab(ProfessionsFrame.recipesTabID)
+    end
+    return pcall(page.SelectRecipe, page, info)
+end
+
+-- Shows a recipe (of profession, by name) in the professions window, if it's
+-- open. In the profession the window is showing, it's selected there
+-- directly. C_TradeSkillUI.OpenRecipe is only the fallback: it asks the
+-- server to open the profession, which can be slow or do nothing.
+function Recipes.Show(recipeID, profession)
+    if not Recipes.WindowOpen() then
+        return
+    end
+    if not SelectInWindow(recipeID, profession) and C_TradeSkillUI.OpenRecipe then
+        C_TradeSkillUI.OpenRecipe(recipeID)
+    end
+end
+
 function Recipes.ForProfession(key)
     local list = {}
     local saved = db and db.professions[key]

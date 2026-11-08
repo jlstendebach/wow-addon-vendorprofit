@@ -141,7 +141,7 @@ The panel is laid out as:
 
 ```
 Queued
-    Rough Bronze Cuirass x10                 [Remove]
+    Rough Bronze Cuirass x10             [-] [+] [🔍] [x]
 Profit                                       [ Scan ]
     Vendor price                             60s
     Auction price                            1g 23s 50c
@@ -149,8 +149,10 @@ Profit                                       [ Scan ]
     Items you have                           -10s
     Items to buy                             -33s 75c
 
-    Vendor profit                            16s 25c
-    Auction profit                           79s 75c
+  ┌──────────────────────────────────────────────┐
+  │ Vendor profit                        16s 25c │
+  │ Auction profit                       79s 75c │
+  └──────────────────────────────────────────────┘
 ──────────────── To do ────────────────
 1. Buy                                       [ Buy ]
     Copper Ore x24             auction       12s 70c
@@ -178,10 +180,10 @@ The buttons for each part sit on their section's heading, with short labels; hov
 
 **3. Scan.** At the auction house the panel docks beside it (and opens by itself when something is queued). **Scan** on the **Profit** heading first looks up every item in the order's crafting trees in one batch request (the same lookup as Best Crafts' Scan), so the order is planned with live prices straight away and items with nothing listed are skipped, not searched. Then it reads every listing of each item the order buys there, so buying 24 is priced by walking up the cheapest listings, not at the lowest single price, and your own listings are left out. Those listings are what purchases are priced and checked against. With them the order is planned again: if crafting something has become cheaper than buying it, or the other way round, the plan changes and the new items are scanned too.
 
-**4. Buy.** **Buy** on the **Buy** step works before a scan too: it scans first, then goes straight on to the first purchase (stopping at **Buy anyway** if the order turns out to lose money). Once scanned, **Buy** (away from the auction house it says **Open AH**; hover it: *Buy 24 Copper Ore for 12s 70c*) asks the auction house for a price quote. If the quote is no more than the scan, the button becomes **Confirm**, with *Confirm: 24 Copper Ore for 12s 70c* and a **Cancel** button shown right under the step, and clicking Confirm buys. That's two clicks per item, the same as Auctionator's own buying: the game only allows a purchase as part of a click. **Scan** again any time to refresh prices.
+**4. Buy.** **Buy** on the **Buy** step works before a scan too: it scans first, then goes straight on to the first purchase (stopping at **Buy anyway** if neither selling to a vendor nor at auction would make money). Once scanned, **Buy** (away from the auction house it says **Open AH**; hover it: *Buy 24 Copper Ore for 12s 70c*) asks the auction house for a price quote. If the quote is no more than the scan, the button becomes **Confirm**, with *Confirm: 24 Copper Ore for 12s 70c* and a **Cancel** button shown right under the step, and clicking Confirm buys. That's two clicks per item, the same as Auctionator's own buying: the game only allows a purchase as part of a click. **Scan** again any time to refresh prices.
 
 - **Price went up:** if the quote is higher than the scan (someone bought the cheap ones first), the purchase is cancelled and the item scanned again.
-- **Not profitable:** before each purchase, finishing the order must still make money at current prices. If not, the button says **Buy anyway**: clicking it is your go-ahead, until the next scan.
+- **Not profitable:** before each purchase, finishing the order must still make money one way or the other at current prices: selling to a vendor or at auction. If neither does, the button says **Buy anyway**, with a message saying so: clicking it is your go-ahead, until the next scan. If only one of them loses money, buying goes ahead, and that one shows in red in the Profit box.
 - **Not enough listed:** it buys what's there and says how many are missing.
 - **Not enough gold, no reply, a failed purchase:** nothing is recorded, the panel says what happened, and the item is scanned again. A purchase that gets no reply but goes through later is still recorded when the success arrives.
 - **Items that don't stack** (gear and the like) are listed as **buy yourself**: the panel only buys stackable items.
@@ -198,7 +200,9 @@ Items the plan gets from a vendor (Weak Flux, thread, vials) are bought at a ven
 
 **The window.** The Shopping List and Best Crafts are tabs down the right side of one Vendor Profit window. Drag it anywhere. From then on it opens where you left it (saved per character). It opens with the auction house when something is queued (on the Shopping List, unless it's already open on another tab), but only ever closes when you close it (its close button, the title-bar button, or `/vprofit`). `/vprofit reset` docks it beside the auction house or professions window again.
 
-The order is saved per character. **Remove** takes a recipe out; removing the last one empties the order and its record.
+The order is saved per character. Each queued recipe has four small buttons: **-** and **+** craft one fewer or one more (at least one), the **magnifying glass** shows the recipe in the professions window (it's off while that window is closed), and **x** takes it out of the order; removing the last one empties the order and its record. Hover a queued recipe to see its own cost along the cheapest route and its vendor and auction profit at today's prices. Its name is red when neither would make money.
+
+The **Vendor profit** and **Auction profit** rows sit in a box, as the bottom line; either one is red, label and all, when it's a loss.
 
 ## Profit History
 
