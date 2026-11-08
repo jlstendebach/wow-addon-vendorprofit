@@ -141,7 +141,7 @@ The panel is laid out as:
 
 ```
 Queued
-    Rough Bronze Cuirass x10                 [Remove]
+    Rough Bronze Cuirass x10                 [-] [+] [x]
 Profit                                       [ Scan ]
     Vendor price                             60s
     Auction price                            1g 23s 50c
@@ -161,12 +161,12 @@ Profit                                       [ Scan ]
   » Copper Bar x24       Mining, 24 crafts
     Bronze Bar x58       Mining, 29 crafts
     Rough Bronze Cuirass x10   Blacksmithing, 10 crafts
-──────────── Already in your bags ────────────
+────────── [-] Already in your bags ──────────
     Bronze Bar x12
     Copper Bar x3
 ```
 
-**To do** is a checklist in the order you'd do it: **Buy** first (prices are what can change, so you find out at the auction house before fetching or crafting anything), **Collect from mailbox** (purchases not collected yet), **Take from bank**, then **Craft**. Each step shows only while it has something left in it and they're numbered in order, so the list gets shorter as you go. Every button sits on its section's heading, with a short label; hover one for the details. There's no button bar at the bottom. Your items are used from your bags first, then the mailbox, then the bank, so **Take from bank** lists exactly what to fetch. Bags include the reagent bank, since crafting uses it directly. **Already in your bags** is just for information. Several queued recipes share your items, so nothing is counted twice.
+**To do** is a checklist in the order you'd do it: **Buy** first (prices are what can change, so you find out at the auction house before fetching or crafting anything), **Collect from mailbox** (purchases not collected yet), **Take from bank**, then **Craft**. Each step shows only while it has something left in it and they're numbered in order, so the list gets shorter as you go. Every button sits on its section's heading, with a short label; hover one for the details. There's no button bar at the bottom. Your items are used from your bags first, then the mailbox, then the bank, so **Take from bank** lists exactly what to fetch. Bags include the reagent bank, since crafting uses it directly. **Already in your bags** is just for information; click its divider to fold it away (it then shows how many items it holds) or open it again. That's remembered per character. Several queued recipes share your items, so nothing is counted twice.
 
 **Take from bank.** At the bank, **Take** on the **Take from bank** step moves exactly those amounts into your bags: it splits them off the bank's stacks (smallest stacks first) into empty bag slots, one move at a time, waiting for each to finish. If something isn't in the bank after all, or your bags fill up, or the bank closes, it stops and says so. The window opens beside the bank by itself when the order has something to fetch.
 
@@ -178,10 +178,10 @@ The buttons for each part sit on their section's heading, with short labels; hov
 
 **3. Scan.** At the auction house the panel docks beside it (and opens by itself when something is queued). **Scan** on the **Profit** heading first looks up every item in the order's crafting trees in one batch request (the same lookup as Best Crafts' Scan), so the order is planned with live prices straight away and items with nothing listed are skipped, not searched. Then it reads every listing of each item the order buys there, so buying 24 is priced by walking up the cheapest listings, not at the lowest single price, and your own listings are left out. Those listings are what purchases are priced and checked against. With them the order is planned again: if crafting something has become cheaper than buying it, or the other way round, the plan changes and the new items are scanned too.
 
-**4. Buy.** **Buy** on the **Buy** step works before a scan too: it scans first, then goes straight on to the first purchase (stopping at **Buy anyway** if the order turns out to lose money). Once scanned, **Buy** (away from the auction house it says **Open AH**; hover it: *Buy 24 Copper Ore for 12s 70c*) asks the auction house for a price quote. If the quote is no more than the scan, the button becomes **Confirm**, with *Confirm: 24 Copper Ore for 12s 70c* and a **Cancel** button shown right under the step, and clicking Confirm buys. That's two clicks per item, the same as Auctionator's own buying: the game only allows a purchase as part of a click. **Scan** again any time to refresh prices.
+**4. Buy.** **Buy** on the **Buy** step works before a scan too: it scans first, then goes straight on to the first purchase (stopping at **Buy anyway** if neither selling to a vendor nor at auction would make money). Once scanned, **Buy** (away from the auction house it says **Open AH**; hover it: *Buy 24 Copper Ore for 12s 70c*) asks the auction house for a price quote. If the quote is no more than the scan, the button becomes **Confirm**, with *Confirm: 24 Copper Ore for 12s 70c* and a **Cancel** button shown right under the step, and clicking Confirm buys. That's two clicks per item, the same as Auctionator's own buying: the game only allows a purchase as part of a click. **Scan** again any time to refresh prices.
 
 - **Price went up:** if the quote is higher than the scan (someone bought the cheap ones first), the purchase is cancelled and the item scanned again.
-- **Not profitable:** before each purchase, finishing the order must still make money at current prices. If not, the button says **Buy anyway**: clicking it is your go-ahead, until the next scan.
+- **Not profitable:** before each purchase, finishing the order must still make money one way or the other at current prices: selling to a vendor or at auction. If neither does, the button says **Buy anyway**, with a message saying so: clicking it is your go-ahead, until the next scan. If only one of them loses money, buying goes ahead, and that one shows in red under Profit.
 - **Not enough listed:** it buys what's there and says how many are missing.
 - **Not enough gold, no reply, a failed purchase:** nothing is recorded, the panel says what happened, and the item is scanned again. A purchase that gets no reply but goes through later is still recorded when the success arrives.
 - **Items that don't stack** (gear and the like) are listed as **buy yourself**: the panel only buys stackable items.
@@ -198,7 +198,9 @@ Items the plan gets from a vendor (Weak Flux, thread, vials) are bought at a ven
 
 **The window.** The Shopping List and Best Crafts are tabs down the right side of one Vendor Profit window. Drag it anywhere. From then on it opens where you left it (saved per character). It opens with the auction house when something is queued (on the Shopping List, unless it's already open on another tab), but only ever closes when you close it (its close button, the title-bar button, or `/vprofit`). `/vprofit reset` docks it beside the auction house or professions window again.
 
-The order is saved per character. **Remove** takes a recipe out; removing the last one empties the order and its record.
+The order is saved per character. Each queued recipe has three small buttons: **-** and **+** craft one fewer or one more (at least one), and **x** takes it out of the order; removing the last one empties the order and its record. Hover a queued recipe to see its own cost along the cheapest route and its vendor and auction profit at today's prices; click it to show its recipe in the professions window (when that window is open). Its name is red when neither would make money.
+
+**Vendor profit** and **Auction profit** are red, label and all, when they're a loss.
 
 ## Profit History
 

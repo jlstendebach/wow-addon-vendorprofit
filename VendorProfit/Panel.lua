@@ -92,6 +92,26 @@ local function GetRow(index)
             end
         end)
         row.button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        -- Small icon buttons right of the row (Queued: - + magnifier cancel),
+        -- made as needed.
+        row.icons = {}
+        -- Hovering the row's text, for rows that explain themselves.
+        row.hit = CreateFrame("Frame", nil, content)
+        row.hit:EnableMouse(true)
+        row.hit:SetScript("OnEnter", function(self)
+            if self.tooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                self.tooltip(GameTooltip)
+                GameTooltip:Show()
+            end
+        end)
+        row.hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row.hit:SetScript("OnMouseUp", function(self, mouseButton)
+            if self.onClick and mouseButton == "LeftButton" and self:IsMouseOver() then
+                self.onClick()
+            end
+        end)
+        row.hit:Hide()
         -- Lines either side of a divider's title.
         row.lines = {}
         for side = 1, 2 do
@@ -106,9 +126,70 @@ local function GetRow(index)
     return row
 end
 
+local ICON_BUTTON_WIDTH, ICON_BUTTON_HEIGHT = 20, 18
+
+local function GetIcon(row, index)
+    local icon = row.icons[index]
+    if icon == nil then
+        icon = CreateFrame("Button", nil, content, "UIPanelButtonTemplate")
+        icon:SetSize(ICON_BUTTON_WIDTH, ICON_BUTTON_HEIGHT)
+        icon:SetMotionScriptsWhileDisabled(true)
+        icon.icon = icon:CreateTexture(nil, "OVERLAY")
+        icon.icon:SetSize(12, 12)
+        icon.icon:SetPoint("CENTER", icon, "CENTER", 0, 0)
+        icon:SetScript("OnEnter", function(self)
+            if self.tooltip then
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetText(self.tooltip, 1, 1, 1, 1, true)
+                GameTooltip:Show()
+            end
+        end)
+        icon:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row.icons[index] = icon
+    end
+    return icon
+end
+
+local function HideExtras(row, fromIcon)
+    for index = fromIcon or 1, #row.icons do
+        row.icons[index]:Hide()
+    end
+    row.hit:Hide()
+    row.hit.tooltip = nil
+    row.hit.onClick = nil
+end
+
+-- Lays out icon buttons ({ text or texture, onClick, enabled, tooltip })
+-- from the right edge, leftwards. Returns the width they take.
+local function LayoutIcons(row, icons)
+    local right = -PADDING
+    for index, spec in ipairs(icons or {}) do
+        local icon = GetIcon(row, index)
+        icon:ClearAllPoints()
+        icon:SetPoint("TOPRIGHT", content, "TOPRIGHT", right, y + 2)
+        icon:SetText(spec.text or "")
+        if spec.texture then
+            icon.icon:SetTexture(spec.texture)
+            icon.icon:SetDesaturated(spec.enabled == false)
+            icon.icon:Show()
+        else
+            icon.icon:Hide()
+        end
+        icon:SetScript("OnClick", spec.onClick)
+        icon:SetEnabled(spec.enabled ~= false)
+        icon.tooltip = spec.tooltip
+        icon:Show()
+        right = right - ICON_BUTTON_WIDTH - 2
+    end
+    HideExtras(row, #(icons or {}) + 1)
+    return -right - PADDING
+end
+
 -- button: { text, onClick, onMouseDown, enabled, width, tooltip } adds a
--- button at the right.
-local function AddDivider(row, title)
+-- button at the right. extras: { icons = { ... } (see LayoutIcons),
+-- tooltip = function(GameTooltip) for hovering the row's text, onClick for
+-- clicking it }.
+local function AddDivider(row, title, onClick)
     y = y - 10
     row.left:SetFontObject("GameFontNormalSmall")
     row.left:ClearAllPoints()
@@ -128,17 +209,26 @@ local function AddDivider(row, title)
     right:SetPoint("RIGHT", content, "TOPRIGHT", -PADDING, y - 6)
     left:Show()
     right:Show()
+    -- A divider that collapses its section: the whole row is clickable.
+    if onClick then
+        row.hit:ClearAllPoints()
+        row.hit:SetPoint("TOPLEFT", content, "TOPLEFT", PADDING, y + 4)
+        row.hit:SetSize(WIDTH - 2 * PADDING, HEADING_HEIGHT)
+        row.hit.onClick = onClick
+        row.hit:Show()
+    end
     y = y - HEADING_HEIGHT
     return row
 end
 
 -- kind: "divider" (a centered title between lines), "heading", "row",
 -- "note" or "gap" (space between groups).
-local function AddRow(kind, left, right, button)
+local function AddRow(kind, left, right, button, extras)
     usedRows = usedRows + 1
     local row = GetRow(usedRows)
+    HideExtras(row)
     if kind == "divider" then
-        return AddDivider(row, left)
+        return AddDivider(row, left, extras and extras.onClick)
     elseif kind == "gap" then
         -- Space between groups of rows.
         row.left:Hide()
@@ -163,12 +253,17 @@ local function AddRow(kind, left, right, button)
     local plain = kind == "note" and not left:find("^|c")
     row.left:SetText(plain and Gray(left) or left)
     local buttonWidth = button and (button.width or 60) or 0
+    if extras and extras.icons then
+        buttonWidth = LayoutIcons(row, extras.icons)
+        button = nil
+    end
+    local reserved = buttonWidth > 0 and buttonWidth + 4 or 0
     row.left:SetWordWrap(kind == "note")
-    row.left:SetWidth(kind == "note" and (WIDTH - 2 * PADDING - (button and buttonWidth + 4 or 0)) or (WIDTH * 0.55))
+    row.left:SetWidth(kind == "note" and (WIDTH - 2 * PADDING - reserved) or (WIDTH * 0.55))
     row.left:Show()
 
     row.right:ClearAllPoints()
-    row.right:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PADDING - (button and buttonWidth + 4 or 0), y)
+    row.right:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PADDING - reserved, y)
     row.right:SetText(right or "")
     row.right:SetShown(right ~= nil)
 
@@ -186,9 +281,18 @@ local function AddRow(kind, left, right, button)
         row.button:Hide()
     end
 
+    if extras and extras.tooltip then
+        row.hit:ClearAllPoints()
+        row.hit:SetPoint("TOPLEFT", content, "TOPLEFT", PADDING, y + 2)
+        row.hit:SetSize(WIDTH * 0.55, ROW_HEIGHT + 2)
+        row.hit.tooltip = extras.tooltip
+        row.hit.onClick = extras.onClick
+        row.hit:Show()
+    end
+
     if kind == "note" then
         height = math.max(ROW_HEIGHT, (row.left:GetStringHeight() or 0) + 3)
-    elseif button then
+    elseif button or (extras and extras.icons) then
         height = math.max(height, 20)
     end
     y = y - height
@@ -203,6 +307,7 @@ local function HideUnusedRows()
         row.button:Hide()
         row.lines[1]:Hide()
         row.lines[2]:Hide()
+        HideExtras(row)
     end
 end
 
@@ -473,9 +578,14 @@ local function AddProfit(s)
     end
     AddRow("row", L.ITEMS_TO_BUY, Money(-s.remaining))
     AddRow("gap")
-    AddRow("row", L.VENDOR_PROFIT_ROW, Money(s.profit))
-    AddRow("row", L.AUCTION_PROFIT_ROW, OrNoPrice(s.auctionProfit))
+    -- The bottom line: a loss in red, label and all.
+    local function Bottom(label, profit)
+        return profit ~= nil and profit < 0 and Red(label) or label
+    end
+    AddRow("row", Bottom(L.VENDOR_PROFIT_ROW, s.profit), Money(s.profit))
+    AddRow("row", Bottom(L.AUCTION_PROFIT_ROW, s.auctionProfit), OrNoPrice(s.auctionProfit))
     if s.spent > 0 then
+        AddRow("gap")
         AddRow("row", Gray(L.SPENT), Gray(VendorProfit.FormatCoins(s.spent)))
     end
 end
@@ -540,6 +650,75 @@ end
 
 -- Queued crafts, the order's profit, the To do checklist, then what's
 -- already in your bags, for information.
+-- Whether "Already in your bags" is folded away, saved per character.
+local function BagsCollapsed()
+    return VendorProfitCharDB ~= nil and VendorProfitCharDB.bagsCollapsed == true
+end
+
+local function SetBagsCollapsed(collapsed)
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    VendorProfitCharDB.bagsCollapsed = collapsed or nil
+    Panel.Refresh()
+end
+
+-- What one queued entry makes, on its own, along its cheapest route at
+-- today's prices: { cost, vendor, auction } for all its crafts (vendor or
+-- auction nil when there's no price to sell at).
+local function EntryProfit(entry)
+    local route = VendorProfit.Route.ForRecipe(entry.itemID, entry.reagents)
+    local cost = math.floor(route.cost * entry.crafts + 0.5)
+    local made = entry.count * entry.crafts
+    local sellPrice = entry.sellPrice or select(11, C_Item.GetItemInfo(entry.itemID))
+    local _, auction = VendorProfit.GetBuyPrices(entry.itemID)
+    return {
+        cost = cost,
+        vendor = sellPrice and sellPrice > 0 and sellPrice * made - cost or nil,
+        auction = auction and math.floor(auction * made * VendorProfit.GetAfterAHCut()) - cost or nil,
+    }
+end
+
+-- Whether a profit makes money: positive vendor or auction profit.
+local function MakesMoney(vendor, auction)
+    return (vendor ~= nil and vendor > 0) or (auction ~= nil and auction > 0)
+end
+
+local function QueuedTooltip(entry)
+    return function(tooltip)
+        local profit = EntryProfit(entry)
+        tooltip:SetText(ItemLabel(entry.itemID, entry.crafts * entry.count))
+        tooltip:AddLine(" ")
+        tooltip:AddDoubleLine(L.QUEUED_COST, Money(-profit.cost))
+        tooltip:AddDoubleLine(L.VENDOR_PROFIT_ROW,
+            profit.vendor and Money(profit.vendor) or Gray(L.QUEUED_NO_VENDOR))
+        tooltip:AddDoubleLine(L.AUCTION_PROFIT_ROW,
+            profit.auction and Money(profit.auction) or Gray(L.NO_AUCTION_PRICE))
+    end
+end
+
+local CANCEL_TEXTURE = "Interface\\RaidFrame\\ReadyCheck-NotReady"
+
+local function AddQueued(index, entry)
+    local profit = EntryProfit(entry)
+    local label = ItemLabel(entry.itemID, entry.crafts * entry.count)
+    if not MakesMoney(profit.vendor, profit.auction) then
+        label = Red(label)
+    end
+    AddRow("row", label, nil, nil, {
+        tooltip = QueuedTooltip(entry),
+        -- Clicking the item shows its recipe in the professions window.
+        onClick = function() VendorProfit.Recipes.Show(entry.recipeID, entry.profession) end,
+        -- Right to left: cancel, +, -.
+        icons = {
+            { texture = CANCEL_TEXTURE, tooltip = L.QUEUED_REMOVE, onClick = function() Order.Remove(index) end },
+            { text = "+", tooltip = L.QUEUED_MORE, onClick = function() Order.SetCrafts(index, entry.crafts + 1) end },
+            {
+                text = "-", enabled = entry.crafts > 1, tooltip = L.QUEUED_FEWER,
+                onClick = function() Order.SetCrafts(index, entry.crafts - 1) end,
+            },
+        },
+    })
+end
+
 local function AddContent()
     local s = Shopper.Summary()
     local plan = s.plan
@@ -551,19 +730,27 @@ local function AddContent()
         return
     end
     for index, entry in ipairs(entries) do
-        AddRow("row", ItemLabel(entry.itemID, entry.crafts * entry.count), nil, {
-            text = L.REMOVE,
-            onClick = function() Order.Remove(index) end,
-        })
+        AddQueued(index, entry)
     end
 
     AddProfit(s)
     local fromBags = AddToDo(plan)
 
     if #fromBags > 0 then
-        AddRow("divider", L.HEAD_BAGS)
-        for _, use in ipairs(fromBags) do
-            AddRow("row", ItemLabel(use.itemID, use.quantity))
+        -- Click the divider to fold it away (remembered per character).
+        local collapsed = BagsCollapsed()
+        local sign = collapsed and "Interface\\Buttons\\UI-PlusButton-Up" or "Interface\\Buttons\\UI-MinusButton-Up"
+        local title = "|T" .. sign .. ":12:12|t " .. L.HEAD_BAGS
+        if collapsed then
+            title = title .. " (" .. #fromBags .. ")"
+        end
+        AddRow("divider", title, nil, nil, {
+            onClick = function() SetBagsCollapsed(not collapsed) end,
+        })
+        if not collapsed then
+            for _, use in ipairs(fromBags) do
+                AddRow("row", ItemLabel(use.itemID, use.quantity))
+            end
         end
     end
 end
@@ -815,6 +1002,17 @@ function Panel.FindButton(text)
         local button = rows[index].button
         if button:IsShown() and button:GetText() == text then
             return button
+        end
+    end
+end
+
+-- The first shown row whose left text contains text: its regions (left,
+-- right, button, icons, hit: the text's hover and click area). For tests and debugging.
+function Panel.FindRow(text)
+    for index = 1, usedRows do
+        local row = rows[index]
+        if row.left:IsShown() and (row.left:GetText() or ""):find(text, 1, true) then
+            return row
         end
     end
 end

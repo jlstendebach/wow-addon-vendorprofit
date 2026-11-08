@@ -411,7 +411,9 @@ def shop_client(sell=600, before_load=""):
 
 
 def lines(ev):
-    return list(ev("VendorProfit.Panel.Lines()").values())
+    # A collapsible divider's +/- icon isn't part of its title.
+    return [re.sub(r"^\|TInterface\\Buttons\\UI-(Plus|Minus)Button-Up:12:12\|t ", "", l)
+            for l in ev("VendorProfit.Panel.Lines()").values()]
 
 
 DIVIDERS = {"To do", "Already in your bags"}
@@ -599,6 +601,49 @@ check("reopened away from the AH: docked to the professions window", ev("VendorP
 run("VendorProfit.Order.Clear()")
 check("clear empties the order and its record", ev("VendorProfit.Order.IsEmpty()") and ev("VendorProfitCharDB.order.spent") == 0)
 
+# --- Queued rows: -, +, show, remove; red when nothing makes money; hover -------------
+run, ev = shop_client()
+run('__stub.createCount = 2'); run(QUEUE + ':Click()')
+Q = 'VendorProfit.Panel.FindRow("Rough Bronze Cuirass x2")'
+check("queued row: cancel, +, - from the right; no Remove button",
+      ev(Q + ".icons[1].icon.__texture") == "Interface\\RaidFrame\\ReadyCheck-NotReady"
+      and ev(Q + ".icons[2].__text") == "+" and ev(Q + ".icons[3].__text") == "-"
+      and not ev(Q + ".icons[4]") and not ev(Q + ".button:IsShown()") and ev('VendorProfit.Panel.FindButton("Remove")') is None)
+run(Q + '.icons[2]:Click()')
+check("+ crafts one more", ev("VendorProfit.Order.Entries()[1].crafts") == 3 and has_line(ev, "Rough Bronze Cuirass x3"))
+Q3 = 'VendorProfit.Panel.FindRow("Rough Bronze Cuirass x3")'
+run(Q3 + '.icons[3]:Click(); ' + 'VendorProfit.Panel.FindRow("Rough Bronze Cuirass x2").icons[3]:Click()')
+check("- crafts one fewer, down to one", ev("VendorProfit.Order.Entries()[1].crafts") == 1)
+Q1 = 'VendorProfit.Panel.FindRow("Rough Bronze Cuirass x1")'
+check("...then - is off", not ev(Q1 + ".icons[3]:IsEnabled()"))
+run('VendorProfit.Order.SetCrafts(1, 0)')
+check("never below one", ev("VendorProfit.Order.Entries()[1].crafts") == 1)
+run('__stub.openedRecipe = nil; __stub.selectedRecipe = nil; ' + Q1 + '.hit:GetScript("OnMouseUp")(' + Q1 + '.hit, "LeftButton")')
+check("clicking the item shows its recipe in the professions window", ev("__stub.selectedRecipe") == 2670)
+run(Q1 + '.hit:GetScript("OnEnter")(' + Q1 + '.hit)')
+tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
+check("hover: the item, a gap, then its cost and its vendor and auction profit, nothing more",
+      [t[0] for t in tip[1:]] == [" ", "Cost (cheapest route)", "Vendor profit", "Auction profit"])
+check("makes money: name not red", not ev(Q1 + ".left:GetText()").startswith("|cffff2020"))
+run('__stub.items["item:2866"].sellPrice = 1; __stub.auctionPrices[2866] = 1; VendorProfit.Order.Changed()')
+check("neither vendor nor auction makes money: name in red", ev('VendorProfit.Panel.FindRow("Rough Bronze Cuirass x1").left:GetText()').startswith("|cffff2020"))
+run('VendorProfit.Panel.FindRow("Rough Bronze Cuirass x1").icons[1]:Click()')
+check("cancel removes it", ev("VendorProfit.Order.IsEmpty()"))
+check("no errors", ev("#__stub.errors") == 0)
+
+# --- Already in your bags: collapsible -------------------------------------------------
+run, ev = shop_client()
+run('__stub.createCount = 10'); run(QUEUE + ':Click()')
+BAGS = 'VendorProfit.Panel.FindRow("Already in your bags")'
+check("expanded to start, with a minus sign", section(ev, "Already in your bags") == ["|Ticon2840:0|t Copper Bar x3", "|Ticon2841:0|t Bronze Bar x12"]
+      and "UI-MinusButton-Up" in ev(BAGS + ".left:GetText()"))
+run(BAGS + '.hit:GetScript("OnMouseUp")(' + BAGS + '.hit, "LeftButton")')
+check("click the divider: collapsed, a plus sign and how many items", not has_line(ev, "Bronze Bar x12")
+      and "UI-PlusButton-Up" in ev(BAGS + ".left:GetText()") and ev(BAGS + ".left:GetText()").endswith("Already in your bags (2)"))
+check("remembered per character", ev("VendorProfitCharDB.bagsCollapsed") == True)
+run(BAGS + '.hit:GetScript("OnMouseUp")(' + BAGS + '.hit, "LeftButton")')
+check("click again: back open", has_line(ev, "Bronze Bar x12") and ev("VendorProfitCharDB.bagsCollapsed") is None)
+
 # --- Not profitable at live prices --------------------------------------------
 run, ev = shop_client(sell=450)
 run('__stub.createCount = 10'); run(QUEUE + ':Click()')
@@ -609,11 +654,18 @@ run('''
     __stub.ah.listings[2771] = { { unitPrice = 95, quantity = 100 } }
 ''')
 run('__stub.OpenAH()'); click(run, "scan"); run('__stub.Advance(3)')
-check("live prices: loses money", ev("VendorProfit.Shopper.Summary().profit") < 0)
+check("live prices: loses money selling to a vendor", ev("VendorProfit.Shopper.Summary().profit") < 0)
+check("...but makes money at auction: plain Buy, no warning", ev("VendorProfit.Shopper.Summary().auctionProfit") > 0
+      and ev(BUY + ".__text") == "Buy" and not has_line(ev, "makes money"))
+check("vendor profit in red, label and all; auction profit not", has_line(ev, "|cffff2020Vendor profit|r", "|cffff2020-")
+      and has_line(ev, "Auction profit") and not has_line(ev, "|cffff2020Auction profit|r"))
+# The cuirass sells for little at auction too: neither makes money.
+run('__stub.auctionPrices[2866] = 100; VendorProfit.Shopper.Recompute(); VendorProfit.Panel.Refresh()')
+check("neither makes money", ev("VendorProfit.Shopper.Summary().auctionProfit") < 0)
 check("buy turns into Buy anyway", ev(BUY + ".__text") == "Buy anyway" and ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip").startswith("Not profitable"))
-check("vendor profit shown in red", has_line(ev, "Vendor profit", "|cffff2020-"))
 run('VendorProfit.Shopper.Buy()')
-check("even called directly, nothing is bought", ev("#__stub.ah.starts") == 0)
+check("even called directly, nothing is bought, and it says why", ev("#__stub.ah.starts") == 0
+      and has_line(ev, "Neither selling to a vendor nor at auction makes money at these prices."))
 click(run, "buy")
 check("clicking Buy anyway buys", ev("#__stub.ah.starts") == 1 and ev("VendorProfit.Shopper.Status()") == "quoting")
 run('__stub.Advance(0.5)'); click(run, "cancel")

@@ -289,8 +289,12 @@ function Shopper.CanBuy()
     return status == "ready" and Shopper.NextPurchase() ~= nil
 end
 
+-- Whether finishing the order makes money one way or the other: selling to
+-- a vendor or at auction. Buying only stops (for "Buy anyway") when neither
+-- does.
 function Shopper.IsProfitable()
-    return Shopper.Summary().profit >= 0
+    local s = Shopper.Summary()
+    return s.profit > 0 or (s.auctionProfit ~= nil and s.auctionProfit > 0)
 end
 
 function Shopper.IsOverridden()

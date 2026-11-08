@@ -65,39 +65,10 @@ end
 -- The list stays up after the professions window closes (the game keeps
 -- reporting the last profession), so you can scan and queue at the auction
 -- house without it. Only Show needs the window open.
-local function ProfessionsWindowOpen()
-    return ProfessionsFrame ~= nil and ProfessionsFrame:IsShown()
-end
+local ProfessionsWindowOpen = Recipes.WindowOpen
 
--- Selects a recipe in the professions window the way clicking it in the
--- window's own list does: instant, with no trip to the server. Returns
--- whether it could.
-local function SelectInWindow(recipe)
-    local _, openName = Recipes.OpenProfession()
-    local page = ProfessionsFrame.CraftingPage
-    local info = C_TradeSkillUI.GetRecipeInfo(recipe.recipeID)
-    if openName ~= recipe.profession or info == nil or page == nil or page.SelectRecipe == nil then
-        return false
-    end
-    -- On the recipes tab, not specializations or crafting orders.
-    if ProfessionsFrame.recipesTabID and ProfessionsFrame.GetTab and ProfessionsFrame.SetTab
-        and ProfessionsFrame:GetTab() ~= ProfessionsFrame.recipesTabID then
-        ProfessionsFrame:SetTab(ProfessionsFrame.recipesTabID)
-    end
-    return pcall(page.SelectRecipe, page, info)
-end
-
--- Shows a recipe in the professions window, if it's open. In the profession
--- the window is showing, it's selected there directly. C_TradeSkillUI.
--- OpenRecipe is only the fallback: it asks the server to open the
--- profession, which can be slow or do nothing.
 local function ShowRecipe(recipe)
-    if not ProfessionsWindowOpen() then
-        return
-    end
-    if not SelectInWindow(recipe) and C_TradeSkillUI.OpenRecipe then
-        C_TradeSkillUI.OpenRecipe(recipe.recipeID)
-    end
+    Recipes.Show(recipe.recipeID, recipe.profession)
 end
 
 local function QueueRecipe(entry)
