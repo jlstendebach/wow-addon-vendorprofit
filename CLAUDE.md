@@ -79,8 +79,8 @@ version, with the commit messages as its notes.
 
 - One branch per change, named after its commit: `feat/investment-column`,
   `fix/one-click-open`.
-- The pull request's title is the commit message; **squash-merge** it, so
-  `main` (and the release notes) get one line per change.
+- **Squash-merge** pull requests, so `main` (and the release notes) get one
+  line per change: the pull request's title.
 - **If `main` moved on** (someone else merged first), bring the branch up to
   date before merging:
   ```
@@ -107,7 +107,17 @@ git commit -m "feat: show investment in best crafts"
 git push -u origin HEAD
 ```
 
-Then say to open the pull request from the link `git push` prints.
+Then say to open the pull request from the link `git push` prints, and give
+its title and summary, each in its own copyable code block:
+
+- **Title:** `<Type> - <Scope> - <Short description>`, for example
+  `Feat - Best Crafts - Show investment per craft` or
+  `Fix - Shopping List - Open professions with one click`. The type is the
+  commit's, capitalized (`Feat`, `Fix`, `Perf`, `Refactor`, `Test`, `Docs`,
+  `CI`, `Chore`); the scope is the part of the addon (`Best Crafts`,
+  `Shopping List`, `Profit History`, `Crafting Screen`, `Workflow`, ...).
+- **Summary:** a line on what it's for, a few bullets of what changed, and
+  the new version (or that there's none, and so no release).
 
 The commit message is a short [Conventional Commit](https://www.conventionalcommits.org/):
 `type: what changed`, lowercase, under about 50 characters, no period, no
