@@ -1,9 +1,10 @@
 -- The Best Crafts tab of the Vendor Profit window: every saved recipe of the
 -- open profession, ranked by profit per craft (BestCrafts.lua), losses
 -- included, then the ones with no price to rank by, in a scrolling list with
--- Vendor and Auction tabs. Each has Show (selects it in the professions
--- window) and Queue (adds one craft to the shopping order). Live prices come
--- from Scan.
+-- Vendor and Auction tabs and Investment, Profit and ROI columns, sortable
+-- by clicking a column's heading. Each has a magnifying glass (selects it in
+-- the professions window) and + (adds one craft to the shopping order). Live
+-- prices come from Scan.
 --
 -- Opened by the Vendor Profit button in the professions window's title bar,
 -- or /vprofit best.
@@ -20,7 +21,7 @@ VendorProfit.BestPanel = BestPanel
 
 local Panel = VendorProfit.Panel
 
--- Wider than the Shopping List, for the Investment and Profit columns.
+-- Wider than the Shopping List, for the money columns.
 local WIDTH = 480
 local PADDING = 16
 local ROW_HEIGHT = 22
@@ -28,11 +29,19 @@ local LIST_TOP = -94
 local VISIBLE_ROWS = 14
 local SCROLLBAR_WIDTH = 24
 local LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
--- Columns, from the right of the list: Show, Queue, Profit, Investment.
-local SHOW_WIDTH, QUEUE_WIDTH, MONEY_WIDTH = 50, 56, 72
-local PROFIT_RIGHT = -(SHOW_WIDTH + 4 + QUEUE_WIDTH + 8)
-local INVESTMENT_RIGHT = PROFIT_RIGHT - MONEY_WIDTH - 6
-local NAME_WIDTH = LIST_WIDTH + INVESTMENT_RIGHT - MONEY_WIDTH - 6
+-- Columns, from the right of the list: Show (magnifying glass), Queue (+),
+-- ROI, Profit, Investment; the recipe name takes the rest.
+local ICON_BUTTON_WIDTH, MONEY_WIDTH, ROI_WIDTH, GAP = 22, 72, 48, 6
+local ROI_RIGHT = -(2 * ICON_BUTTON_WIDTH + 4 + 8)
+local PROFIT_RIGHT = ROI_RIGHT - ROI_WIDTH - GAP
+local INVESTMENT_RIGHT = PROFIT_RIGHT - MONEY_WIDTH - GAP
+local NAME_WIDTH = LIST_WIDTH + INVESTMENT_RIGHT - MONEY_WIDTH - GAP
+
+-- Sorting by column: Recipe (A to Z first), Investment, Profit, ROI (highest
+-- first). Clicking the sorted column again reverses it. Recipes with no
+-- profit to rank stay at the bottom.
+local SORT_DEFAULT = { key = "profit", ascending = false }
+local SORT_STARTS_ASCENDING = { name = true }
 
 local frame              -- the page
 local tab = "vendor"
@@ -108,6 +117,15 @@ local function SmallButton(parent, text, width)
     return button
 end
 
+local function Tooltip(button, text)
+    button:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(type(text) == "function" and text(self) or text, 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+end
+
 -- Rows live on the scroll child, frame.list, one ROW_HEIGHT apart.
 local function GetRow(index)
     local row = rows[index]
@@ -115,48 +133,124 @@ local function GetRow(index)
         local list = frame.list
         row = {}
         local top = -(index - 1) * ROW_HEIGHT
+        local function Column(width, right)
+            local text = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+            text:SetJustifyH("RIGHT")
+            text:SetWordWrap(false)
+            text:SetWidth(width)
+            text:SetPoint("TOPRIGHT", list, "TOPRIGHT", right, top - 4)
+            return text
+        end
         row.left = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         row.left:SetJustifyH("LEFT")
         row.left:SetWordWrap(false)
         row.left:SetWidth(NAME_WIDTH)
         row.left:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top - 4)
         -- Investment: what one craft's items cost along the cheapest route.
-        row.investment = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        row.investment:SetJustifyH("RIGHT")
-        row.investment:SetWidth(MONEY_WIDTH)
-        row.investment:SetPoint("TOPRIGHT", list, "TOPRIGHT", INVESTMENT_RIGHT, top - 4)
-        row.right = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        row.right:SetJustifyH("RIGHT")
-        row.right:SetWidth(MONEY_WIDTH)
-        row.right:SetPoint("TOPRIGHT", list, "TOPRIGHT", PROFIT_RIGHT, top - 4)
-        -- Why a recipe isn't ranked, across both money columns.
-        row.reason = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        row.reason:SetJustifyH("RIGHT")
-        row.reason:SetWordWrap(false)
-        row.reason:SetWidth(2 * MONEY_WIDTH + 6)
-        row.reason:SetPoint("TOPRIGHT", list, "TOPRIGHT", PROFIT_RIGHT, top - 4)
-        row.queue = SmallButton(list, L.QUEUE, QUEUE_WIDTH)
-        row.show = SmallButton(list, L.BEST_SHOW, SHOW_WIDTH)
+        row.investment = Column(MONEY_WIDTH, INVESTMENT_RIGHT)
+        row.right = Column(MONEY_WIDTH, PROFIT_RIGHT)
+        -- Return on investment: profit as a share of the investment.
+        row.roi = Column(ROI_WIDTH, ROI_RIGHT)
+        -- Why a recipe isn't ranked, across the columns it has no number for.
+        row.reason = Column(MONEY_WIDTH, ROI_RIGHT)
+
+        -- Show: a magnifying glass.
+        row.show = SmallButton(list, "", ICON_BUTTON_WIDTH)
         row.show:SetPoint("TOPRIGHT", list, "TOPRIGHT", 0, top)
-        row.queue:SetPoint("RIGHT", row.show, "LEFT", -4, 0)
+        row.show.icon = row.show:CreateTexture(nil, "OVERLAY")
+        row.show.icon:SetTexture("Interface\\Common\\UI-Searchbox-Icon")
+        row.show.icon:SetSize(12, 12)
+        row.show.icon:SetPoint("CENTER", row.show, "CENTER", 0, 0)
         row.show:SetMotionScriptsWhileDisabled(true)
-        row.show:SetScript("OnEnter", function(self)
-            if not self:IsEnabled() then
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetText(string.format(L.BEST_SHOW_CLOSED, self.profession or ""), 1, 1, 1, 1, true)
-                GameTooltip:Show()
+        Tooltip(row.show, function(self)
+            if self:IsEnabled() then
+                return L.BEST_SHOW_HELP
             end
+            return string.format(L.BEST_SHOW_CLOSED, self.profession or "")
         end)
-        row.show:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        row.queue:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(L.BEST_QUEUE_HELP, 1, 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        row.queue:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        -- Queue: a plus.
+        row.queue = SmallButton(list, "+", ICON_BUTTON_WIDTH)
+        row.queue:SetPoint("RIGHT", row.show, "LEFT", -4, 0)
+        Tooltip(row.queue, L.BEST_QUEUE_HELP)
         rows[index] = row
     end
     return row
+end
+
+-- The sort, saved per character.
+local function Sort()
+    local db = VendorProfitCharDB
+    if db and type(db.bestSort) == "table" and db.bestSort.key then
+        return db.bestSort
+    end
+    return SORT_DEFAULT
+end
+
+local function SetSort(key)
+    local current = Sort()
+    local ascending
+    if current.key == key then
+        ascending = not current.ascending
+    else
+        ascending = SORT_STARTS_ASCENDING[key] or false
+    end
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    VendorProfitCharDB.bestSort = { key = key, ascending = ascending }
+    BestPanel.Refresh()
+end
+
+function BestPanel.Sort()
+    return Sort()
+end
+
+local function SortValue(entry, key)
+    if key == "name" then
+        return (C_Item.GetItemInfo(entry.recipe.item) or ""):lower()
+    elseif key == "investment" then
+        return entry.cost
+    elseif key == "roi" then
+        return entry.roi or -math.huge
+    end
+    return entry.profit
+end
+
+-- Orders the ranked entries by the sort; unranked ones stay last as they are.
+local function SortEntries(entries)
+    local sort = Sort()
+    local ranked, unranked = {}, {}
+    for _, entry in ipairs(entries) do
+        if entry.profit then
+            entry.roi = entry.cost > 0 and entry.profit / entry.cost or nil
+            ranked[#ranked + 1] = entry
+        else
+            unranked[#unranked + 1] = entry
+        end
+    end
+    table.sort(ranked, function(a, b)
+        local x, y = SortValue(a, sort.key), SortValue(b, sort.key)
+        if x ~= y then
+            if sort.ascending then
+                return x < y
+            end
+            return x > y
+        end
+        return a.recipe.recipeID < b.recipe.recipeID
+    end)
+    for _, entry in ipairs(unranked) do
+        ranked[#ranked + 1] = entry
+    end
+    return ranked
+end
+
+local function FormatROI(roi)
+    if roi == nil then
+        return Gray("-")
+    end
+    local text = string.format("%d%%", math.floor(roi * 100 + (roi >= 0 and 0.5 or -0.5)))
+    if roi < 0 then
+        return RED_FONT_COLOR:WrapTextInColorCode(text)
+    end
+    return text
 end
 
 local function SetTab(name)
@@ -193,17 +287,29 @@ local function Create(page)
     end)
     frame.scan:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
-    -- Column headings over the list.
-    local function Heading(text, right)
-        local heading = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        heading:SetJustifyH("RIGHT")
-        heading:SetWidth(MONEY_WIDTH)
-        heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + LIST_WIDTH + right, LIST_TOP + 14)
-        heading:SetText(text)
+    -- Column headings over the list; click one to sort by it.
+    frame.headings = {}
+    local function Heading(key, text, width, right)
+        local heading = CreateFrame("Button", nil, frame)
+        heading:SetSize(width, 14)
+        if right then
+            heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + LIST_WIDTH + right, LIST_TOP + 16)
+        else
+            heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, LIST_TOP + 16)
+        end
+        heading.text = heading:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        heading.text:SetAllPoints(heading)
+        heading.text:SetJustifyH(right and "RIGHT" or "LEFT")
+        heading.label = text
+        heading:SetScript("OnClick", function() SetSort(key) end)
+        Tooltip(heading, L.BEST_SORT_HELP)
+        frame.headings[key] = heading
         return heading
     end
-    frame.investmentHeading = Heading(L.BEST_INVESTMENT, INVESTMENT_RIGHT)
-    frame.profitHeading = Heading(L.BEST_PROFIT, PROFIT_RIGHT)
+    frame.nameHeading = Heading("name", L.BEST_RECIPE, NAME_WIDTH)
+    frame.investmentHeading = Heading("investment", L.BEST_INVESTMENT, MONEY_WIDTH, INVESTMENT_RIGHT)
+    frame.profitHeading = Heading("profit", L.BEST_PROFIT, MONEY_WIDTH, PROFIT_RIGHT)
+    frame.roiHeading = Heading("roi", L.BEST_ROI, ROI_WIDTH, ROI_RIGHT)
 
     -- The list scrolls; the mouse wheel works over it.
     frame.scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
@@ -243,19 +349,32 @@ local function Refresh()
         scan.tooltip = BestCrafts.CanScan() and L.BEST_SCAN_HELP or L.BEST_SCAN_OPEN_AH
     end
 
+    -- Headings: the sorted one in white, with an arrow for its direction.
+    local sort = Sort()
+    for key, heading in pairs(frame.headings) do
+        if key == sort.key then
+            local arrow = sort.ascending and L.BEST_SORT_UP or L.BEST_SORT_DOWN
+            heading.text:SetText(HIGHLIGHT_FONT_COLOR:WrapTextInColorCode(heading.label .. " " .. arrow))
+        else
+            heading.text:SetText(heading.label)
+        end
+    end
+
     local ranked = {}
     if profession then
-        ranked = BestCrafts.Rank(profession, tab, function() BestPanel.Refresh() end)
+        ranked = SortEntries(BestCrafts.Rank(profession, tab, function() BestPanel.Refresh() end))
     end
     local place = 0
     for index, entry in ipairs(ranked) do
         local row = GetRow(index)
         local reason
+        row.roi:SetText("")
         if entry.profit then
             place = place + 1
             row.left:SetText(place .. ". " .. ItemLabel(entry.recipe.item))
             row.investment:SetText(VendorProfit.FormatMoney(entry.cost))
             row.right:SetText(VendorProfit.FormatMoney(entry.profit))
+            row.roi:SetText(FormatROI(entry.roi))
         else
             row.left:SetText(Gray("-  ") .. ItemLabel(entry.recipe.item))
             local unpriced = entry.unpriced
@@ -266,23 +385,26 @@ local function Refresh()
             else
                 reason = L.BEST_NO_AUCTION_PRICE
             end
-            -- The investment is known when only the sale price is missing.
+            -- The investment is known when only the sale price is missing;
+            -- the reason takes the columns without a number.
+            row.right:SetText("")
             if unpriced.output then
                 row.investment:SetText(VendorProfit.FormatMoney(entry.cost))
-                row.right:SetText(Gray(reason))
-                reason = nil
+                row.reason:SetWidth(MONEY_WIDTH + GAP + ROI_WIDTH)
             else
                 row.investment:SetText("")
-                row.right:SetText("")
+                row.reason:SetWidth(2 * (MONEY_WIDTH + GAP) + ROI_WIDTH)
             end
         end
         row.reason:SetText(reason and Gray(reason) or "")
         row.left:Show()
         row.investment:Show()
         row.right:Show()
+        row.roi:Show()
         row.reason:Show()
         row.show:SetScript("OnClick", function() ShowRecipe(entry.recipe) end)
         row.show:SetEnabled(ProfessionsWindowOpen())
+        row.show.icon:SetDesaturated(not ProfessionsWindowOpen())
         row.show.profession = name
         row.show:Show()
         row.queue:SetScript("OnClick", function() QueueRecipe(entry) end)
@@ -293,6 +415,7 @@ local function Refresh()
         row.left:Hide()
         row.investment:Hide()
         row.right:Hide()
+        row.roi:Hide()
         row.reason:Hide()
         row.show:Hide()
         row.queue:Hide()
@@ -362,7 +485,8 @@ function BestPanel.Lines()
     return lines
 end
 
--- A row's regions: left, investment, right (profit), reason, show, queue.
+-- A row's regions: left, investment, right (profit), roi, reason, show,
+-- queue.
 -- For tests and debugging.
 function BestPanel.Row(index)
     return rows[index]

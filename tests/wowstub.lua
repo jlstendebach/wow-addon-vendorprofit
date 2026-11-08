@@ -118,6 +118,8 @@ function FontMethods:GetText() return self.__text end
 function FontMethods:SetJustifyH() end
 function FontMethods:SetFontObject() end
 function FontMethods:SetWordWrap() end
+function FontMethods:SetAllPoints(target) self.__point = { "ALL", target } end
+function FontMethods:SetDesaturated(d) self.__desaturated = d end
 function FontMethods:SetWidth() end
 function FontMethods:GetStringHeight() return 12 end
 function FontMethods:ClearAllPoints() self.__point = nil end
@@ -211,6 +213,7 @@ end
 WHITE_FONT_COLOR, RED_FONT_COLOR = Color("ffffff", 1, 1, 1), Color("ff2020", 1, 0.125, 0.125)
 GRAY_FONT_COLOR, GREEN_FONT_COLOR = Color("808080", 0.5, 0.5, 0.5), Color("20ff20", 0.125, 1, 0.125)
 NORMAL_FONT_COLOR = Color("ffd100", 1, 0.82, 0)
+HIGHLIGHT_FONT_COLOR = Color("ffffff", 1, 1, 1)
 
 function GetMoneyString(copper)
     assert(copper == math.floor(copper), "GetMoneyString needs whole copper, got " .. tostring(copper))

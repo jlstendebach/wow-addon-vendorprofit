@@ -109,19 +109,20 @@ The **Vendor Profit** button in the professions window's title bar (left of Trad
 
 ```
 Best Crafts: Blacksmithing
-[ Vendor ] [ Auction ]                                          [ Scan ]
-                              Investment    Profit
-1. Rough Bronze Cuirass           4s 38c    1s 62c   [Queue] [Show]
-2. Rough Bronze Shoulders         3s 13c       87c   [Queue] [Show]
-3. Copper Chain Vest              3s 60c   -2s 10c   [Queue] [Show]
--  Mystery Helm            no price: Strange Ore     [Queue] [Show]
+[ Vendor ] [ Auction ]                                     [ Scan ]
+Recipe                     Investment    Profit▼    ROI
+1. Rough Bronze Cuirass        4s 38c    1s 62c     37%   [+] [🔍]
+2. Rough Bronze Shoulders      3s 13c       87c     28%   [+] [🔍]
+3. Copper Chain Vest           3s 60c   -2s 10c    -58%   [+] [🔍]
+-  Mystery Helm             no price: Strange Ore         [+] [🔍]
 Prices from Auctionator's last scan.
 ```
 
-- **Investment** is what one craft's items cost along its cheapest route: what you'd spend, counting items you already have at what they'd cost to get. **Profit** is what one craft makes after that. The tab is wider than the Shopping List to fit both.
+- **Investment** is what one craft's items cost along its cheapest route: what you'd spend, counting items you already have at what they'd cost to get. **Profit** is what one craft makes after that, and **ROI** (return on investment) is the profit as a share of the investment. The tab is wider than the Shopping List to fit them.
+- **Sorting.** Click a column's heading to sort by it (highest first; Recipe A to Z); click it again to reverse. The sorted column is in white with an arrow, numbers follow the sort, and recipes with no profit to rank stay at the bottom. The sort is saved per character. By default it's by Profit.
 - **Vendor** ranks by selling to a vendor, a guaranteed sale. **Auction** ranks by Auctionator's price after the 5% cut; usually higher, but an auction might not sell.
 - Losses are listed too (in red), below the crafts that make money. Recipes with no profit to rank by come last, unnumbered, saying why: a reagent with no price anywhere (*no price: Strange Ore*, so their profit can't be trusted), or no vendor (or auction) price for what they make.
-- **Show** selects the recipe in the professions window (it's off while that window is closed). **Queue** adds one craft to the shopping order (click again for more); the window stays on Best Crafts.
+- The **magnifying glass** selects the recipe in the professions window (it's off while that window is closed). **+** adds one craft to the shopping order (click again for more); the window stays on Best Crafts.
 - It ranks straight away from Auctionator's prices. At the auction house, **Scan** looks up live lowest prices for everything that matters to the profession: every recipe's crafting tree, merged into one list of unique items, looked up a couple of hundred at a time with the auction house's batch lookup (the one it uses for favorites) rather than one search per item. It takes seconds. Items with nothing listed count as unavailable until the next scan, and Auctionator saves the prices it sees too. Items that bind on pickup aren't looked up.
 
 ## Shopping
@@ -231,6 +232,7 @@ Saved data, per character (`VendorProfitCharDB`):
 - `professions[professionID] = { name, recipes = { [recipeID] = { item, count, reagents } } }`
 - `order = { entries, inMail, lastSeen, spent }`: the queued crafts, purchases not seen in bags or bank yet (and the count they're waiting to rise from), and what the panel spent.
 - `panel = { left, top }`: where you moved the Vendor Profit window, if you did.
+- `bestSort = { key, ascending }`: how Best Crafts is sorted.
 
 Opening a profession uses a secure action button casting the profession's spell, as TradeSkillMaster does in Forever. It's a separate invisible button laid over the Craft button rather than part of the panel, because a secure button inside the panel would make the panel protected and the game would block showing, hiding or moving it in combat. It's only placed out of combat and hidden as combat starts.
 

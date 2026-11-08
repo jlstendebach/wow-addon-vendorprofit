@@ -1239,7 +1239,30 @@ check("all recipes listed, not just the top 10: priced ones ranked, then the res
 check("investment column: what one craft's items cost along the cheapest route",
       ev("VendorProfit.BestPanel.Row(1).investment:GetText()") == "|cffffffff4s 38c|r"
       and ev("VendorProfit.BestPanel.Row(2).investment:GetText()") == "|cffffffff3s 13c|r"
-      and ev(B + ".investmentHeading:GetText()") == "Investment" and ev(B + ".profitHeading:GetText()") == "Profit")
+      and ev(B + ".investmentHeading.label") == "Investment" and ev(B + ".profitHeading.label") == "Profit")
+check("ROI column: profit as a share of the investment, losses in red",
+      ev("VendorProfit.BestPanel.Row(1).roi:GetText()") == "37%" and ev("VendorProfit.BestPanel.Row(2).roi:GetText()") == "28%"
+      and ev("VendorProfit.BestPanel.Row(3).roi:GetText()").startswith("|cffff2020-"))
+check("+ to queue, a magnifying glass to show", ev("VendorProfit.BestPanel.Row(1).queue.__text") == "+"
+      and ev("VendorProfit.BestPanel.Row(1).show.icon.__texture") == "Interface\\Common\\UI-Searchbox-Icon"
+      and ev("VendorProfit.BestPanel.Row(1).queue:GetWidth()") == 22)
+check("sorted by profit, highest first, by default: its heading marked",
+      ev("VendorProfit.BestPanel.Sort().key") == "profit" and "Arrow-Down" in ev(B + ".profitHeading.text:GetText()")
+      and "Arrow" not in ev(B + ".investmentHeading.text:GetText()"))
+run(B + ".investmentHeading:Click()")
+order = lambda: [l.split(" | ")[0] for l in best()]
+check("click Investment: biggest investment first; unpriced stay last",
+      [o.split(" ")[-1] for o in order()[:3]] == ["Cuirass", "Vest", "Shoulders"] and order()[3].startswith("|cff808080-")
+      and order()[0].startswith("1. "))
+run(B + ".investmentHeading:Click()")
+check("click again: reversed", [o.split(" ")[-1] for o in order()[:3]] == ["Shoulders", "Vest", "Cuirass"]
+      and "Arrow-Up" in ev(B + ".investmentHeading.text:GetText()"))
+run(B + ".nameHeading:Click()")
+check("Recipe: A to Z first", [o.split("|t ")[-1] for o in order()[:3]] == ["Copper Chain Vest", "Rough Bronze Cuirass", "Rough Bronze Shoulders"])
+run(B + ".roiHeading:Click()")
+check("ROI: highest first", [o.split(" ")[-1] for o in order()[:3]] == ["Cuirass", "Shoulders", "Vest"])
+check("the sort is saved", ev("VendorProfitCharDB.bestSort.key") == "roi")
+run(B + ".profitHeading:Click()")
 check("no investment where a reagent has no price; shown where only the sale price is missing",
       ev("VendorProfit.BestPanel.Row(4).investment:GetText()") == "" and ev("VendorProfit.BestPanel.Row(5).investment:GetText()") != "")
 check("Best Crafts is wider than the Shopping List, for the columns", ev("VendorProfitPanel:GetWidth()") == 480)
@@ -1346,7 +1369,7 @@ check("stays open when the professions window closes", ev("VendorProfit.BestPane
 check("...still listing the last profession's best crafts", len(best()) == 3)
 run('__stub.openedRecipe = nil; VendorProfit.BestPanel.Row(1).show:Click()')
 check("Show off with the professions window closed, saying to open it", ev("__stub.openedRecipe") is None and ev("__stub.selectedRecipe") == 3328
-      and not ev("VendorProfit.BestPanel.Row(1).show:IsEnabled()"))
+      and not ev("VendorProfit.BestPanel.Row(1).show:IsEnabled()") and ev("VendorProfit.BestPanel.Row(1).show.icon.__desaturated"))
 run('VendorProfit.BestPanel.Row(1).show:GetScript("OnEnter")(VendorProfit.BestPanel.Row(1).show)')
 check("...in its tooltip", ev("GameTooltip.lines[1].left") == "Open Blacksmithing to see this recipe.")
 check("Queue still works", ev("VendorProfit.BestPanel.Row(1).queue:IsEnabled()"))
