@@ -84,6 +84,7 @@ VendorProfit.L = {
     BEST_NOTHING_TO_SCAN = "Nothing in this profession can be listed on the auction house.",
     BEST_OPEN_PROFESSION = "Open one of your professions to see its best crafts.",
     BEST_NONE = "No saved recipes for this profession yet.",
+    BEST_NO_MATCH = "No recipes match \"%s\".",
     BEST_NO_PRICE_FOR = "no price: %s",
     BEST_NO_VENDOR_PRICE = "no vendor price",
     BEST_NO_AUCTION_PRICE = "no auction price",

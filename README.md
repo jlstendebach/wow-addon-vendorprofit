@@ -111,7 +111,7 @@ The **Vendor Profit** button in the professions window's title bar (left of Trad
 
 ```
 Best Crafts: Blacksmithing
-[ Vendor ] [ Auction ]                                     [ Scan ]
+[ Vendor ] [ Auction ]  [🔍 Search      ]                  [ Scan ]
 Recipe                     Investment    Profit▼    ROI
 1. Rough Bronze Cuirass        4s 38c    1s 62c     37%   [+] [🔍]
 2. Rough Bronze Shoulders      3s 13c       87c     28%   [+] [🔍]
@@ -121,6 +121,7 @@ Prices from Auctionator's last scan.
 ```
 
 - **Investment** is what one craft's items cost along its cheapest route: what you'd spend, counting items you already have at what they'd cost to get. **Profit** is what one craft makes after that, and **ROI** (return on investment) is the profit as a share of the investment. The tab is wider than the Shopping List to fit them.
+- **Search.** Type in the search box to filter the list by recipe name as you type (any case); recipes keep their place number in the full ranking. Clear it to see everything.
 - **Sorting.** Click a column's heading to sort by it (highest first; Recipe A to Z); click it again to reverse. The sorted column is in white with an arrow, numbers follow the sort, and recipes with no profit to rank stay at the bottom. The sort is saved per character. By default it's by Profit.
 - **Vendor** ranks by selling to a vendor, a guaranteed sale. **Auction** ranks by Auctionator's price after the 5% cut; usually higher, but an auction might not sell.
 - Losses are listed too (in red), below the crafts that make money. Recipes with no profit to rank by come last, unnumbered, saying why: a reagent with no price anywhere (*no price: Strange Ore*, so their profit can't be trusted), or no vendor (or auction) price for what they make.

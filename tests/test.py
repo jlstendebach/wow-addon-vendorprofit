@@ -1503,6 +1503,18 @@ run(B + ".profitHeading:Click()")
 check("no investment where a reagent has no price; shown where only the sale price is missing",
       ev("VendorProfit.BestPanel.Row(4).investment:GetText()") == "" and ev("VendorProfit.BestPanel.Row(5).investment:GetText()") != "")
 check("Best Crafts is wider than the Shopping List, for the columns", ev("VendorProfitPanel:GetWidth()") == 480)
+# Search: filters by name as you type, keeping each recipe's place.
+run(B + '.search:Type("bronze")')
+check("typing filters the list at once: only names containing it", [l.split(" | ")[0] for l in best()]
+      == ["1. |Ticon2866:0|t Rough Bronze Cuirass", "2. |Ticon2865:0|t Rough Bronze Shoulders"])
+run(B + '.search:Type("VEST")')
+check("any case; keeps its place in the ranking", [l.split(" | ")[0] for l in best()] == ["3. |Ticon2867:0|t Copper Chain Vest"])
+run(B + '.search:Type("mystery")')
+check("matches unpriced recipes too, unnumbered", [l.split(" | ")[0] for l in best()] == ["|cff808080-  |r|Ticon2901:0|t Mystery Helm"])
+run(B + '.search:Type("zzz")')
+check("nothing matches: says so", best() == [] and 'No recipes match "zzz".' in ev(B + ".status:GetText()"))
+run(B + '.search:Type("")')
+check("cleared: everything again", len(best()) == 5)
 check("unpriced ones can still be queued and shown", ev("VendorProfit.BestPanel.Row(4).queue:IsShown()") and ev("VendorProfit.BestPanel.Row(4).show:IsShown()"))
 check("the list scrolls: a scroll frame holding the rows", ev(B + ".scroll.__scrollChild == " + B + ".list")
       and ev(B + ".scroll:GetHeight()") == 5 * 22 and ev(B + ".list:GetHeight()") == 5 * 22)

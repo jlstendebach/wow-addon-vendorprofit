@@ -55,6 +55,19 @@ function FrameMethods:GetHeight() return self.__h or 0 end
 function FrameMethods:SetPoint(...) if self.__point == nil then self.__point = { ... } end end
 function FrameMethods:ClearAllPoints() self.__point = nil end
 function FrameMethods:SetText(t) self.__text = t end
+function FrameMethods:HookScript(event, fn)
+    local before = self.__scripts[event]
+    self.__scripts[event] = function(...)
+        if before then before(...) end
+        fn(...)
+    end
+end
+function FrameMethods:ClearFocus() self.__focused = false end
+-- Typing into an edit box: its text changes and OnTextChanged fires.
+function FrameMethods:Type(text)
+    self.__text = text
+    if self.__scripts.OnTextChanged then self.__scripts.OnTextChanged(self, true) end
+end
 function FrameMethods:GetText() return self.__text end
 function FrameMethods:SetEnabled(e) self.__enabled = not not e end
 function FrameMethods:IsEnabled() return self.__enabled ~= false end

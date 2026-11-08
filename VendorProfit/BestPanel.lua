@@ -2,7 +2,8 @@
 -- open profession, ranked by profit per craft (BestCrafts.lua), losses
 -- included, then the ones with no price to rank by, in a scrolling list with
 -- Vendor and Auction tabs and Investment, Profit and ROI columns, sortable
--- by clicking a column's heading. Each has a magnifying glass (selects it in
+-- by clicking a column's heading, and filtered by name with the search box
+-- as you type. Each has a magnifying glass (selects it in
 -- the professions window) and + (adds one craft to the shopping order). Live
 -- prices come from Scan.
 --
@@ -46,7 +47,8 @@ local SORT_STARTS_ASCENDING = { name = true }
 local frame              -- the page
 local tab = "vendor"
 local rows = {}
-local shownList          -- profession and tab the list was last scrolled for
+local shownList          -- profession, tab and filter the list was last scrolled for
+local filter = ""        -- the search box's text, lowercased
 
 local function ItemLabel(itemID)
     local name = C_Item.GetItemInfo(itemID)
@@ -258,6 +260,29 @@ local function Create(page)
     end)
     frame.scan:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+    -- Search: filters the list by name as you type. The game's own search
+    -- box (magnifying glass, "Search" placeholder, clear button) where it
+    -- exists, a plain input box otherwise.
+    local ok, search = pcall(CreateFrame, "EditBox", nil, frame, "SearchBoxTemplate")
+    if not ok then
+        search = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
+    end
+    search:SetSize(150, 20)
+    search:SetPoint("LEFT", frame.tabs.auction, "RIGHT", 14, 0)
+    search:SetAutoFocus(false)
+    -- Hooked, not set, so the template's own placeholder and clear button
+    -- keep working.
+    search:HookScript("OnTextChanged", function(self)
+        local text = (self:GetText() or ""):lower()
+        if text ~= filter then
+            filter = text
+            BestPanel.Refresh()
+        end
+    end)
+    search:HookScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    search:HookScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    frame.search = search
+
     -- Column headings over the list; click one to sort by it.
     frame.headings = {}
     local function Heading(key, text, width, right)
@@ -331,18 +356,29 @@ local function Refresh()
         end
     end
 
-    local ranked = {}
+    local all = {}
     if profession then
-        ranked = SortEntries(BestCrafts.Rank(profession, tab, function() BestPanel.Refresh() end))
+        all = SortEntries(BestCrafts.Rank(profession, tab, function() BestPanel.Refresh() end))
     end
-    local place = 0
+    -- Numbered across the whole list, then filtered by the search box, so a
+    -- recipe keeps its place in the ranking while searching.
+    local ranked, place = {}, 0
+    for _, entry in ipairs(all) do
+        if entry.profit then
+            place = place + 1
+            entry.place = place
+        end
+        local name = (C_Item.GetItemInfo(entry.recipe.item) or ""):lower()
+        if filter == "" or name:find(filter, 1, true) then
+            ranked[#ranked + 1] = entry
+        end
+    end
     for index, entry in ipairs(ranked) do
         local row = GetRow(index)
         local reason
         row.roi:SetText("")
         if entry.profit then
-            place = place + 1
-            row.left:SetText(place .. ". " .. ItemLabel(entry.recipe.item))
+            row.left:SetText(entry.place .. ". " .. ItemLabel(entry.recipe.item))
             row.investment:SetText(VendorProfit.FormatMoney(entry.cost))
             row.right:SetText(VendorProfit.FormatMoney(entry.profit))
             row.roi:SetText(FormatROI(entry.roi))
@@ -398,7 +434,7 @@ local function Refresh()
     frame.list:SetHeight(math.max(#ranked, 1) * ROW_HEIGHT)
     frame.scroll:SetSize(LIST_WIDTH, listHeight)
     frame.scroll:SetShown(#ranked > 0)
-    local listKey = tostring(profession) .. "/" .. tab
+    local listKey = tostring(profession) .. "/" .. tab .. "/" .. filter
     if listKey ~= shownList then
         shownList = listKey
         frame.scroll:SetVerticalScroll(0)
@@ -409,8 +445,10 @@ local function Refresh()
     local lines = {}
     if profession == nil then
         lines[#lines + 1] = L.BEST_OPEN_PROFESSION
-    elseif #ranked == 0 then
+    elseif #all == 0 then
         lines[#lines + 1] = L.BEST_NONE
+    elseif #ranked == 0 then
+        lines[#lines + 1] = string.format(L.BEST_NO_MATCH, frame.search:GetText() or "")
     end
     local liveTime = profession and BestCrafts.LiveTime(profession)
     if liveTime then
