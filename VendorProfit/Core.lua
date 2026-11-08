@@ -137,7 +137,6 @@ VendorProfit.L = {
     QUEUED_FEWER = "Craft one fewer.",
     QUEUED_COST = "Cost (cheapest route)",
     QUEUED_NO_VENDOR = "can't be sold to vendors",
-    QUEUED_TOOLTIP_NOTE = "For this item on its own, at today's prices. Red when neither makes money.",
     BUY_YOURSELF = "buy yourself",
     NOT_SCANNED = "not scanned",
     ONLY_LISTED = "only %d listed",

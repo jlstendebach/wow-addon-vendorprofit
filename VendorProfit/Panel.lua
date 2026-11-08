@@ -106,6 +106,11 @@ local function GetRow(index)
             end
         end)
         row.hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row.hit:SetScript("OnMouseUp", function(self, mouseButton)
+            if self.onClick and mouseButton == "LeftButton" and self:IsMouseOver() then
+                self.onClick()
+            end
+        end)
         row.hit:Hide()
         -- Lines either side of a divider's title.
         row.lines = {}
@@ -151,6 +156,7 @@ local function HideExtras(row, fromIcon)
     end
     row.hit:Hide()
     row.hit.tooltip = nil
+    row.hit.onClick = nil
 end
 
 -- Lays out icon buttons ({ text or texture, onClick, enabled, tooltip })
@@ -181,7 +187,8 @@ end
 
 -- button: { text, onClick, onMouseDown, enabled, width, tooltip } adds a
 -- button at the right. extras: { icons = { ... } (see LayoutIcons),
--- tooltip = function(GameTooltip) for hovering the row's text }.
+-- tooltip = function(GameTooltip) for hovering the row's text, onClick for
+-- clicking it }.
 local function AddDivider(row, title)
     y = y - 10
     row.left:SetFontObject("GameFontNormalSmall")
@@ -271,6 +278,7 @@ local function AddRow(kind, left, right, button, extras)
         row.hit:SetPoint("TOPLEFT", content, "TOPLEFT", PADDING, y + 2)
         row.hit:SetSize(WIDTH * 0.55, ROW_HEIGHT + 2)
         row.hit.tooltip = extras.tooltip
+        row.hit.onClick = extras.onClick
         row.hit:Show()
     end
 
@@ -547,42 +555,6 @@ local function ScanButton()
 end
 
 -- The order's profit: what it sells for, what it costs, and what it makes.
--- A subtle box behind the profit rows, from y top to y bottom.
-local profitBox
-local function ShowProfitBox(top, bottom)
-    if profitBox == nil then
-        profitBox = CreateFrame("Frame", nil, content)
-        profitBox.fill = profitBox:CreateTexture(nil, "BACKGROUND")
-        profitBox.fill:SetAllPoints(profitBox)
-        profitBox.fill:SetColorTexture(0, 0, 0, 0.35)
-        profitBox.edges = {}
-        for _, side in ipairs({ "TOP", "BOTTOM", "LEFT", "RIGHT" }) do
-            local edge = profitBox:CreateTexture(nil, "BORDER")
-            edge:SetColorTexture(1, 0.82, 0, 0.25)
-            if side == "TOP" or side == "BOTTOM" then
-                edge:SetPoint(side .. "LEFT", profitBox, side .. "LEFT")
-                edge:SetPoint(side .. "RIGHT", profitBox, side .. "RIGHT")
-                edge:SetHeight(1)
-            else
-                edge:SetPoint("TOP" .. side, profitBox, "TOP" .. side)
-                edge:SetPoint("BOTTOM" .. side, profitBox, "BOTTOM" .. side)
-                edge:SetWidth(1)
-            end
-            profitBox.edges[side] = edge
-        end
-    end
-    profitBox:ClearAllPoints()
-    profitBox:SetPoint("TOPLEFT", content, "TOPLEFT", PADDING - 6, top + 3)
-    profitBox:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PADDING + 6, top + 3)
-    profitBox:SetHeight(top - bottom + 4)
-    profitBox.top, profitBox.bottom = top, bottom
-    profitBox:Show()
-end
-
-function Panel.ProfitBox()
-    return profitBox
-end
-
 local function AddProfit(s)
     local function OrNoPrice(copper)
         return copper and Money(copper) or Gray(L.NO_AUCTION_PRICE)
@@ -598,14 +570,12 @@ local function AddProfit(s)
     end
     AddRow("row", L.ITEMS_TO_BUY, Money(-s.remaining))
     AddRow("gap")
-    -- The bottom line, in a box; a loss in red, label and all.
-    local top = y
+    -- The bottom line: a loss in red, label and all.
     local function Bottom(label, profit)
         return profit ~= nil and profit < 0 and Red(label) or label
     end
     AddRow("row", Bottom(L.VENDOR_PROFIT_ROW, s.profit), Money(s.profit))
     AddRow("row", Bottom(L.AUCTION_PROFIT_ROW, s.auctionProfit), OrNoPrice(s.auctionProfit))
-    ShowProfitBox(top, y)
     if s.spent > 0 then
         AddRow("gap")
         AddRow("row", Gray(L.SPENT), Gray(VendorProfit.FormatCoins(s.spent)))
@@ -697,17 +667,16 @@ local function QueuedTooltip(entry)
     return function(tooltip)
         local profit = EntryProfit(entry)
         tooltip:SetText(ItemLabel(entry.itemID, entry.crafts * entry.count))
+        tooltip:AddLine(" ")
         tooltip:AddDoubleLine(L.QUEUED_COST, Money(-profit.cost))
         tooltip:AddDoubleLine(L.VENDOR_PROFIT_ROW,
             profit.vendor and Money(profit.vendor) or Gray(L.QUEUED_NO_VENDOR))
         tooltip:AddDoubleLine(L.AUCTION_PROFIT_ROW,
             profit.auction and Money(profit.auction) or Gray(L.NO_AUCTION_PRICE))
-        tooltip:AddLine(L.QUEUED_TOOLTIP_NOTE, 0.6, 0.6, 0.6, true)
     end
 end
 
 local CANCEL_TEXTURE = "Interface\\RaidFrame\\ReadyCheck-NotReady"
-local SHOW_TEXTURE = "Interface\\Common\\UI-Searchbox-Icon"
 
 local function AddQueued(index, entry)
     local profit = EntryProfit(entry)
@@ -715,17 +684,13 @@ local function AddQueued(index, entry)
     if not MakesMoney(profit.vendor, profit.auction) then
         label = Red(label)
     end
-    local canShow = VendorProfit.Recipes.WindowOpen()
     AddRow("row", label, nil, nil, {
         tooltip = QueuedTooltip(entry),
-        -- Right to left: cancel, show, +, -.
+        -- Clicking the item shows its recipe in the professions window.
+        onClick = function() VendorProfit.Recipes.Show(entry.recipeID, entry.profession) end,
+        -- Right to left: cancel, +, -.
         icons = {
             { texture = CANCEL_TEXTURE, tooltip = L.QUEUED_REMOVE, onClick = function() Order.Remove(index) end },
-            {
-                texture = SHOW_TEXTURE, enabled = canShow,
-                tooltip = canShow and L.BEST_SHOW_HELP or string.format(L.BEST_SHOW_CLOSED, entry.profession or ""),
-                onClick = function() VendorProfit.Recipes.Show(entry.recipeID, entry.profession) end,
-            },
             { text = "+", tooltip = L.QUEUED_MORE, onClick = function() Order.SetCrafts(index, entry.crafts + 1) end },
             {
                 text = "-", enabled = entry.crafts > 1, tooltip = L.QUEUED_FEWER,
@@ -912,9 +877,6 @@ local function RefreshShopping()
     usedRows = 0
     y = TOP
     craftCover = nil
-    if profitBox then
-        profitBox:Hide()
-    end
     AddContent()
     local height = FinishLayout()
     HideUnusedRows()
@@ -1015,7 +977,7 @@ function Panel.FindButton(text)
 end
 
 -- The first shown row whose left text contains text: its regions (left,
--- right, button, icons, hit). For tests and debugging.
+-- right, button, icons, hit: the text's hover and click area). For tests and debugging.
 function Panel.FindRow(text)
     for index = 1, usedRows do
         local row = rows[index]

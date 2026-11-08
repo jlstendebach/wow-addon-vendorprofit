@@ -603,26 +603,25 @@ check("clear empties the order and its record", ev("VendorProfit.Order.IsEmpty()
 run, ev = shop_client()
 run('__stub.createCount = 2'); run(QUEUE + ':Click()')
 Q = 'VendorProfit.Panel.FindRow("Rough Bronze Cuirass x2")'
-check("queued row: cancel, magnifying glass, +, - from the right; no Remove button",
+check("queued row: cancel, +, - from the right; no Remove button",
       ev(Q + ".icons[1].icon.__texture") == "Interface\\RaidFrame\\ReadyCheck-NotReady"
-      and ev(Q + ".icons[2].icon.__texture") == "Interface\\Common\\UI-Searchbox-Icon"
-      and ev(Q + ".icons[3].__text") == "+" and ev(Q + ".icons[4].__text") == "-"
-      and not ev(Q + ".button:IsShown()") and ev('VendorProfit.Panel.FindButton("Remove")') is None)
-run(Q + '.icons[3]:Click()')
+      and ev(Q + ".icons[2].__text") == "+" and ev(Q + ".icons[3].__text") == "-"
+      and not ev(Q + ".icons[4]") and not ev(Q + ".button:IsShown()") and ev('VendorProfit.Panel.FindButton("Remove")') is None)
+run(Q + '.icons[2]:Click()')
 check("+ crafts one more", ev("VendorProfit.Order.Entries()[1].crafts") == 3 and has_line(ev, "Rough Bronze Cuirass x3"))
 Q3 = 'VendorProfit.Panel.FindRow("Rough Bronze Cuirass x3")'
-run(Q3 + '.icons[4]:Click(); ' + 'VendorProfit.Panel.FindRow("Rough Bronze Cuirass x2").icons[4]:Click()')
+run(Q3 + '.icons[3]:Click(); ' + 'VendorProfit.Panel.FindRow("Rough Bronze Cuirass x2").icons[3]:Click()')
 check("- crafts one fewer, down to one", ev("VendorProfit.Order.Entries()[1].crafts") == 1)
 Q1 = 'VendorProfit.Panel.FindRow("Rough Bronze Cuirass x1")'
-check("...then - is off", not ev(Q1 + ".icons[4]:IsEnabled()"))
+check("...then - is off", not ev(Q1 + ".icons[3]:IsEnabled()"))
 run('VendorProfit.Order.SetCrafts(1, 0)')
 check("never below one", ev("VendorProfit.Order.Entries()[1].crafts") == 1)
-run('__stub.openedRecipe = nil; __stub.selectedRecipe = nil; ' + Q1 + '.icons[2]:Click()')
-check("magnifying glass shows the recipe in the professions window", ev("__stub.selectedRecipe") == 2670)
+run('__stub.openedRecipe = nil; __stub.selectedRecipe = nil; ' + Q1 + '.hit:GetScript("OnMouseUp")(' + Q1 + '.hit, "LeftButton")')
+check("clicking the item shows its recipe in the professions window", ev("__stub.selectedRecipe") == 2670)
 run(Q1 + '.hit:GetScript("OnEnter")(' + Q1 + '.hit)')
 tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
-check("hover: this item's cost and its vendor and auction profit", [t[0] for t in tip[1:4]]
-      == ["Cost (cheapest route)", "Vendor profit", "Auction profit"])
+check("hover: the item, a gap, then its cost and its vendor and auction profit, nothing more",
+      [t[0] for t in tip[1:]] == [" ", "Cost (cheapest route)", "Vendor profit", "Auction profit"])
 check("makes money: name not red", not ev(Q1 + ".left:GetText()").startswith("|cffff2020"))
 run('__stub.items["item:2866"].sellPrice = 1; __stub.auctionPrices[2866] = 1; VendorProfit.Order.Changed()')
 check("neither vendor nor auction makes money: name in red", ev('VendorProfit.Panel.FindRow("Rough Bronze Cuirass x1").left:GetText()').startswith("|cffff2020"))
@@ -645,7 +644,6 @@ check("...but makes money at auction: plain Buy, no warning", ev("VendorProfit.S
       and ev(BUY + ".__text") == "Buy" and not has_line(ev, "makes money"))
 check("vendor profit in red, label and all; auction profit not", has_line(ev, "|cffff2020Vendor profit|r", "|cffff2020-")
       and has_line(ev, "Auction profit") and not has_line(ev, "|cffff2020Auction profit|r"))
-check("the profit rows sit in a box", ev("VendorProfit.Panel.ProfitBox():IsShown()"))
 # The cuirass sells for little at auction too: neither makes money.
 run('__stub.auctionPrices[2866] = 100; VendorProfit.Shopper.Recompute(); VendorProfit.Panel.Refresh()')
 check("neither makes money", ev("VendorProfit.Shopper.Summary().auctionProfit") < 0)
