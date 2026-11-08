@@ -165,6 +165,8 @@ function FrameMethods:CreateTexture()
     t.SetHeight = function() end
     t.SetSize = function() end
     t.SetTexture = function(tex, path) tex.__texture = path end
+    t.SetBlendMode = function(tex, mode) tex.__blend = mode end
+    t.SetVertexColor = function(tex, ...) tex.__vertexColor = { ... } end
     return t
 end
 function FrameMethods:CreateFontString()
@@ -758,6 +760,19 @@ end
 -- Batch lookups (browse results): one result per listed item, lowest price and
 -- how many are listed, from ah.listings.
 stub.ah.itemKeySearches = {}
+-- Your own auctions: ah.owned = { { itemID, quantity, sold }, ... }.
+stub.ah.owned = {}
+stub.ah.ownedQueries = 0
+C_AuctionHouse.QueryOwnedAuctions = function()
+    stub.ah.ownedQueries = stub.ah.ownedQueries + 1
+    C_Timer.After(0.1, function() stub.Fire("OWNED_AUCTIONS_UPDATED") end)
+end
+C_AuctionHouse.GetNumOwnedAuctions = function() return #stub.ah.owned end
+C_AuctionHouse.GetOwnedAuctionInfo = function(index)
+    local a = stub.ah.owned[index]
+    if a == nil then return nil end
+    return { itemKey = { itemID = a.itemID }, quantity = a.quantity, status = a.sold and 1 or 0 }
+end
 stub.ah.dropBrowse = false
 C_AuctionHouse.SearchForItemKeys = function(keys)
     -- The server disconnects you for more than 100 item keys at once.

@@ -23,6 +23,7 @@ Crafter.lua
 OpenButton.lua
 Banker.lua
 Merchant.lua
+Auctions.lua
 History.lua
 Panel.lua
 BestCrafts.lua
