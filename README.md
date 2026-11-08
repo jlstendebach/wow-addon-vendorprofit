@@ -25,12 +25,13 @@ Requires [Auctionator](https://www.curseforge.com/wow/addons/auctionator).
 
 ## Install
 
-Copy the `VendorProfit` folder into `World of Warcraft\_forever_\Interface\AddOns\`. Everything in it is the addon. Everything outside it (this README, `tests/`) is for development only.
+Download the latest `VendorProfit-<version>.zip` from the repository's **Releases** and unzip it into `World of Warcraft\_forever_\Interface\AddOns\`. Or copy the `VendorProfit` folder there yourself. Everything in it is the addon. Everything outside it (this README, `tests/`, `.github/`) is for development only.
 
 ```
 wow-addon-vendorprofit/
     VendorProfit/     <- the addon; copy this folder as-is
     tests/            <- stubbed-client tests
+    .github/          <- the release workflow
     README.md
 ```
 
@@ -248,3 +249,14 @@ python tests/test.py
 ```
 
 The stub is not the real client. Anything it passes still needs checking in game.
+
+## Releases
+
+Releases are automatic. `.github/workflows/release.yml` runs on every push to `main` that changes the addon, and reads `## Version` from `VendorProfit.toc`. If that version hasn't been released yet, it:
+
+1. runs the tests (no release if any fail),
+2. checks every file the `.toc` loads is in the folder,
+3. zips the `VendorProfit` folder as `VendorProfit-<version>.zip`,
+4. publishes a GitHub release tagged `v<version>`, titled *Vendor Profit for Auctionator &lt;version&gt;*, with the commit messages since the last release as its notes.
+
+So bumping `## Version` and pushing is the whole release. A push that changes the addon without bumping the version releases nothing (the run says so). It can also be run by hand from the repository's **Actions** tab.
