@@ -63,6 +63,24 @@ function FrameMethods:HookScript(event, fn)
     end
 end
 function FrameMethods:ClearFocus() self.__focused = false end
+-- Dropdown menus (the game's menu system): the generator is kept, and
+-- stub.Menu(dropdown) builds it into a list of { text, checked(), toggle() }.
+FILTER = "Filter"
+function FrameMethods:SetupMenu(generator) self.__menu = generator end
+function FrameMethods:SetIsDefaultCallback(fn) self.__isDefault = fn end
+function FrameMethods:SetDefaultCallback(fn) self.__default = fn end
+function stub.Menu(dropdown)
+    local items = {}
+    local root = {
+        CreateCheckbox = function(_, text, isSelected, setSelected)
+            items[#items + 1] = { text = text, checked = isSelected, toggle = setSelected }
+        end,
+        CreateTitle = function(_, text) items[#items + 1] = { text = text, title = true } end,
+        CreateDivider = function() end,
+    }
+    dropdown.__menu(dropdown, root)
+    return items
+end
 -- Typing into an edit box: its text changes and OnTextChanged fires.
 function FrameMethods:Type(text)
     self.__text = text
@@ -229,7 +247,7 @@ stub.casting = nil
 function UnitCastingInfo(unit) if unit == "player" then return stub.casting end end
 function ButtonFrameTemplate_HidePortrait() end
 function ButtonFrameTemplate_HideButtonBar() end
-Enum = { CraftingReagentType = { Basic = 0, Optional = 1 }, PlayerInteractionType = { Auctioneer = 21, Merchant = 5 } }
+Enum = { CraftingReagentType = { Basic = 0, Optional = 1 }, TradeskillRelativeDifficulty = { Optimal = 0, Medium = 1, Easy = 2, Trivial = 3 }, PlayerInteractionType = { Auctioneer = 21, Merchant = 5 } }
 
 local function Color(code, r, g, b)
     return { r = r, g = g, b = b, WrapTextInColorCode = function(_, t) return "|cff" .. code .. t .. "|r" end }
@@ -237,6 +255,9 @@ end
 WHITE_FONT_COLOR, RED_FONT_COLOR = Color("ffffff", 1, 1, 1), Color("ff2020", 1, 0.125, 0.125)
 GRAY_FONT_COLOR, GREEN_FONT_COLOR = Color("808080", 0.5, 0.5, 0.5), Color("20ff20", 0.125, 1, 0.125)
 NORMAL_FONT_COLOR = Color("ffd100", 1, 0.82, 0)
+function CreateColor(r, g, b)
+    return Color(string.format("%02x%02x%02x", math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5)), r, g, b)
+end
 HIGHLIGHT_FONT_COLOR = Color("ffffff", 1, 1, 1)
 
 function GetMoneyString(copper)
@@ -339,7 +360,8 @@ C_TradeSkillUI = {
         if r == nil then return nil end
         -- Forever reports 0 here even with the materials in your bags.
         local available = 0
-        return { recipeID = recipeID, learned = r.learned ~= false, isEnchantingRecipe = r.isEnchant or false, numAvailable = available }
+        return { recipeID = recipeID, learned = r.learned ~= false, isEnchantingRecipe = r.isEnchant or false, numAvailable = available,
+                 relativeDifficulty = r.difficulty }
     end,
     CraftRecipe = function(recipeID, count)
         stub.crafted = stub.crafted or {}

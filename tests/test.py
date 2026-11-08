@@ -1502,7 +1502,7 @@ check("the sort is saved", ev("VendorProfitCharDB.bestSort.key") == "roi")
 run(B + ".profitHeading:Click()")
 check("no investment where a reagent has no price; shown where only the sale price is missing",
       ev("VendorProfit.BestPanel.Row(4).investment:GetText()") == "" and ev("VendorProfit.BestPanel.Row(5).investment:GetText()") != "")
-check("Best Crafts is wider than the Shopping List, for the columns", ev("VendorProfitPanel:GetWidth()") == 480)
+check("Best Crafts is wider than the Shopping List, for the columns", ev("VendorProfitPanel:GetWidth()") == 520)
 # Search: filters by name as you type, keeping each recipe's place.
 run(B + '.search:Type("bronze")')
 check("typing filters the list at once: only names containing it", [l.split(" | ")[0] for l in best()]
@@ -1515,6 +1515,42 @@ run(B + '.search:Type("zzz")')
 check("nothing matches: says so", best() == [] and 'No recipes match "zzz".' in ev(B + ".status:GetText()"))
 run(B + '.search:Type("")')
 check("cleared: everything again", len(best()) == 5)
+# Filters: profitable only, and skill-up colors, from the game's filter dropdown.
+run('__stub.recipes[2670].difficulty = 0; __stub.recipes[3328].difficulty = 1; __stub.recipes[2671].difficulty = 2; __stub.recipes[9102].difficulty = 3')
+run('if __stub.recipe and __stub.recipe.recipeID == 2670 then __stub.recipe.difficulty = 0 end')
+run('VendorProfit.BestPanel.Refresh()')
+F = B + ".filter"
+menu = lambda: [(i.text, i.title or False) for i in ev("__stub.Menu(" + F + ")").values()]
+check("a Filter dropdown: profitable only, then skill-up colors", [t for t, _ in menu()] ==
+      ["Profitable only", "Skill up", "|cffff8040Guaranteed|r", "|cffffff00Likely|r", "|cff40bf40Unlikely|r"])
+check("names in their skill-up color, as the professions window shows them",
+      "|cffff8040Rough Bronze Cuirass|r" in best()[0] and "|cffffff00Rough Bronze Shoulders|r" in best()[1])
+def toggle(n):
+    run('local items = __stub.Menu(%s); items[%d].toggle()' % (F, n))
+toggle(1)
+check("profitable only: the losing vest and the unpriced ones go, places kept",
+      [l.split(" | ")[0].split("|t ")[0] for l in best()] == ["1. |Ticon2866:0", "2. |Ticon2865:0"])
+check("the checkbox shows it's on, and it's saved", ev("__stub.Menu(%s)[1].checked()" % F) and ev("VendorProfitCharDB.bestFilters.profitable"))
+toggle(1)
+toggle(3)
+check("guaranteed only: just the orange recipe", len(best()) == 1 and "Rough Bronze Cuirass" in best()[0])
+toggle(5)
+check("guaranteed or unlikely: orange and green", [("Cuirass" in l, "Vest" in l) for l in best()] == [(True, False), (False, True)])
+check("red X shows the filters aren't at their defaults", not ev(F + ".__isDefault()"))
+run(F + '.__default()')
+check("red X resets them all", len(best()) == 5 and ev("VendorProfitCharDB.bestFilters") is None and ev(F + ".__isDefault()"))
+toggle(1); toggle(5); run(B + '.search:Type("cuirass")')
+check("nothing passes: says so", best() == [] and 'No recipes match "cuirass".' in ev(B + ".status:GetText()"))
+run(B + '.search:Type("")')
+check("...and with no search text, that it's the filters", best() == [] and "No recipes pass the filters." in ev(B + ".status:GetText()"))
+run(F + '.__default()')
+run('__stub.recipes[3328].difficulty = nil; VendorProfit.BestPanel.Refresh()')
+toggle(4)
+check("a recipe whose color isn't known can't pass a skill-up filter, and it says why",
+      best() == [] and "only known for the profession whose window is open" in ev(B + ".status:GetText()"))
+run(F + '.__default()')
+run('for _, id in ipairs({ 2670, 3328, 2671, 9102 }) do if __stub.recipes[id] then __stub.recipes[id].difficulty = nil end end')
+run('if __stub.recipe then __stub.recipe.difficulty = nil end; VendorProfit.BestPanel.Refresh()')
 check("unpriced ones can still be queued and shown", ev("VendorProfit.BestPanel.Row(4).queue:IsShown()") and ev("VendorProfit.BestPanel.Row(4).show:IsShown()"))
 check("the list scrolls: a scroll frame holding the rows", ev(B + ".scroll.__scrollChild == " + B + ".list")
       and ev(B + ".scroll:GetHeight()") == 5 * 22 and ev(B + ".list:GetHeight()") == 5 * 22)

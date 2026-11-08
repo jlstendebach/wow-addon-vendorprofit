@@ -2,8 +2,8 @@
 -- open profession, ranked by profit per craft (BestCrafts.lua), losses
 -- included, then the ones with no price to rank by, in a scrolling list with
 -- Vendor and Auction tabs and Investment, Profit and ROI columns, sortable
--- by clicking a column's heading, and filtered by name with the search box
--- as you type. Each has a magnifying glass (selects it in
+-- by clicking a column's heading, filtered by name with the search box as
+-- you type, and by profit and skill-up color with the Filter dropdown. Each has a magnifying glass (selects it in
 -- the professions window) and + (adds one craft to the shopping order). Live
 -- prices come from Scan.
 --
@@ -22,8 +22,9 @@ VendorProfit.BestPanel = BestPanel
 
 local Panel = VendorProfit.Panel
 
--- Wider than the Shopping List, for the money columns.
-local WIDTH = 480
+-- Wider than the Shopping List, for the money columns and the search and
+-- filter controls.
+local WIDTH = 520
 local PADDING = 16
 local ROW_HEIGHT = 22
 local LIST_TOP = -94
@@ -44,17 +45,25 @@ local NAME_WIDTH = LIST_WIDTH + INVESTMENT_RIGHT - MONEY_WIDTH - GAP
 local SORT_DEFAULT = { key = "profit", ascending = false }
 local SORT_STARTS_ASCENDING = { name = true }
 
+local SKILL_UP_ORDER, SKILL_UP, Filters, FiltersActive, SetFilter, ResetFilters
+
 local frame              -- the page
 local tab = "vendor"
 local rows = {}
 local shownList          -- profession, tab and filter the list was last scrolled for
 local filter = ""        -- the search box's text, lowercased
 
-local function ItemLabel(itemID)
+-- The item's icon and name, the name in its skill-up color if given (as the
+-- professions window colors its list).
+local function ItemLabel(itemID, skillUp)
     local name = C_Item.GetItemInfo(itemID)
     if name == nil then
         Item:CreateFromItemID(itemID):ContinueOnItemLoad(function() BestPanel.Refresh() end)
         name = "item " .. itemID
+    end
+    local skill = skillUp and SKILL_UP[skillUp]
+    if skill then
+        name = skill.color:WrapTextInColorCode(name)
     end
     local icon = select(5, C_Item.GetItemInfoInstant(itemID))
     return (icon and ("|T" .. icon .. ":0|t ") or "") .. name
@@ -226,6 +235,92 @@ local function FormatROI(roi)
     return text
 end
 
+-- Filters ---------------------------------------------------------------------
+
+
+-- Skill-up colors, as the professions window shows them.
+SKILL_UP_ORDER = { "optimal", "medium", "easy" }
+SKILL_UP = {
+    optimal = { label = L.BEST_SKILL_OPTIMAL, color = CreateColor and CreateColor(1, 0.5, 0.25) or ORANGE_FONT_COLOR },
+    medium = { label = L.BEST_SKILL_MEDIUM, color = CreateColor and CreateColor(1, 1, 0) or YELLOW_FONT_COLOR },
+    easy = { label = L.BEST_SKILL_EASY, color = CreateColor and CreateColor(0.25, 0.75, 0.25) or GREEN_FONT_COLOR },
+    trivial = { color = GRAY_FONT_COLOR },
+}
+
+-- A recipe's skill-up color key, if the game says (it only knows for the
+-- profession whose window is open).
+local function SkillUp(recipeID)
+    local info = C_TradeSkillUI.GetRecipeInfo(recipeID)
+    local difficulty = info and info.relativeDifficulty
+    if difficulty == nil then
+        return nil
+    end
+    local enum = Enum.TradeskillRelativeDifficulty or {}
+    if difficulty == (enum.Optimal or 0) then
+        return "optimal"
+    elseif difficulty == (enum.Medium or 1) then
+        return "medium"
+    elseif difficulty == (enum.Easy or 2) then
+        return "easy"
+    end
+    return "trivial"
+end
+
+-- The filters, saved per character: { profitable, optimal, medium, easy }.
+Filters = function()
+    local db = VendorProfitCharDB
+    return db and type(db.bestFilters) == "table" and db.bestFilters or {}
+end
+
+FiltersActive = function()
+    local filters = Filters()
+    return filters.profitable or filters.optimal or filters.medium or filters.easy or false
+end
+
+local function SkillFilterActive()
+    local filters = Filters()
+    return filters.optimal or filters.medium or filters.easy or false
+end
+
+SetFilter = function(key, value)
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    VendorProfitCharDB.bestFilters = VendorProfitCharDB.bestFilters or {}
+    VendorProfitCharDB.bestFilters[key] = value or nil
+    BestPanel.Refresh()
+end
+
+ResetFilters = function()
+    if VendorProfitCharDB then
+        VendorProfitCharDB.bestFilters = nil
+    end
+    BestPanel.Refresh()
+end
+
+-- Whether an entry passes the filters. Skill-up filters show recipes of the
+-- checked colors; a recipe whose color isn't known can't pass them.
+local function PassesFilters(entry)
+    local filters = Filters()
+    if filters.profitable and not (entry.profit and entry.profit > 0) then
+        return false
+    end
+    if SkillFilterActive() then
+        return entry.skillUp ~= nil and filters[entry.skillUp] == true
+    end
+    return true
+end
+
+function BestPanel.Filters()
+    return Filters()
+end
+
+function BestPanel.SetFilter(key, value)
+    SetFilter(key, value)
+end
+
+function BestPanel.ResetFilters()
+    ResetFilters()
+end
+
 local function SetTab(name)
     tab = name
     BestPanel.Refresh()
@@ -239,8 +334,8 @@ local function Create(page)
     frame.heading:SetJustifyH("LEFT")
 
     frame.tabs = {
-        vendor = SmallButton(frame, L.BEST_TAB_VENDOR, 90),
-        auction = SmallButton(frame, L.BEST_TAB_AUCTION, 90),
+        vendor = SmallButton(frame, L.BEST_TAB_VENDOR, 76),
+        auction = SmallButton(frame, L.BEST_TAB_AUCTION, 76),
     }
     frame.tabs.vendor:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -52)
     frame.tabs.auction:SetPoint("LEFT", frame.tabs.vendor, "RIGHT", 4, 0)
@@ -267,7 +362,7 @@ local function Create(page)
     if not ok then
         search = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
     end
-    search:SetSize(150, 20)
+    search:SetSize(130, 20)
     search:SetPoint("LEFT", frame.tabs.auction, "RIGHT", 14, 0)
     search:SetAutoFocus(false)
     -- Hooked, not set, so the template's own placeholder and clear button
@@ -282,6 +377,40 @@ local function Create(page)
     search:HookScript("OnEscapePressed", function(self) self:ClearFocus() end)
     search:HookScript("OnEnterPressed", function(self) self:ClearFocus() end)
     frame.search = search
+
+    -- Filter: the same kind of dropdown as the professions window's own
+    -- (checkboxes, and a red X to reset). Left out if this client doesn't
+    -- have the game's menu system.
+    local hasMenus, dropdown = pcall(CreateFrame, "DropdownButton", nil, frame, "WowStyle1FilterDropdownTemplate")
+    if hasMenus and dropdown and dropdown.SetupMenu then
+        dropdown:SetSize(76, 22)
+        dropdown:SetPoint("LEFT", search, "RIGHT", 8, 0)
+        if dropdown.Text then
+            dropdown.Text:SetText(FILTER or L.BEST_FILTER)
+        elseif dropdown.SetText then
+            dropdown:SetText(FILTER or L.BEST_FILTER)
+        end
+        dropdown:SetupMenu(function(_, root)
+            root:CreateCheckbox(L.BEST_FILTER_PROFITABLE,
+                function() return Filters().profitable == true end,
+                function() SetFilter("profitable", not Filters().profitable) end)
+            root:CreateTitle(L.BEST_FILTER_SKILL_UP)
+            for _, key in ipairs(SKILL_UP_ORDER) do
+                local skill = SKILL_UP[key]
+                root:CreateCheckbox(skill.color:WrapTextInColorCode(skill.label),
+                    function() return Filters()[key] == true end,
+                    function() SetFilter(key, not Filters()[key]) end)
+            end
+        end)
+        -- The red X beside it resets the filters.
+        if dropdown.SetIsDefaultCallback then
+            dropdown:SetIsDefaultCallback(function() return not FiltersActive() end)
+        end
+        if dropdown.SetDefaultCallback then
+            dropdown:SetDefaultCallback(function() ResetFilters() end)
+        end
+        frame.filter = dropdown
+    end
 
     -- Column headings over the list; click one to sort by it.
     frame.headings = {}
@@ -362,14 +491,18 @@ local function Refresh()
     end
     -- Numbered across the whole list, then filtered by the search box, so a
     -- recipe keeps its place in the ranking while searching.
-    local ranked, place = {}, 0
+    local ranked, place, unknownSkillUp = {}, 0, false
     for _, entry in ipairs(all) do
         if entry.profit then
             place = place + 1
             entry.place = place
         end
+        entry.skillUp = SkillUp(entry.recipe.recipeID)
+        if entry.skillUp == nil then
+            unknownSkillUp = true
+        end
         local name = (C_Item.GetItemInfo(entry.recipe.item) or ""):lower()
-        if filter == "" or name:find(filter, 1, true) then
+        if (filter == "" or name:find(filter, 1, true)) and PassesFilters(entry) then
             ranked[#ranked + 1] = entry
         end
     end
@@ -378,12 +511,12 @@ local function Refresh()
         local reason
         row.roi:SetText("")
         if entry.profit then
-            row.left:SetText(entry.place .. ". " .. ItemLabel(entry.recipe.item))
+            row.left:SetText(entry.place .. ". " .. ItemLabel(entry.recipe.item, entry.skillUp))
             row.investment:SetText(VendorProfit.FormatMoney(entry.cost))
             row.right:SetText(VendorProfit.FormatMoney(entry.profit))
             row.roi:SetText(FormatROI(entry.roi))
         else
-            row.left:SetText(Gray("-  ") .. ItemLabel(entry.recipe.item))
+            row.left:SetText(Gray("-  ") .. ItemLabel(entry.recipe.item, entry.skillUp))
             local unpriced = entry.unpriced
             if unpriced.itemID then
                 reason = string.format(L.BEST_NO_PRICE_FOR, C_Item.GetItemInfo(unpriced.itemID) or ("item " .. unpriced.itemID))
@@ -447,8 +580,13 @@ local function Refresh()
         lines[#lines + 1] = L.BEST_OPEN_PROFESSION
     elseif #all == 0 then
         lines[#lines + 1] = L.BEST_NONE
-    elseif #ranked == 0 then
+    elseif #ranked == 0 and filter ~= "" then
         lines[#lines + 1] = string.format(L.BEST_NO_MATCH, frame.search:GetText() or "")
+    elseif #ranked == 0 then
+        lines[#lines + 1] = L.BEST_NO_MATCH_FILTERS
+    end
+    if SkillFilterActive() and unknownSkillUp then
+        lines[#lines + 1] = L.BEST_SKILL_UNKNOWN
     end
     local liveTime = profession and BestCrafts.LiveTime(profession)
     if liveTime then

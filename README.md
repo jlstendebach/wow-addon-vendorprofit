@@ -111,7 +111,7 @@ The **Vendor Profit** button in the professions window's title bar (left of Trad
 
 ```
 Best Crafts: Blacksmithing
-[ Vendor ] [ Auction ]  [🔍 Search      ]                  [ Scan ]
+[Vendor] [Auction]  [🔍 Search    ] [Filter ▸]           [ Scan ]
 Recipe                     Investment    Profit▼    ROI
 1. Rough Bronze Cuirass        4s 38c    1s 62c     37%   [+] [🔍]
 2. Rough Bronze Shoulders      3s 13c       87c     28%   [+] [🔍]
@@ -120,8 +120,9 @@ Recipe                     Investment    Profit▼    ROI
 Prices from Auctionator's last scan.
 ```
 
-- **Investment** is what one craft's items cost along its cheapest route: what you'd spend, counting items you already have at what they'd cost to get. **Profit** is what one craft makes after that, and **ROI** (return on investment) is the profit as a share of the investment. The tab is wider than the Shopping List to fit them.
+- **Investment** is what one craft's items cost along its cheapest route: what you'd spend, counting items you already have at what they'd cost to get. **Profit** is what one craft makes after that, and **ROI** (return on investment) is the profit as a share of the investment. The tab is wider than the Shopping List to fit them and the search and filter controls.
 - **Search.** Type in the search box to filter the list by recipe name as you type (any case); recipes keep their place number in the full ranking. Clear it to see everything.
+- **Filter.** The **Filter** dropdown, like the professions window's own, has **Profitable only** (a positive profit on the tab you're on) and skill-up colors: **Guaranteed** (orange), **Likely** (yellow) and **Unlikely** (green). Check any colors to see only recipes of those colors; the red X beside it resets everything. Filters are saved per character. Recipe names are shown in their skill-up color, as in the professions window. The game only knows skill-up colors for the profession whose window is open, so with it closed, a color filter shows nothing (and says why).
 - **Sorting.** Click a column's heading to sort by it (highest first; Recipe A to Z); click it again to reverse. The sorted column is in white with an arrow, numbers follow the sort, and recipes with no profit to rank stay at the bottom. The sort is saved per character. By default it's by Profit.
 - **Vendor** ranks by selling to a vendor, a guaranteed sale. **Auction** ranks by Auctionator's price after the 5% cut; usually higher, but an auction might not sell.
 - Losses are listed too (in red), below the crafts that make money. Recipes with no profit to rank by come last, unnumbered, saying why: a reagent with no price anywhere (*no price: Strange Ore*, so their profit can't be trusted), or no vendor (or auction) price for what they make.
@@ -276,7 +277,7 @@ Saved data, per character (`VendorProfitCharDB`):
 - `professions[professionID] = { name, recipes = { [recipeID] = { item, count, reagents } } }`
 - `order = { entries, inMail, lastSeen, spent }`: the queued crafts, purchases not seen in bags or bank yet (and the count they're waiting to rise from), and what the panel spent.
 - `panel = { left, top }`: where you moved the Vendor Profit window, if you did.
-- `bestSort = { key, ascending }`: how Best Crafts is sorted.
+- `bestSort = { key, ascending }` and `bestFilters`: how Best Crafts is sorted and filtered.
 - `history = { stock, sales, purchases }`: what the items you have cost you, your sales, and your last 500 purchases.
 
 Opening a profession uses a secure action button casting the profession's spell, as TradeSkillMaster does in Forever. It's a separate invisible button laid over the Craft button rather than part of the panel, because a secure button inside the panel would make the panel protected and the game would block showing, hiding or moving it in combat. It's only placed out of combat and hidden as combat starts.
