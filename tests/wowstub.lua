@@ -91,6 +91,10 @@ function stub.Menu(dropdown)
             items[#items + 1] = { text = text, checked = isSelected, toggle = setSelected }
         end,
         CreateTitle = function(_, text) items[#items + 1] = { text = text, title = true } end,
+        CreateRadio = function(_, text, isSelected, setSelected, data)
+            items[#items + 1] = { text = text, radio = true,
+                checked = function() return isSelected(data) end, toggle = function() setSelected(data) end }
+        end,
         CreateDivider = function() end,
     }
     local generator = dropdown and dropdown.__menu or stub.menu.generator

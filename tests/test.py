@@ -1180,6 +1180,7 @@ run('__stub.SellItem(2903, 1)')
 check("sold again", len(sales()) == 3)
 run('BuybackItem(#__stub.buyback); __stub.Advance(0.1)')
 check("bought back: that sale is gone, its cost back on the ring", len(sales()) == 2 and ev(H + ".Recorded(2903)") == 1)
+check("...and gone from the item's totals", ev(H + ".ItemTotals()[2903].sales") == 2 and ev(H + ".ItemTotals()[2903].n") == 2)
 run('__stub.SellItem(2903, 1)')
 check("sold once more after the buyback: one new sale", len(sales()) == 3 and sales()[0]["cost"] == round(market))
 run('__stub.bags[2903] = 1; __stub.SellItem(2903, 1)')
@@ -1188,26 +1189,114 @@ run('__stub.CloseMerchant()')
 
 # The tab: newest first, totals, a breakdown on hover.
 run('VendorProfit.Panel.Show("history")')
+check("opens on Sales, its button lit", ev("VendorProfit.HistoryPanel.View()") == "sales"
+      and ev("VendorProfit.HistoryPanel.Frame().views.sales.__lit")
+      and ev("VendorProfit.HistoryPanel.Frame().views.items.__text") == "Best Sellers")
 rows = list(ev("VendorProfit.HistoryPanel.Lines()").values())
-check("listed newest first: date, item, how, cost, sold for, profit", len(rows) == 3
-      and rows[1].endswith("|cffffffff1s 50c|r | |cffffffff1s 80c|r | |cffffffff30c|r") and " | Auction | " in rows[1]
-      and " | Vendor | " in rows[2] and rows[2].endswith("|cffffffff1s|r | |cffffffff2s|r | |cffffffff1s|r"))
+check("listed newest first: date (mm/dd), item, cost, sold for, profit; no Sold to column", len(rows) == 3
+      and rows[1].endswith("|cffffffff1s 50c|r | |cffffffff1s 80c|r | |cffffffff30c|r")
+      and rows[2].endswith("|cffffffff1s|r | |cffffffff2s|r | |cffffffff1s|r")
+      and rows[0].split(" | ")[0] == ev('date("%m/%d", time())') and len(rows[0].split(" | ")) == 5)
 total = ev('VendorProfit.FormatMoney(%d)' % (100 + 30 + 200 - round(market)))
 check("totals: all of it and the last 7 days", ev("VendorProfit.HistoryPanel.Frame().total:GetText()")
       == "Profit: %s from 3 sales. Last 7 days: %s." % (total, total))
-run('local r = VendorProfit.HistoryPanel.Row(1); r.hit.__left = 10; r.date.__left = 10; r.item.__left = 80; r.how.__left = 300; '
+run('local r = VendorProfit.HistoryPanel.Row(2); r.hit.__left = 10; r.date.__left = 10; r.item.__left = 50; '
     'r.cost.__left = 340; r.sold.__left = 400; r.profit.__left = 460; __stub.cursorX = 350')
+run('VendorProfit.HistoryPanel.Row(2).hit:GetScript("OnEnter")()')
+tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
+check("hover: how it sold, now in the tooltip", ("Sold at auction for (after the cut)", "|cffffffff1s 80c|r") in tip)
+check("...above the row, from the top right of the column under the cursor", tooltip_at("VendorProfit.HistoryPanel.Row(2).hit", "VendorProfit.HistoryPanel.Row(2).cost"))
 run('VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnEnter")()')
 tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
 check("hover: what was bought and what was your own items at market value", ("Bought", "|cffffffff0c|r") in tip
       and ("Your own items, at market value", ev('VendorProfit.FormatMoney(%d)' % round(market))) in tip)
-check("...above the row, from the top right of the column under the cursor", tooltip_at("VendorProfit.HistoryPanel.Row(1).hit", "VendorProfit.HistoryPanel.Row(1).cost"))
-run('__stub.cursorX = 90; VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnUpdate")(VendorProfit.HistoryPanel.Row(1).hit)')
+run('local r = VendorProfit.HistoryPanel.Row(1); r.hit.__left = 10; r.date.__left = 10; r.item.__left = 50; '
+    'r.cost.__left = 340; r.sold.__left = 400; r.profit.__left = 460; __stub.cursorX = 90; r.hit:GetScript("OnUpdate")(r.hit)')
 check("...moving along as the cursor crosses into another column", tooltip_at("VendorProfit.HistoryPanel.Row(1).hit", "VendorProfit.HistoryPanel.Row(1).item"))
-run('__stub.cursorX = 0; VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnUpdate")(VendorProfit.HistoryPanel.Row(1).hit)')
-check("...left of every column: the first", tooltip_at("VendorProfit.HistoryPanel.Row(1).hit", "VendorProfit.HistoryPanel.Row(1).date"))
 run('GameTooltip:Hide(); VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnUpdate")(VendorProfit.HistoryPanel.Row(1).hit)')
 check("...and stops following once the tooltip's gone", ev('VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnUpdate")') is None)
+
+# Best Sellers: the three ring sales in one row.
+HF = "VendorProfit.HistoryPanel.Frame()"
+run(HF + ".views.items:Click()")
+sellers = list(ev("VendorProfit.HistoryPanel.Lines()").values())
+ring_profit = 100 + 30 + 200 - round(market)
+check("Best Sellers: one row per item: units sold, average profit each, total",
+      ev("VendorProfit.HistoryPanel.View()") == "items" and len(sellers) == 1
+      and sellers[0] == "|Ticon2903:0|t Test Ring | 3 | %s | %s" % (ev('VendorProfit.FormatMoney(%s)' % (ring_profit / 3)), ev('VendorProfit.FormatMoney(%d)' % ring_profit))
+      and ev(HF + ".views.items.__lit") and not ev(HF + ".views.sales.__lit"))
+check("...sorted by total profit by default, its heading marked", ev("VendorProfit.HistoryPanel.Sort().key") == "profit"
+      and "Arrow-Down" in ev(HF + ".sellerHeadings.profit.text:GetText()") and not ev(HF + ".headings[1]:IsShown()"))
+run('VendorProfit.HistoryPanel.SellerRow(1).hit:GetScript("OnEnter")()')
+tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
+check("hover: how many in how many sales, the averages, vendor and auction counts, when it last sold",
+      tip[1][0] == "3 sold in 3 sales" and ("Sold to vendors", "2") in tip and ("Sold at auction", "1") in tip
+      and any(t[0] == "Average cost" for t in tip) and tip[-1][0].startswith("Last sold "))
+run("GameTooltip:Hide()")
+# A second item, to sort and search.
+run('local list = VendorProfitCharDB.history.sales; '
+    'list[#list + 1] = { item = 2840, n = 5, cost = 500, sold = 1000, bought = 500, how = "auction", time = time() }; '
+    'VendorProfitCharDB.history.items = nil; VendorProfit.HistoryPanel.Refresh()')
+check("totals missing (saved before they were kept): rebuilt from the sales list",
+      ev("VendorProfit.History.ItemTotals()[2840].n") == 5 and ev("VendorProfit.History.ItemTotals()[2903].n") == 3)
+names = lambda: [l.split(" | ")[0].split("|t ")[-1] for l in ev("VendorProfit.HistoryPanel.Lines()").values()]
+check("two items: most profit first", names() == ["Copper Bar", "Test Ring"])
+run(HF + ".sellerHeadings.n:Click()")
+check("sort by Sold: most first", names() == ["Copper Bar", "Test Ring"] and "Arrow-Down" in ev(HF + ".sellerHeadings.n.text:GetText()"))
+run(HF + ".sellerHeadings.n:Click()")
+check("again: reversed", names() == ["Test Ring", "Copper Bar"])
+run(HF + ".sellerHeadings.name:Click()")
+check("Item: A to Z first", names() == ["Copper Bar", "Test Ring"])
+run('VendorProfitCharDB.bestSellersSort = nil')
+run(HF + '.search:Type("ring")')
+check("search filters Best Sellers by name as you type", names() == ["Test Ring"])
+run(HF + ".views.sales:Click()")
+check("...and Sales too, any case", len(list(ev("VendorProfit.HistoryPanel.Lines()").values())) == 3
+      and all("Test Ring" in l for l in ev("VendorProfit.HistoryPanel.Lines()").values()))
+run(HF + '.search:Type("zzz")')
+check("nothing matching: says so", ev(HF + ".empty:IsShown()") and ev(HF + ".empty:GetText()") == "No sales match your search.")
+run(HF + '.search:Type("")')
+check("cleared: everything again", len(list(ev("VendorProfit.HistoryPanel.Lines()").values())) == 4)
+
+# Range: narrows both views to recent sales. All time on Best Sellers is every sale ever.
+run('VendorProfitCharDB.bestSellersSort = nil')
+run(HF + ".views.items:Click()")
+check("Range starts on All time", ev("VendorProfit.HistoryPanel.Range()") == "all" and ev(HF + ".range.__text") == "All time")
+run(HF + ".range:Click()")
+menu = list(ev("__stub.Menu()").values())
+check("Range menu: all time, days, then sales, under the button", [m.text for m in menu] == ["All time", "Last 7 days", "Last 30 days",
+      "Last 90 days", "Last 50 sales", "Last 100 sales", "Last 250 sales"] and menu[0].checked()
+      and ev("__stub.menu.__point[1]") == "TOPLEFT" and ev("__stub.menu.__point[3]") == "BOTTOMLEFT")
+run('local items = __stub.Menu(); for _, m in ipairs(items) do if m.text == "Last 50 sales" then m.toggle() end end')
+check("picked: saved, and the button says so", ev("VendorProfitCharDB.historyRange") == "s50" and ev(HF + ".range.__text") == "Last 50 sales")
+# Old sales: ten days ago, outside 7 days.
+run('for _, sale in ipairs(VendorProfitCharDB.history.sales) do if sale.item == 2903 then sale.time = time() - 10 * 24 * 60 * 60 end end')
+run('VendorProfit.HistoryPanel.SetRange("d7")')
+check("last 7 days: only what sold in them", names() == ["Copper Bar"])
+run(HF + ".views.sales:Click()")
+check("...in Sales too", len(list(ev("VendorProfit.HistoryPanel.Lines()").values())) == 1)
+run('VendorProfit.HistoryPanel.SetRange("d30")')
+check("last 30 days: both again", len(list(ev("VendorProfit.HistoryPanel.Lines()").values())) == 4)
+run('VendorProfit.HistoryPanel.SetRange("s50"); ' + HF + '.search:Type("zzz")')
+check("nothing found by search: says it's the search", ev(HF + ".empty:GetText()") == "No sales match your search.")
+run(HF + '.search:Type(""); for _, sale in ipairs(VendorProfitCharDB.history.sales) do sale.time = time() - 100 * 24 * 60 * 60 end; VendorProfit.HistoryPanel.SetRange("d90")')
+check("nothing in the range: says so", ev(HF + ".empty:IsShown()") and ev(HF + ".empty:GetText()") == "No sales in this range.")
+run('VendorProfit.HistoryPanel.SetRange("all")')
+
+# The list keeps the newest sales; the totals keep every one.
+run('VendorProfit.History.MAX_SALES = 3; VendorProfit.History.Bought(2840, 4, 400, "vendor")')
+run('for i = 1, 4 do VendorProfit.History.Sold(2840, 1, 300, "auction") end')
+check("over the cap: the oldest sales drop off the list", len(list(ev("VendorProfit.History.Sales()").values())) == 3)
+check("...but every one stays in the item's totals", ev("VendorProfit.History.ItemTotals()[2840].n") == 9
+      and ev("VendorProfit.History.ItemTotals()[2840].sales") == 5)
+total_profit, total_count = ev("VendorProfit.History.Total()")
+check("...and in the total at the top", total_count == 8)
+run(HF + ".views.items:Click()")
+check("Best Sellers over All time: every copper bar sold", any(l.split(" | ")[1] == "9" for l in ev("VendorProfit.HistoryPanel.Lines()").values()))
+run('VendorProfit.HistoryPanel.SetRange("s50")')
+check("...over a range: only the list's", [l.split(" | ")[1] for l in ev("VendorProfit.HistoryPanel.Lines()").values()] == ["3"])
+run('VendorProfit.HistoryPanel.SetRange("all"); VendorProfit.History.MAX_SALES = 500')
+run('table.remove(VendorProfitCharDB.history.purchases)')  # the copper bars bought for this
 check("window wider for the history's columns", ev("VendorProfitPanel:GetWidth()") == 540)
 run('SlashCmdList.VENDORPROFIT("history")')
 check("/vprofit history toggles it", not ev("VendorProfit.Panel.IsShown()"))
