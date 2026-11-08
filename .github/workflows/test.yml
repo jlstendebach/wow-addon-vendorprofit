@@ -1,0 +1,49 @@
+# Checks every pull request into main: the tests pass, and if the addon
+# changed, its version is higher than main's (so merging it releases it, and
+# two pull requests can't both claim the same version).
+#
+# Make "Tests and version" a required status check in main's ruleset, so a
+# pull request can't merge until this passes.
+
+name: Test
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Tests and version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Tests
+        run: |
+          pip install lupa
+          python tests/test.py
+
+      - name: Version bumped
+        run: |
+          # The checkout is the pull request merged into main: its first
+          # parent is main as it is now.
+          base=$(git rev-parse HEAD^1)
+          if git diff --quiet "$base" HEAD -- VendorProfit; then
+            echo "The addon didn't change: no version bump needed."
+            exit 0
+          fi
+          read_version() { sed -n 's/^## Version:[[:space:]]*//p' | tr -d '\r[:space:]'; }
+          old=$(git show "$base:VendorProfit/VendorProfit.toc" | read_version)
+          new=$(read_version < VendorProfit/VendorProfit.toc)
+          highest=$(printf '%s\n%s\n' "$old" "$new" | sort -V | tail -n 1)
+          if [ "$new" = "$old" ] || [ "$highest" != "$new" ]; then
+            echo "::error file=VendorProfit/VendorProfit.toc::The addon changed but its version ($new) isn't higher than main's ($old). Bump it from main's version: minor for a feat, patch otherwise."
+            exit 1
+          fi
+          echo "Version $old -> $new"
