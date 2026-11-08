@@ -900,6 +900,8 @@ SlashCmdList.VENDORPROFIT = function(arg)
         Panel.Toggle("best")
     elseif command == "history" then
         Panel.Toggle("history")
+    elseif command == "prices" then
+        VendorProfit.Merchant.ShowPriceLines()
     else
         Panel.Toggle()
     end

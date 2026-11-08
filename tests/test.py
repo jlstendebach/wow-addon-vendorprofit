@@ -1108,6 +1108,23 @@ check("Coarse Thread with no vendor price from Auctionator yet: the usual 10c", 
 run('__stub.vendorPrices[2320] = 12')
 check("...Auctionator's recorded price wins once it has one", ev("(VendorProfit.GetBuyPrices(2320))") == 12)
 check("items vendors don't sell: no vendor price", ev("(VendorProfit.GetBuyPrices(2866))") is None)
+# /vprofit prices: the open vendor's prices in the list's format, to paste in.
+run('__stub.items["item:2321"] = { name = "Fine Thread", cached = true }')
+run('__stub.items["item:2320"] = { name = "Coarse Thread", cached = true }')
+run('__stub.items["item:99999"] = { name = "New Thing", cached = true }')
+run('SlashCmdList.VENDORPROFIT("prices")')
+check("/vprofit prices away from a vendor says to talk to one", ev("VendorProfitPriceExport") is None
+      and any("talk to a vendor first" in m for m in ev("__stub.printed").values()))
+run('''__stub.OpenMerchant({ { itemID = 2321, price = 120 }, { itemID = 2320, price = 50, stackCount = 5 },
+    { itemID = 99999, price = 7 }, { itemID = 2880, price = 100, numAvailable = 3 }, { itemID = 2324, price = 25, extended = true } })''')
+run('SlashCmdList.VENDORPROFIT("prices")')
+text = ev("VendorProfitPriceExport.edit.__text")
+check("lists the vendor's prices in the file's format, per item, sorted, marking new and changed",
+      text.split("\n") == ["    [2320] = 10, -- Coarse Thread", "    [2321] = 120, -- Fine Thread (was 100)", "    [99999] = 7, -- New Thing (new)"])
+check("...leaving out limited stock and items that cost more than gold", "2880" not in text and "2324" not in text)
+check("ready to copy", ev("VendorProfitPriceExport:IsShown()") and ev("VendorProfitPriceExport.edit.__highlighted")
+      and ev("VendorProfitPriceExport.note:GetText()") == "3 items, 2 new or changed. Copy (Ctrl+C) the lines you want into VendorPrices.lua.")
+run('__stub.CloseMerchant()')
 check("only Auctionator needed: the list is the addon's own", ev("VendorProfit.KNOWN_VENDOR_PRICES[2320]") == 10
       and ev("TSM_API") is None)
 

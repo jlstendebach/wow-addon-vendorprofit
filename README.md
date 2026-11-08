@@ -188,6 +188,8 @@ The buttons for each part sit on their section's heading, with short labels; hov
 
 **Vendors.** Vendor prices come from Auctionator, which records them when you open the window of a vendor that sells the item. Until it has, the addon uses the item's usual vendor price from its own list (`VendorPrices.lua`), so a new install doesn't plan Coarse Thread from the auction house just because you haven't visited a trade-goods vendor yet. Auctionator's recorded price always wins.
 
+The list is maintained here, by hand: one item per line, `[itemID] = copper for one,`. To update it, talk to a vendor and type `/vprofit prices`: a box lists that vendor's prices in the same format, sorted, marking items that are new or whose price differs from the list. Copy the lines you want (Ctrl+C) into `VendorPrices.lua`.
+
 Items the plan gets from a vendor (Weak Flux, thread, vials) are bought at a vendor. Talk to one that sells any of them and the window opens beside it, with **Buy** on the **Buy** step (hover it: *Buy from this vendor: 3 Weak Flux, for 2s 70c*). One click buys all of it: exactly what's needed, or whole batches for items sold several at a time, and only for gold. It also buys anything planned from the auction house that this vendor sells for no more. If you run short of gold it buys what it can and says what's missing. After a purchase, the button shows **Buying...** until the items reach your bags (or 10 seconds pass), so a double click can't buy twice. Away from vendors, with only vendor items left, the button is off and says to find a vendor.
 
 **5. Craft.** **Craft** on the **Craft** step crafts the step marked **»**, as many times as it needs (up to what you have materials for; hover it: *Craft Copper Bar, 7 times*). The game only crafts recipes of the profession window that's open, so when the next step is in another profession the button says **Open Mining**, and clicking it opens that profession (Mining opens with Smelting). In combat it can't be clicked (hover: *Open Mining after combat*): the game doesn't let addons open professions then. It skips ahead to a later step the open window can make if you have its materials, is off with *Missing materials for ...* when you don't, and says **Crafting...** while you're casting. Materials are counted from your bags and reagent bank, which is what crafting can use; items in the main bank don't count until you take them out. Crafting the queued item counts the order down as usual.
@@ -237,7 +239,7 @@ Files:
 | File | What it does |
 | --- | --- |
 | `Core.lua` | Prices, working out the shown recipe, attaching to Auctionator's frame |
-| `VendorPrices.lua` | Usual vendor prices, for items Auctionator hasn't seen a vendor sell yet |
+| `VendorPrices.lua` | Usual vendor prices, for items Auctionator hasn't seen a vendor sell yet; updated with `/vprofit prices` |
 | `VendorLine.lua` | The Vendor Profit line |
 | `Recipes.lua` | Saving and looking up this character's recipes |
 | `Route.lua` | Finding the cheapest route |

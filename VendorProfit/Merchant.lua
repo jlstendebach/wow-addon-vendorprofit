@@ -201,6 +201,95 @@ function Merchant.Buy(offers)
 end
 
 
+-- Keeping VendorPrices.lua up to date ---------------------------------------------
+
+-- The open vendor's prices in VendorPrices.lua's format, one line per item
+-- it sells for gold without limit, sorted by ID, each marked if it's not in
+-- the list or the list has another price. Returns the text and how many
+-- lines are new or changed.
+function Merchant.PriceLines()
+    local items = {}
+    for index = 1, GetMerchantNumItems() do
+        local itemID, price, stackCount, numAvailable, extended = ItemAt(index)
+        if itemID and price and price > 0 and not extended and numAvailable == -1 then
+            local each = price / stackCount
+            if items[itemID] == nil or each < items[itemID] then
+                items[itemID] = each
+            end
+        end
+    end
+    local ids = {}
+    for itemID in pairs(items) do
+        ids[#ids + 1] = itemID
+    end
+    table.sort(ids)
+    local known = VendorProfit.KNOWN_VENDOR_PRICES or {}
+    local lines, changed = {}, 0
+    for _, itemID in ipairs(ids) do
+        local price = items[itemID]
+        local note = ItemName(itemID)
+        if known[itemID] == nil then
+            note = note .. " (new)"
+            changed = changed + 1
+        elseif known[itemID] ~= price then
+            note = note .. " (was " .. known[itemID] .. ")"
+            changed = changed + 1
+        end
+        -- Prices per item can be fractional when sold in batches.
+        local text = price == math.floor(price) and tostring(price) or string.format("%.2f", price)
+        lines[#lines + 1] = string.format("    [%d] = %s, -- %s", itemID, text, note)
+    end
+    return table.concat(lines, "\n"), changed, #ids
+end
+
+-- A box to copy the lines from (Ctrl+C), since chat can't be copied.
+local exportFrame
+function Merchant.ShowPriceLines()
+    if not open then
+        print(L.PRICES_NO_VENDOR)
+        return
+    end
+    local text, changed, total = Merchant.PriceLines()
+    if exportFrame == nil then
+        exportFrame = CreateFrame("Frame", "VendorProfitPriceExport", UIParent, "ButtonFrameTemplate")
+        exportFrame:SetSize(460, 360)
+        exportFrame:SetPoint("CENTER")
+        exportFrame:SetFrameStrata("DIALOG")
+        exportFrame:SetMovable(true)
+        exportFrame:EnableMouse(true)
+        exportFrame:RegisterForDrag("LeftButton")
+        exportFrame:SetScript("OnDragStart", exportFrame.StartMoving)
+        exportFrame:SetScript("OnDragStop", exportFrame.StopMovingOrSizing)
+        if ButtonFrameTemplate_HidePortrait then
+            ButtonFrameTemplate_HidePortrait(exportFrame)
+        end
+        if ButtonFrameTemplate_HideButtonBar then
+            ButtonFrameTemplate_HideButtonBar(exportFrame)
+        end
+        exportFrame.note = exportFrame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        exportFrame.note:SetPoint("TOPLEFT", exportFrame, "TOPLEFT", 16, -32)
+        exportFrame.note:SetPoint("RIGHT", exportFrame, "RIGHT", -16, 0)
+        exportFrame.note:SetJustifyH("LEFT")
+        local scroll = CreateFrame("ScrollFrame", nil, exportFrame, "UIPanelScrollFrameTemplate")
+        scroll:SetPoint("TOPLEFT", exportFrame, "TOPLEFT", 16, -64)
+        scroll:SetPoint("BOTTOMRIGHT", exportFrame, "BOTTOMRIGHT", -34, 16)
+        local edit = CreateFrame("EditBox", nil, scroll)
+        edit:SetMultiLine(true)
+        edit:SetAutoFocus(false)
+        edit:SetFontObject("ChatFontNormal")
+        edit:SetWidth(400)
+        edit:SetScript("OnEscapePressed", function() exportFrame:Hide() end)
+        scroll:SetScrollChild(edit)
+        exportFrame.edit = edit
+    end
+    exportFrame:SetTitle(L.PRICES_TITLE)
+    exportFrame.note:SetText(string.format(L.PRICES_NOTE, total, changed))
+    exportFrame.edit:SetText(text)
+    exportFrame:Show()
+    exportFrame.edit:SetFocus()
+    exportFrame.edit:HighlightText()
+end
+
 local events = CreateFrame("Frame")
 for _, event in ipairs({ "MERCHANT_SHOW", "MERCHANT_CLOSED", "MERCHANT_UPDATE", "BAG_UPDATE_DELAYED" }) do
     pcall(events.RegisterEvent, events, event)

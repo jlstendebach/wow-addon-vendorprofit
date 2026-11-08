@@ -59,6 +59,11 @@ function FrameMethods:GetText() return self.__text end
 function FrameMethods:SetEnabled(e) self.__enabled = not not e end
 function FrameMethods:IsEnabled() return self.__enabled ~= false end
 function FrameMethods:SetTitle(t) self.__title = t end
+function FrameMethods:SetMultiLine(m) self.__multiLine = m end
+function FrameMethods:SetFontObject() end
+function FrameMethods:SetAutoFocus(f) end
+function FrameMethods:SetFocus() self.__focused = true end
+function FrameMethods:HighlightText() self.__highlighted = true end
 function FrameMethods:SetMovable(m) self.__movable = m end
 function FrameMethods:SetClampedToScreen() end
 function FrameMethods:RegisterForDrag(...) self.__drag = { ... } end
