@@ -77,7 +77,7 @@ local function ShowTooltip(row)
     if purchase == nil then
         return
     end
-    VendorProfit.SetRowTooltipOwner(row.hit, row.item)
+    VendorProfit.SetRowTooltipOwner(row.hit, { row.date, row.item, row.from, row.each, row.total, row.market })
     GameTooltip:SetText(ItemLabel(purchase.item, purchase.n))
     GameTooltip:AddLine(date(L.HISTORY_TIME_FORMAT, purchase.time), 1, 1, 1)
     GameTooltip:AddDoubleLine(L.PURCHASES_EACH_LONG, Money(purchase.total / purchase.n))

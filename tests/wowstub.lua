@@ -223,6 +223,8 @@ function stub.RunTimers() stub.Advance(1) end
 GameTooltip = { lines = {}, shown = false }
 function GameTooltip:SetOwner(owner, anchor) self.owner = owner; self.anchor = anchor; self.point = nil; self.lines = {} end
 function GameTooltip:ClearAllPoints() self.point = nil end
+stub.cursorX = 0
+function GetCursorPosition() return stub.cursorX, 0 end
 function GameTooltip:SetPoint(...) self.point = { ... } end
 function GameTooltip:SetText(t) self.lines = { { left = t } } end
 function GameTooltip:AddLine(t) self.lines[#self.lines + 1] = { left = t } end

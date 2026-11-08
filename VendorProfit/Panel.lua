@@ -101,7 +101,7 @@ local function GetRow(index)
         row.hit:EnableMouse(true)
         row.hit:SetScript("OnEnter", function(self)
             if self.tooltip then
-                VendorProfit.SetRowTooltipOwner(self, self.text)
+                VendorProfit.SetRowTooltipOwner(self, { self.text })
                 self.tooltip(GameTooltip)
                 GameTooltip:Show()
             end
