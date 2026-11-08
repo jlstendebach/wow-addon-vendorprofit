@@ -161,12 +161,12 @@ Profit                                       [ Scan ]
   » Copper Bar x24       Mining, 24 crafts
     Bronze Bar x58       Mining, 29 crafts
     Rough Bronze Cuirass x10   Blacksmithing, 10 crafts
-──────────── Already in your bags ────────────
+────────── [-] Already in your bags ──────────
     Bronze Bar x12
     Copper Bar x3
 ```
 
-**To do** is a checklist in the order you'd do it: **Buy** first (prices are what can change, so you find out at the auction house before fetching or crafting anything), **Collect from mailbox** (purchases not collected yet), **Take from bank**, then **Craft**. Each step shows only while it has something left in it and they're numbered in order, so the list gets shorter as you go. Every button sits on its section's heading, with a short label; hover one for the details. There's no button bar at the bottom. Your items are used from your bags first, then the mailbox, then the bank, so **Take from bank** lists exactly what to fetch. Bags include the reagent bank, since crafting uses it directly. **Already in your bags** is just for information. Several queued recipes share your items, so nothing is counted twice.
+**To do** is a checklist in the order you'd do it: **Buy** first (prices are what can change, so you find out at the auction house before fetching or crafting anything), **Collect from mailbox** (purchases not collected yet), **Take from bank**, then **Craft**. Each step shows only while it has something left in it and they're numbered in order, so the list gets shorter as you go. Every button sits on its section's heading, with a short label; hover one for the details. There's no button bar at the bottom. Your items are used from your bags first, then the mailbox, then the bank, so **Take from bank** lists exactly what to fetch. Bags include the reagent bank, since crafting uses it directly. **Already in your bags** is just for information; click its divider to fold it away (it then shows how many items it holds) or open it again. That's remembered per character. Several queued recipes share your items, so nothing is counted twice.
 
 **Take from bank.** At the bank, **Take** on the **Take from bank** step moves exactly those amounts into your bags: it splits them off the bank's stacks (smallest stacks first) into empty bag slots, one move at a time, waiting for each to finish. If something isn't in the bank after all, or your bags fill up, or the bank closes, it stops and says so. The window opens beside the bank by itself when the order has something to fetch.
 

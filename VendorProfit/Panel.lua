@@ -189,7 +189,7 @@ end
 -- button at the right. extras: { icons = { ... } (see LayoutIcons),
 -- tooltip = function(GameTooltip) for hovering the row's text, onClick for
 -- clicking it }.
-local function AddDivider(row, title)
+local function AddDivider(row, title, onClick)
     y = y - 10
     row.left:SetFontObject("GameFontNormalSmall")
     row.left:ClearAllPoints()
@@ -209,6 +209,14 @@ local function AddDivider(row, title)
     right:SetPoint("RIGHT", content, "TOPRIGHT", -PADDING, y - 6)
     left:Show()
     right:Show()
+    -- A divider that collapses its section: the whole row is clickable.
+    if onClick then
+        row.hit:ClearAllPoints()
+        row.hit:SetPoint("TOPLEFT", content, "TOPLEFT", PADDING, y + 4)
+        row.hit:SetSize(WIDTH - 2 * PADDING, HEADING_HEIGHT)
+        row.hit.onClick = onClick
+        row.hit:Show()
+    end
     y = y - HEADING_HEIGHT
     return row
 end
@@ -220,7 +228,7 @@ local function AddRow(kind, left, right, button, extras)
     local row = GetRow(usedRows)
     HideExtras(row)
     if kind == "divider" then
-        return AddDivider(row, left)
+        return AddDivider(row, left, extras and extras.onClick)
     elseif kind == "gap" then
         -- Space between groups of rows.
         row.left:Hide()
@@ -642,6 +650,17 @@ end
 
 -- Queued crafts, the order's profit, the To do checklist, then what's
 -- already in your bags, for information.
+-- Whether "Already in your bags" is folded away, saved per character.
+local function BagsCollapsed()
+    return VendorProfitCharDB ~= nil and VendorProfitCharDB.bagsCollapsed == true
+end
+
+local function SetBagsCollapsed(collapsed)
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    VendorProfitCharDB.bagsCollapsed = collapsed or nil
+    Panel.Refresh()
+end
+
 -- What one queued entry makes, on its own, along its cheapest route at
 -- today's prices: { cost, vendor, auction } for all its crafts (vendor or
 -- auction nil when there's no price to sell at).
@@ -718,9 +737,20 @@ local function AddContent()
     local fromBags = AddToDo(plan)
 
     if #fromBags > 0 then
-        AddRow("divider", L.HEAD_BAGS)
-        for _, use in ipairs(fromBags) do
-            AddRow("row", ItemLabel(use.itemID, use.quantity))
+        -- Click the divider to fold it away (remembered per character).
+        local collapsed = BagsCollapsed()
+        local sign = collapsed and "Interface\\Buttons\\UI-PlusButton-Up" or "Interface\\Buttons\\UI-MinusButton-Up"
+        local title = "|T" .. sign .. ":12:12|t " .. L.HEAD_BAGS
+        if collapsed then
+            title = title .. " (" .. #fromBags .. ")"
+        end
+        AddRow("divider", title, nil, nil, {
+            onClick = function() SetBagsCollapsed(not collapsed) end,
+        })
+        if not collapsed then
+            for _, use in ipairs(fromBags) do
+                AddRow("row", ItemLabel(use.itemID, use.quantity))
+            end
         end
     end
 end

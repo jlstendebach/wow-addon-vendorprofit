@@ -411,7 +411,9 @@ def shop_client(sell=600, before_load=""):
 
 
 def lines(ev):
-    return list(ev("VendorProfit.Panel.Lines()").values())
+    # A collapsible divider's +/- icon isn't part of its title.
+    return [re.sub(r"^\|TInterface\\Buttons\\UI-(Plus|Minus)Button-Up:12:12\|t ", "", l)
+            for l in ev("VendorProfit.Panel.Lines()").values()]
 
 
 DIVIDERS = {"To do", "Already in your bags"}
@@ -628,6 +630,19 @@ check("neither vendor nor auction makes money: name in red", ev('VendorProfit.Pa
 run('VendorProfit.Panel.FindRow("Rough Bronze Cuirass x1").icons[1]:Click()')
 check("cancel removes it", ev("VendorProfit.Order.IsEmpty()"))
 check("no errors", ev("#__stub.errors") == 0)
+
+# --- Already in your bags: collapsible -------------------------------------------------
+run, ev = shop_client()
+run('__stub.createCount = 10'); run(QUEUE + ':Click()')
+BAGS = 'VendorProfit.Panel.FindRow("Already in your bags")'
+check("expanded to start, with a minus sign", section(ev, "Already in your bags") == ["|Ticon2840:0|t Copper Bar x3", "|Ticon2841:0|t Bronze Bar x12"]
+      and "UI-MinusButton-Up" in ev(BAGS + ".left:GetText()"))
+run(BAGS + '.hit:GetScript("OnMouseUp")(' + BAGS + '.hit, "LeftButton")')
+check("click the divider: collapsed, a plus sign and how many items", not has_line(ev, "Bronze Bar x12")
+      and "UI-PlusButton-Up" in ev(BAGS + ".left:GetText()") and ev(BAGS + ".left:GetText()").endswith("Already in your bags (2)"))
+check("remembered per character", ev("VendorProfitCharDB.bagsCollapsed") == True)
+run(BAGS + '.hit:GetScript("OnMouseUp")(' + BAGS + '.hit, "LeftButton")')
+check("click again: back open", has_line(ev, "Bronze Bar x12") and ev("VendorProfitCharDB.bagsCollapsed") is None)
 
 # --- Not profitable at live prices --------------------------------------------
 run, ev = shop_client(sell=450)
