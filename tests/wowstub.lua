@@ -52,8 +52,13 @@ function FrameMethods:SetWidth(w) self.__w = w end
 function FrameMethods:SetHeight(h) self.__h = h end
 function FrameMethods:GetHeight() return self.__h or 0 end
 -- __point is the first point set since ClearAllPoints.
-function FrameMethods:SetPoint(...) if self.__point == nil then self.__point = { ... } end end
-function FrameMethods:ClearAllPoints() self.__point = nil end
+function FrameMethods:SetPoint(point, ...)
+    if self.__point == nil then self.__point = { point, ... } end
+    -- Every point by name, for regions anchored on two sides.
+    self.__points = self.__points or {}
+    self.__points[point] = { point, ... }
+end
+function FrameMethods:ClearAllPoints() self.__point = nil; self.__points = nil end
 function FrameMethods:SetText(t) self.__text = t end
 function FrameMethods:HookScript(event, fn)
     local before = self.__scripts[event]
@@ -70,7 +75,15 @@ function FrameMethods:SetupMenu(generator) self.__menu = generator end
 function FrameMethods:SetIsDefaultCallback(fn) self.__isDefault = fn end
 function FrameMethods:SetDefaultCallback(fn) self.__default = fn end
 -- MenuUtil.CreateContextMenu keeps its generator in stub.menu.
-MenuUtil = { CreateContextMenu = function(owner, generator) stub.menu = { owner = owner, generator = generator } end }
+MenuUtil = {
+    CreateContextMenu = function(owner, generator)
+        local menu = CreateFrame("Frame")
+        menu.owner, menu.generator = owner, generator
+        menu.__point = { "CURSOR" }
+        stub.menu = menu
+        return menu
+    end,
+}
 function stub.Menu(dropdown)
     local items = {}
     local root = {

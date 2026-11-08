@@ -1,7 +1,7 @@
 -- The Best Crafts tab of the Vendor Profit window: every saved recipe of the
 -- open profession, ranked by profit per craft (BestCrafts.lua), losses
 -- included, then the ones with no price to rank by, in a scrolling list with
--- Vendor and Auction tabs and Investment, Profit and ROI columns, sortable
+-- Auction and Vendor tabs and Investment, Profit and ROI columns, sortable
 -- by clicking a column's heading, filtered by name with the search box as
 -- you type, and by profit and skill-up color with the Filter dropdown. Each has a magnifying glass (selects it in
 -- the professions window) and + (adds one craft to the shopping order). Live
@@ -45,10 +45,10 @@ local NAME_WIDTH = LIST_WIDTH + INVESTMENT_RIGHT - MONEY_WIDTH - GAP
 local SORT_DEFAULT = { key = "profit", ascending = false }
 local SORT_STARTS_ASCENDING = { name = true }
 
-local SKILL_UP_ORDER, SKILL_UP, Filters, FiltersActive, SetFilter, ResetFilters, FilterMenu
+local SKILL_UP_ORDER, SKILL_UP, Filters, FiltersActive, SetFilter, ResetFilters, FilterMenu, ToggleFilterMenu
 
 local frame              -- the page
-local tab = "vendor"
+local tab = "auction"     -- auction first: it's what this tab is used for most
 local rows = {}
 local shownList          -- profession, tab and filter the list was last scrolled for
 local filter = ""        -- the search box's text, lowercased
@@ -323,6 +323,32 @@ FilterMenu = function(_, root)
     end
 end
 
+-- The open Filter menu, and when it last closed: a click on the button
+-- closes the menu (the game closes menus on any click outside them) before
+-- the button hears it, so a click just after it closed was meant to close it.
+local filterMenu
+local filterMenuClosed = 0
+
+ToggleFilterMenu = function(button)
+    if filterMenu and filterMenu:IsShown() then
+        filterMenu:Hide()
+        return
+    end
+    if GetTime() - filterMenuClosed < 0.25 then
+        return
+    end
+    filterMenu = MenuUtil.CreateContextMenu(button, FilterMenu)
+    if filterMenu then
+        -- Under the button, not at the mouse.
+        filterMenu:ClearAllPoints()
+        filterMenu:SetPoint("TOPLEFT", button, "BOTTOMLEFT", 0, -2)
+        if not filterMenu.vendorProfitHooked then
+            filterMenu.vendorProfitHooked = true
+            filterMenu:HookScript("OnHide", function() filterMenuClosed = GetTime() end)
+        end
+    end
+end
+
 function BestPanel.Filters()
     return Filters()
 end
@@ -351,8 +377,8 @@ local function Create(page)
         vendor = SmallButton(frame, L.BEST_TAB_VENDOR, 76),
         auction = SmallButton(frame, L.BEST_TAB_AUCTION, 76),
     }
-    frame.tabs.vendor:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -52)
-    frame.tabs.auction:SetPoint("LEFT", frame.tabs.vendor, "RIGHT", 4, 0)
+    frame.tabs.auction:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -52)
+    frame.tabs.vendor:SetPoint("LEFT", frame.tabs.auction, "RIGHT", 4, 0)
     frame.tabs.vendor:SetScript("OnClick", function() SetTab("vendor") end)
     frame.tabs.auction:SetScript("OnClick", function() SetTab("auction") end)
 
@@ -377,8 +403,9 @@ local function Create(page)
     if not ok then
         search = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
     end
-    search:SetSize(130, 20)
-    search:SetPoint("LEFT", frame.tabs.auction, "RIGHT", 14, 0)
+    -- It fills the row between the tabs and Filter (see below).
+    search:SetHeight(20)
+    search:SetPoint("LEFT", frame.tabs.vendor, "RIGHT", 14, 0)
     search:SetAutoFocus(false)
     -- Hooked, not set, so the template's own placeholder and clear button
     -- keep working.
@@ -394,19 +421,14 @@ local function Create(page)
     frame.search = search
 
     -- Filter: a button in the page's own style that opens the game's menu
-    -- of checkboxes, and a small red X beside it, shown while any filter is
-    -- on, to reset them. Left out if this client doesn't have the game's
-    -- menu system.
+    -- of checkboxes under it (clicking it again closes it), and a small red
+    -- X at the row's end that clears the filters, grayed out while none are
+    -- on. Left out if this client doesn't have the game's menu system; the
+    -- search box then runs to the end of the row.
     if MenuUtil and MenuUtil.CreateContextMenu then
-        local button = SmallButton(frame, L.BEST_FILTER, 76)
-        button:SetPoint("LEFT", search, "RIGHT", 8, 0)
-        button:SetScript("OnClick", function(self)
-            MenuUtil.CreateContextMenu(self, FilterMenu)
-        end)
-        frame.filter = button
-
         local reset = SmallButton(frame, "", 22)
-        reset:SetPoint("LEFT", button, "RIGHT", 4, 0)
+        reset:SetPoint("RIGHT", frame, "TOPRIGHT", -PADDING, -62)
+        reset:SetMotionScriptsWhileDisabled(true)
         reset.icon = reset:CreateTexture(nil, "OVERLAY")
         reset.icon:SetTexture("Interface\\RaidFrame\\ReadyCheck-NotReady")
         reset.icon:SetSize(12, 12)
@@ -419,6 +441,14 @@ local function Create(page)
         end)
         reset:SetScript("OnLeave", function() GameTooltip:Hide() end)
         frame.filterReset = reset
+
+        local button = SmallButton(frame, L.BEST_FILTER, 76)
+        button:SetPoint("RIGHT", reset, "LEFT", -4, 0)
+        button:SetScript("OnClick", function(self) ToggleFilterMenu(self) end)
+        frame.filter = button
+        search:SetPoint("RIGHT", button, "LEFT", -8, 0)
+    else
+        search:SetPoint("RIGHT", frame, "TOPRIGHT", -PADDING, -62)
     end
 
     -- Column headings over the list; click one to sort by it.
@@ -470,7 +500,8 @@ local function Refresh()
             end
         end
         frame.filter:SetText(on > 0 and string.format(L.BEST_FILTER_ON, on) or L.BEST_FILTER)
-        frame.filterReset:SetShown(on > 0)
+        frame.filterReset:SetEnabled(on > 0)
+        frame.filterReset.icon:SetDesaturated(on == 0)
     end
 
     -- Tabs: the selected one stays lit.

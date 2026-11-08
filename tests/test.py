@@ -1455,6 +1455,11 @@ run(TITLEBTN + ":Click()")
 check("...and again: closes the window", not ev("VendorProfit.Panel.IsShown()"))
 run(TITLEBTN + ":Click()")
 best = lambda: list(ev("VendorProfit.BestPanel.Lines()").values())
+check("auction tab first, left of vendor", ev("VendorProfit.BestPanel.Tab()") == "auction"
+      and ev(B + ".tabs.auction.__point[1]") == "TOPLEFT" and ev(B + ".tabs.vendor.__point[2] == " + B + ".tabs.auction"))
+check("the search box fills the row up to Filter, and the red X ends it",
+      ev(B + ".search.__points.RIGHT[2] == " + B + ".filter") and ev(B + ".filterReset.__point[3]") == "TOPRIGHT")
+run(B + ".tabs.vendor:Click()")
 ranked = best()
 check("vendor tab first, ranked: cuirass 600 - 438, shoulders 400 - 313, then the losing vest in red",
       ev("VendorProfit.BestPanel.Tab()") == "vendor" and ranked[:2] == [
@@ -1522,32 +1527,45 @@ run('VendorProfit.BestPanel.Refresh()')
 F = B + ".filter"
 def menu():
     run(F + ':Click()')
-    return [(i.text, i.title or False) for i in ev("__stub.Menu(nil)").values()]
+    items = [(i.text, i.title or False) for i in ev("__stub.Menu(nil)").values()]
+    run('__stub.menu:Hide(); __stub.Advance(1)')
+    return items
 check("a Filter button in the page's style (not the game's dropdown) opens the menu: profitable only, then skill-up colors",
       ev(F + ".__text") == "Filter" and [t for t, _ in menu()] ==
       ["Profitable only", "Skill up", "|cffff8040Guaranteed|r", "|cffffff00Likely|r", "|cff40bf40Unlikely|r"])
 check("names in their skill-up color, as the professions window shows them",
       "|cffff8040Rough Bronze Cuirass|r" in best()[0] and "|cffffff00Rough Bronze Shoulders|r" in best()[1])
 check("no skill up: left white, not gray", "|Ticon2902:0|t Plain Ring |" in best()[4])
-check("no reset X while no filter is on", not ev(B + ".filterReset:IsShown()"))
+check("the reset X stays, grayed out, while no filter is on", ev(B + ".filterReset:IsShown()")
+      and not ev(B + ".filterReset:IsEnabled()") and ev(B + ".filterReset.icon.__desaturated"))
+run(F + ':Click()')
+check("the menu opens under the button, not at the mouse", ev("__stub.menu.__point[1]") == "TOPLEFT"
+      and ev("__stub.menu.__point[2] == " + F) and ev("__stub.menu.__point[3]") == "BOTTOMLEFT")
+run(F + ':Click()')
+check("clicking Filter again closes it", not ev("__stub.menu:IsShown()"))
+run('__stub.Advance(1); ' + F + ':Click(); __stub.menu:Hide(); ' + F + ':Click()')
+check("a click that the game already used to close the menu doesn't reopen it", not ev("__stub.menu:IsShown()"))
+run('__stub.Advance(1)')
 check("Scan sits on the heading's line, apart from the list controls", ev(B + ".scan.__point[5]") == -38)
 def toggle(n):
     run(F + ':Click()')
     run('local items = __stub.Menu(nil); items[%d].toggle()' % n)
+    run('__stub.menu:Hide(); __stub.Advance(1)')
 toggle(1)
 check("profitable only: the losing vest and the unpriced ones go, places kept",
       [l.split(" | ")[0].split("|t ")[0] for l in best()] == ["1. |Ticon2866:0", "2. |Ticon2865:0"])
 run(F + ':Click()')
 check("the checkbox shows it's on, and it's saved", ev("__stub.Menu(nil)[1].checked()") and ev("VendorProfitCharDB.bestFilters.profitable"))
-check("the button says how many are on, and the reset X shows", ev(F + ".__text") == "Filter (1)" and ev(B + ".filterReset:IsShown()"))
+run('__stub.menu:Hide(); __stub.Advance(1)')
+check("the button says how many are on, and the reset X is on", ev(F + ".__text") == "Filter (1)" and ev(B + ".filterReset:IsEnabled()"))
 toggle(1)
 toggle(3)
 check("guaranteed only: just the orange recipe", len(best()) == 1 and "Rough Bronze Cuirass" in best()[0])
 toggle(5)
 check("guaranteed or unlikely: orange and green", [("Cuirass" in l, "Vest" in l) for l in best()] == [(True, False), (False, True)])
 run(B + '.filterReset:Click()')
-check("the red X resets them all, and goes", len(best()) == 5 and ev("VendorProfitCharDB.bestFilters") is None
-      and not ev(B + ".filterReset:IsShown()") and ev(F + ".__text") == "Filter")
+check("the red X resets them all, and grays out", len(best()) == 5 and ev("VendorProfitCharDB.bestFilters") is None
+      and not ev(B + ".filterReset:IsEnabled()") and ev(F + ".__text") == "Filter")
 toggle(1); toggle(5); run(B + '.search:Type("cuirass")')
 check("nothing passes: says so", best() == [] and 'No recipes match "cuirass".' in ev(B + ".status:GetText()"))
 run(B + '.search:Type("")')
