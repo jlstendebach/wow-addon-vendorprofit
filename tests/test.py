@@ -821,6 +821,32 @@ run6('VendorProfit.Order.Entries()')
 check("old snapshot and purchase record dropped", ev6("VendorProfitCharDB.order.snapshot") is None and ev6("VendorProfitCharDB.order.bought") is None)
 
 
+# --- Opening a profession: one click ------------------------------------------------
+run, ev = shop_client()
+run('__stub.bags[2841] = 0; __stub.bags[2840] = 0; __stub.bank[2840] = 0')
+run('__stub.createCount = 2'); run(QUEUE + ':Click()')
+OPEN = "VendorProfitOpenProfessionButton"
+check("before: Open Mining, covered", ev(CRAFT + ".__text") == "Open Mining" and ev(OPEN + ":IsShown()"))
+run(OPEN + ':Click()')
+check("clicked: the cover goes, so a second click can't close the window it's opening",
+      not ev(OPEN + ":IsShown()") and ev(CRAFT + ".__text") == "Opening..." and not ev(CRAFT + ":IsEnabled()")
+      and ev(CRAFT + ".tooltip") == "Waiting for Mining to open.")
+# The window shows Mining but its data is still loading.
+run('__stub.tradeSkill.ready = false; __stub.OpenProfession(186, "Mining", %s)' % MINING)
+run('__stub.Advance(4)')
+check("window showing Mining but still loading: still waiting, no cover", ev(CRAFT + ".__text") == "Opening..." and not ev(OPEN + ":IsShown()"))
+run('__stub.tradeSkill.ready = true; __stub.Fire("TRADE_SKILL_DATA_SOURCE_CHANGED")')
+check("loaded (data source changed): ready to craft", ev(CRAFT + ".__text") == "Craft" and not ev(OPEN + ":IsShown()"))
+# A click that never opens anything: the cover comes back after a few seconds.
+run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
+run('__stub.Advance(1)')
+check("back on another profession: Open Mining again", ev(CRAFT + ".__text") == "Open Mining" and ev(OPEN + ":IsShown()"))
+run(OPEN + ':Click()')
+run('__stub.Advance(4)')
+check("nothing opened after a few seconds: the cover is back", ev(CRAFT + ".__text") == "Open Mining" and ev(OPEN + ":IsShown()"))
+check("no errors", ev("#__stub.errors") == 0)
+
+
 # --- Craft button ------------------------------------------------------------------
 run, ev = shop_client()
 run('__stub.bags[2841] = 0; __stub.bags[2840] = 0; __stub.bank[2840] = 0')

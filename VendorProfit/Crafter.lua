@@ -35,6 +35,17 @@ local function OpenProfession()
     return info and info.professionName
 end
 
+-- The profession the window is showing, even while it's still loading.
+local function ShowingProfession()
+    if not (ProfessionsFrame and ProfessionsFrame:IsShown()) then
+        return nil
+    end
+    local ui = C_TradeSkillUI
+    if ui.IsTradeSkillLinked and ui.IsTradeSkillLinked() then return nil end
+    local info = ui.GetBaseProfessionInfo and ui.GetBaseProfessionInfo()
+    return info and info.professionName
+end
+
 -- How many times a step can be crafted with what's in your bags (and reagent
 -- bank) now. Counted here rather than asking the game: its recipe info's
 -- numAvailable isn't reliable in Forever (TradeSkillMaster counts them itself
@@ -59,6 +70,7 @@ end
 --   { step, crafts }           ready: craft step.recipeID this many times
 --   { step, open = name }      open this profession to craft it
 --   { step, materials = true } in the open profession, but materials are missing
+--   { step, loading = name }   its profession's window is open but still loading
 -- When nothing can be crafted, it's about the first step in the list.
 --   nil                        nothing to craft
 function Crafter.Next()
@@ -68,6 +80,15 @@ function Crafter.Next()
         return nil
     end
     local open = OpenProfession()
+    if open == nil then
+        -- The window is showing a profession the order needs, still loading.
+        local loading = ShowingProfession()
+        for _, step in ipairs(plan.crafts) do
+            if loading and step.profession == loading then
+                return { step = step, loading = loading }
+            end
+        end
+    end
     if open then
         for _, step in ipairs(plan.crafts) do
             if step.profession == open then

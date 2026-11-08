@@ -103,7 +103,12 @@ function stub.Drag(f, left, top)
     f.__scripts.OnDragStop(f)
     stub.dragTo = nil
 end
-function FrameMethods:Click(...) if self.__scripts.OnClick and self:IsEnabled() then self.__scripts.OnClick(self, ...) end end
+function FrameMethods:Click(...)
+    if not self:IsEnabled() then return end
+    if self.__scripts.PreClick then self.__scripts.PreClick(self, ...) end
+    if self.__scripts.OnClick then self.__scripts.OnClick(self, ...) end
+    if self.__scripts.PostClick then self.__scripts.PostClick(self, ...) end
+end
 function FrameMethods:SetFrameLevel(l) self.__level = l end
 function FrameMethods:GetFrameLevel() return self.__level or 1 end
 function FrameMethods:CreateTexture()

@@ -395,6 +395,15 @@ local function CraftButton()
         return nil
     end
     local name = ItemName(nextCraft.step.itemID)
+    -- Opening: wait, rather than offer a click that would close it again.
+    local waitingFor = nextCraft.loading or (nextCraft.open and OpenButton.IsOpening(nextCraft.open) and nextCraft.open)
+    if waitingFor then
+        button.text, button.tooltip = L.OPENING_LABEL, string.format(L.OPENING_HELP, waitingFor)
+        return button, nextCraft.step
+    end
+    if not nextCraft.open then
+        OpenButton.Opened()
+    end
     if nextCraft.open then
         button.text = string.format(L.OPEN_LABEL, nextCraft.open)
         if InCombatLockdown() then
@@ -874,7 +883,8 @@ local events = CreateFrame("Frame")
 events:RegisterEvent("BAG_UPDATE_DELAYED")
 events:RegisterEvent("PLAYER_MONEY")
 -- The Craft button follows the open profession window and your casting.
-for _, event in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE", "TRADE_SKILL_LIST_UPDATE" }) do
+for _, event in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE", "TRADE_SKILL_LIST_UPDATE",
+    "TRADE_SKILL_DATA_SOURCE_CHANGED", "TRADE_SKILL_DATA_SOURCE_CHANGING" }) do
     pcall(events.RegisterEvent, events, event)
 end
 pcall(events.RegisterUnitEvent, events, "UNIT_SPELLCAST_START", "player")

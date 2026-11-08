@@ -20,6 +20,8 @@ VendorProfit.OpenButton = OpenButton
 local MINING_SPELL, SMELTING_SPELL = 2575, 2656
 
 local button
+local opening            -- { profession, expires } after a click, until it opens
+local OPENING_TIMEOUT = 3
 
 local function SpellName(spellID)
     if C_Spell and C_Spell.GetSpellName then
@@ -48,7 +50,40 @@ local function Create()
         GameTooltip:Show()
     end)
     button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    -- Clicked: the profession is on its way. Casting its spell again would
+    -- close the window it's opening, so the button goes away until it's open
+    -- (or a few seconds pass), and the panel checks back as it loads.
+    button:SetScript("PostClick", function(self)
+        opening = { profession = self.profession, expires = GetTime() + OPENING_TIMEOUT }
+        if not InCombatLockdown() then
+            self:Hide()
+        end
+        if VendorProfit.Panel then
+            VendorProfit.Panel.Refresh()
+        end
+        for _, delay in ipairs({ 0.5, 1.5, OPENING_TIMEOUT + 0.1 }) do
+            C_Timer.After(delay, function()
+                if VendorProfit.Panel then
+                    VendorProfit.Panel.Refresh()
+                end
+            end)
+        end
+    end)
     button:Hide()
+end
+
+-- Whether that profession was just clicked open and hasn't finished opening.
+function OpenButton.IsOpening(profession)
+    if opening == nil or GetTime() >= opening.expires then
+        opening = nil
+        return false
+    end
+    return opening.profession == profession
+end
+
+-- It's open: stop waiting.
+function OpenButton.Opened()
+    opening = nil
 end
 
 -- Lays the secure button over target so clicking target opens profession.
