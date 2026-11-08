@@ -15,7 +15,9 @@ VendorProfit.PurchasePanel = PurchasePanel
 local WIDTH = 540
 local PADDING = 16
 local ROW_HEIGHT = 18
-local LIST_TOP = -62
+-- The column headings sit 16 above the list, as far below the title (12
+-- tall, at -32) as Profit History's total is below its title.
+local LIST_TOP = -66
 local VISIBLE_ROWS = 18
 local SCROLLBAR_WIDTH = 24
 local LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
@@ -77,7 +79,7 @@ local function ShowTooltip(row)
     if purchase == nil then
         return
     end
-    GameTooltip:SetOwner(row.hit, "ANCHOR_RIGHT")
+    VendorProfit.SetRowTooltipOwner(row.hit, { row.date, row.item, row.from, row.each, row.total, row.market })
     GameTooltip:SetText(ItemLabel(purchase.item, purchase.n))
     GameTooltip:AddLine(date(L.HISTORY_TIME_FORMAT, purchase.time), 1, 1, 1)
     GameTooltip:AddDoubleLine(L.PURCHASES_EACH_LONG, Money(purchase.total / purchase.n))

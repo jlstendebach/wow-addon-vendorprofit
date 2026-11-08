@@ -394,6 +394,71 @@ function VendorProfit.FormatMoney(copper)
     return RED_FONT_COLOR:WrapTextInColorCode("-" .. VendorProfit.FormatCoins(-copper))
 end
 
+-- Starts a list row's tooltip where the game puts an item's: just above the
+-- row, past the end of its name (text). The row's hover area is wider than
+-- the name, so the usual ANCHOR_RIGHT on it would put the tooltip too far out.
+function VendorProfit.SetNameTooltipOwner(owner, text)
+    GameTooltip:SetOwner(owner, "ANCHOR_NONE")
+    GameTooltip:ClearAllPoints()
+    local x = 0
+    local textLeft, ownerLeft = text:GetLeft(), owner:GetLeft()
+    if textLeft and ownerLeft then
+        -- A long name is cut off at its column's width.
+        local width = text:GetStringWidth()
+        local column = text:GetWidth()
+        if column and column > 0 then
+            width = math.min(width, column)
+        end
+        x = textLeft - ownerLeft + width
+    end
+    GameTooltip:SetPoint("BOTTOMLEFT", owner, "TOPLEFT", x, 0)
+end
+
+-- Starts a list row's tooltip where the game puts one for a button: its
+-- bottom left at the top right of the column (one of columns, the row's text
+-- regions) under the cursor. It moves along as the cursor crosses into
+-- another column.
+function VendorProfit.SetRowTooltipOwner(owner, columns)
+    GameTooltip:SetOwner(owner, "ANCHOR_NONE")
+    local placedAt
+    local function Place()
+        local ownerLeft = owner:GetLeft()
+        if ownerLeft == nil then
+            return
+        end
+        local cursor = GetCursorPosition() / owner:GetEffectiveScale()
+        -- The rightmost column starting left of the cursor; left of them
+        -- all, the first.
+        local column, first
+        for _, region in ipairs(columns) do
+            local left = region:GetLeft()
+            if left then
+                if left <= cursor and (column == nil or left > column:GetLeft()) then
+                    column = region
+                end
+                if first == nil or left < first:GetLeft() then
+                    first = region
+                end
+            end
+        end
+        column = column or first
+        local x = column and column:GetRight() - ownerLeft or 0
+        if x ~= placedAt then
+            placedAt = x
+            GameTooltip:ClearAllPoints()
+            GameTooltip:SetPoint("BOTTOMLEFT", owner, "TOPLEFT", x, 0)
+        end
+    end
+    Place()
+    owner:SetScript("OnUpdate", function(self)
+        if not GameTooltip:IsOwned(self) then
+            self:SetScript("OnUpdate", nil)
+            return
+        end
+        Place()
+    end)
+end
+
 -- Lines -----------------------------------------------------------------------
 
 -- Each line module has:
