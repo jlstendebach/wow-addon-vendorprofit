@@ -225,6 +225,12 @@ Sales use up the item's costs oldest first. Vendor sales are read from the vendo
 - Bought reagents that leave some other way (mailed to an alt, destroyed) stop counting once you no longer have them. Crafted items out of your bags keep counting, since they may be up for auction.
 - The last 500 sales are kept, per character.
 
+## Purchase History
+
+The **Purchase History** tab (or `/vprofit purchases`) lists your last 500 purchases, newest first, for a gut check: the date, the item and how many, whether it came from the auction house or a vendor, what you paid **each** and in **total**, and what one costs **now** (the cheaper of the vendor and auction prices). Hover a purchase for the exact time.
+
+Vendor purchases show up straight away, from any vendor. Auction house purchases show up when you take them out of the mailbox, read from their mail, however you bought them. These are the same purchases whose costs feed the Profit History.
+
 ## How it works
 
 - Auctionator makes its crafting info frame (`AuctionatorCraftingInfoProfessionsFrame`) the first time the professions window opens. The addon hooks the function that makes it, attaches right after, and retries on the next frame in case it sees the event first.
@@ -259,6 +265,7 @@ Files:
 | `BestPanel.lua` | The Best Crafts tab, and the button in the professions window's title bar |
 | `History.lua` | Profit history: what items cost you as they come in, and their sales |
 | `HistoryPanel.lua` | The Profit History tab |
+| `PurchasePanel.lua` | The Purchase History tab |
 
 Saved data, per character (`VendorProfitCharDB`):
 
@@ -266,7 +273,7 @@ Saved data, per character (`VendorProfitCharDB`):
 - `order = { entries, inMail, lastSeen, spent }`: the queued crafts, purchases not seen in bags or bank yet (and the count they're waiting to rise from), and what the panel spent.
 - `panel = { left, top }`: where you moved the Vendor Profit window, if you did.
 - `bestSort = { key, ascending }`: how Best Crafts is sorted.
-- `history = { stock, sales }`: the profit history: what the items you have cost you, and your sales.
+- `history = { stock, sales, purchases }`: what the items you have cost you, your sales, and your last 500 purchases.
 
 Opening a profession uses a secure action button casting the profession's spell, as TradeSkillMaster does in Forever. It's a separate invisible button laid over the Craft button rather than part of the panel, because a secure button inside the panel would make the panel protected and the game would block showing, hiding or moving it in combat. It's only placed out of combat and hidden as combat starts.
 

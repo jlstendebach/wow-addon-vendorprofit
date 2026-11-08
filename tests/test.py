@@ -56,7 +56,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "History.lua", "Panel.lua", "BestCrafts.lua", "BestPanel.lua", "HistoryPanel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "History.lua", "Panel.lua", "BestCrafts.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
 run('__stub.Fire("TRADE_SKILL_SHOW")')
@@ -1098,6 +1098,24 @@ check("crafted items out of your bags still count (they may be up for auction)",
 run('__stub.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 12345)')
 check("other spells aren't crafts", ev(H + ".Recorded(2903)") == 1)
 check("no errors", ev("#__stub.errors") == 0)
+
+# Purchase History: every purchase above, newest first, what each one cost.
+run('VendorProfit.Panel.Show("purchases")')
+bought = list(ev("VendorProfit.PurchasePanel.Lines()").values())
+check("purchases listed newest first: date, item, from, each, total, now", len(bought) == 3
+      and "|t Copper Bar x2 | Vendor | |cffffffff1s 50c|r | |cffffffff3s|r | " in bought[0]
+      and "|t Copper Bar | Vendor | |cffffffff1s 50c|r | |cffffffff1s 50c|r | " in bought[1]
+      and "|t Copper Bar | Auction | |cffffffff1s|r | |cffffffff1s|r | " in bought[2])
+check("...with today's cheapest price to compare", bought[2].endswith(ev('VendorProfit.FormatMoney(math.min(150, %d))' % 120)))
+check("window as wide as the history", ev("VendorProfitPanel:GetWidth()") == 540 and ev("VendorProfitPanel.tabs.purchases.label") == "Purchase History")
+run('VendorProfit.PurchasePanel.Row(1).hit:GetScript("OnEnter")()')
+check("hover: what you paid each, and the cheapest now", ("You paid each", "|cffffffff1s 50c|r") in [(l.left, l.right) for l in ev("GameTooltip.lines").values()])
+run('VendorProfitCharDB.history.purchases = {}; VendorProfit.Panel.Refresh()')
+check("none yet: says where they come from", ev("VendorProfit.PurchasePanel.Frame().empty:IsShown()"))
+run('SlashCmdList.VENDORPROFIT("purchases")')
+check("/vprofit purchases toggles it", not ev("VendorProfit.Panel.IsShown()"))
+run('for i = 1, 510 do VendorProfit.History.Bought(2840, 1, 100, "vendor") end')
+check("keeps the last 500", ev("#VendorProfitCharDB.history.purchases") == 500)
 
 
 # --- Known vendor prices ---------------------------------------------------------------

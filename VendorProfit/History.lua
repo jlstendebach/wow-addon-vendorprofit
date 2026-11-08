@@ -26,6 +26,8 @@
 --     cost and bought per item
 --   sales = { { time, item, n, how ("vendor"/"auction"), sold, cost, bought },
 --     ... } oldest first, at most MAX_SALES
+--   purchases = { { time, item, n, total, how }, ... } oldest first, at most
+--     MAX_PURCHASES, for the Purchase History tab
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -37,6 +39,7 @@ local History = {}
 VendorProfit.History = History
 
 History.MAX_SALES = 500
+History.MAX_PURCHASES = 500
 -- How long after an item comes in or goes out before its count is trusted
 -- again (purchases and crafts land a moment later).
 local SETTLE = 5
@@ -60,6 +63,7 @@ local function DB()
     db.history = db.history or {}
     db.history.stock = db.history.stock or {}
     db.history.sales = db.history.sales or {}
+    db.history.purchases = db.history.purchases or {}
     return db.history
 end
 
@@ -140,11 +144,28 @@ end
 
 -- Purchases ---------------------------------------------------------------------
 
-function History.Bought(itemID, n, total)
+-- A purchase: its cost goes on the item, and it's logged for the Purchase
+-- History tab. how = "auction" or "vendor".
+function History.Bought(itemID, n, total, how)
     if itemID and n and n > 0 and total then
         AddStock(itemID, n, total / n, total / n, false)
+        local purchases = DB().purchases
+        purchases[#purchases + 1] = { time = time(), item = itemID, n = n, total = math.floor(total + 0.5), how = how }
+        while #purchases > History.MAX_PURCHASES do
+            table.remove(purchases, 1)
+        end
         Changed()
     end
+end
+
+-- Purchases, newest first.
+function History.Purchases()
+    local list = {}
+    local purchases = DB().purchases
+    for index = #purchases, 1, -1 do
+        list[#list + 1] = purchases[index]
+    end
+    return list
 end
 
 -- Crafts ------------------------------------------------------------------------
@@ -334,7 +355,7 @@ if BuyMerchantItem then
         stackCount = math.max(stackCount or 1, 1)
         local n = quantity or stackCount
         if itemID and price and price > 0 then
-            History.Bought(itemID, n, price * n / stackCount)
+            History.Bought(itemID, n, price * n / stackCount, "vendor")
         end
     end)
 end
@@ -397,7 +418,7 @@ local function TakeMail(index, takingItem, takingMoney)
     if mail.invoiceType == "buyer" and takingItem then
         if mail.itemID and mail.bid then
             recentMail[mail.key] = now
-            History.Bought(mail.itemID, mail.n or mail.count or 1, mail.bid)
+            History.Bought(mail.itemID, mail.n or mail.count or 1, mail.bid, "auction")
         end
     elseif mail.invoiceType == "seller" and takingMoney then
         local itemID = ItemByName(mail.itemName)
