@@ -33,12 +33,20 @@ wow-addon-vendorprofit/
     tests/            <- stubbed-client tests
     scripts/          <- release versioning and version stamping
     .github/          <- the test and release workflows
+    deploy.bat        <- copies the addon into WoW (development)
+    update.bat        <- brings your branch up to date with main, then deploys
     README.md
 ```
 
 The folder must stay named `VendorProfit` to match `VendorProfit.toc`.
 
-For development, a local `deploy.bat` (kept out of git, since its paths are machine-specific) mirrors the folder into AddOns. Run it, then `/reload` in game, or restart WoW if files were added or removed.
+For development on Windows, `deploy.bat` mirrors the folder into AddOns and stamps the version from git. Run it, then `/reload` in game, or restart WoW if files were added or removed. It expects WoW in `C:\Program Files (x86)\World of Warcraft`; if yours is elsewhere, create a `deploy.local.bat` next to it (git ignores it) with one line:
+
+```bat
+set "ADDONS=D:\Games\World of Warcraft\_forever_\Interface\AddOns"
+```
+
+`update.bat` brings the branch you're on up to date with `main`, fetches the release tags, and runs `deploy.bat`. Run it after a pull request is merged. It deploys whatever your branch has, so work not yet merged comes along; if merging `main` hits a conflict, it stops without deploying.
 
 ## Vendor Profit
 

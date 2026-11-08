@@ -1,2 +1,4 @@
 # Shell scripts run on GitHub's Linux runners: keep LF line endings.
 *.sh text eol=lf
+# Batch files run on Windows: keep CRLF, which cmd needs for labels to work.
+*.bat text eol=crlf
