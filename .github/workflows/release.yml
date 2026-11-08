@@ -1,23 +1,27 @@
-# Releases the addon when its version changes.
+# Releases the addon when changes to it reach main.
 #
-# On every push to main that touches the addon (or this file), this reads "## Version" from
-# VendorProfit.toc. If there's no release for that version yet, it runs the
-# tests, checks every file the .toc loads is there, zips the VendorProfit
-# folder (unzip it into Interface\AddOns) and publishes a GitHub release
-# tagged v<version>, with the commits since the last release as its notes.
-# Pushes that don't bump the version release nothing.
+# The version isn't in the repository (VendorProfit.toc says
+# @project-version@); it's worked out from the commits since the last release
+# (scripts/next-version.sh): any feat is a minor release, anything else that
+# changed the addon a patch, and feat! or BREAKING CHANGE a major one. Merges
+# that don't touch the addon release nothing.
+#
+# It runs the tests, stamps the version into the .toc inside the zip, checks
+# every file the .toc loads is there, and publishes a GitHub release tagged
+# v<version>, with the commits since the last release as its notes.
 
 name: Release
 
 on:
   push:
     branches: [main]
-    paths: ["VendorProfit/**", ".github/workflows/release.yml"]
+    paths: ["VendorProfit/**", ".github/workflows/release.yml", "scripts/next-version.sh"]
   workflow_dispatch:
 
 permissions:
   contents: write
 
+# One release at a time, so two quick merges can't claim the same version.
 concurrency:
   group: release
   cancel-in-progress: false
@@ -30,38 +34,43 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Read the version
+      - name: Work out the version
         id: version
         run: |
-          version=$(sed -n 's/^## Version:[[:space:]]*//p' VendorProfit/VendorProfit.toc | tr -d '\r[:space:]')
-          if [ -z "$version" ]; then
-            echo "::error file=VendorProfit/VendorProfit.toc::No '## Version:' line"
+          git fetch --tags --force
+          read -r version last < <(bash scripts/next-version.sh) || true
+          if [ -z "${version:-}" ]; then
+            echo "::notice::Nothing in the addon changed since the last release; nothing to release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then
+            echo "::error::v$version is already released."
             exit 1
           fi
+          echo "Releasing $version (last release: $last)"
+          echo "release=true" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          if git rev-parse -q --verify "refs/tags/v$version" > /dev/null; then
-            echo "::notice::v$version is already released; bump ## Version in VendorProfit.toc to release again."
-            echo "released=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "released=false" >> "$GITHUB_OUTPUT"
-          fi
+          echo "last=$last" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-python@v5
-        if: steps.version.outputs.released == 'false'
+        if: steps.version.outputs.release == 'true'
         with:
           python-version: "3.12"
 
       - name: Test
-        if: steps.version.outputs.released == 'false'
+        if: steps.version.outputs.release == 'true'
         run: |
           pip install lupa
           python tests/test.py
 
       - name: Package
-        if: steps.version.outputs.released == 'false'
+        if: steps.version.outputs.release == 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
+          sed -i "s/^## Version:.*/## Version: $VERSION/" VendorProfit/VendorProfit.toc
+          grep "^## Version: $VERSION" VendorProfit/VendorProfit.toc
           # Every file the .toc loads has to be in the zip.
           missing=0
           while IFS= read -r file; do
@@ -75,17 +84,17 @@ jobs:
           unzip -l "VendorProfit-$VERSION.zip"
 
       - name: Release
-        if: steps.version.outputs.released == 'false'
+        if: steps.version.outputs.release == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
+          LAST: ${{ steps.version.outputs.last }}
         run: |
           # Notes: the commits since the last release.
-          previous=$(git describe --tags --abbrev=0 --match 'v*' 2> /dev/null || true)
-          if [ -n "$previous" ]; then
-            echo "Changes since $previous:" > notes.md
+          if [ "$LAST" != "none" ]; then
+            echo "Changes since $LAST:" > notes.md
             echo >> notes.md
-            git log --no-merges --pretty='- %s' "$previous..HEAD" >> notes.md
+            git log --no-merges --pretty='- %s' "$LAST..HEAD" >> notes.md
           else
             echo "First release." > notes.md
           fi
