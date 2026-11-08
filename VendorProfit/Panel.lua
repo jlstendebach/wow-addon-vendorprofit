@@ -937,6 +937,9 @@ local function Refresh()
             frame:SetHeight(math.max(def.refresh(pages[def.name]), MinHeight()))
         end
     end
+    -- The cover was placed while laying out; the new height can move a
+    -- centered window.
+    OpenButton.Follow()
 end
 
 function Panel.Refresh()
