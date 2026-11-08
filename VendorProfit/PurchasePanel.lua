@@ -15,7 +15,9 @@ VendorProfit.PurchasePanel = PurchasePanel
 local WIDTH = 540
 local PADDING = 16
 local ROW_HEIGHT = 18
-local LIST_TOP = -62
+-- The column headings sit 16 above the list, as far below the title (12
+-- tall, at -32) as Profit History's total is below its title.
+local LIST_TOP = -66
 local VISIBLE_ROWS = 18
 local SCROLLBAR_WIDTH = 24
 local LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH

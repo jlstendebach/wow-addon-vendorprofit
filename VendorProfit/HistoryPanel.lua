@@ -15,7 +15,9 @@ VendorProfit.HistoryPanel = HistoryPanel
 local WIDTH = 540
 local PADDING = 16
 local ROW_HEIGHT = 18
-local LIST_TOP = -76
+-- The column headings sit 16 above the list, as far below the total (10
+-- tall, at -50) as the total is below the title (12 tall, at -32).
+local LIST_TOP = -82
 local VISIBLE_ROWS = 18
 local SCROLLBAR_WIDTH = 24
 local LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
