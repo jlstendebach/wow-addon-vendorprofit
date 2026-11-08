@@ -634,7 +634,11 @@ run(Q1 + '.hit:GetScript("OnEnter")(' + Q1 + '.hit)')
 tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
 check("hover: the item, a gap, then its cost and its vendor and auction profit, nothing more",
       [t[0] for t in tip[1:]] == [" ", "Cost (cheapest route)", "Vendor profit", "Auction profit"])
-check("...above the row, from the name's top right", tooltip_at(Q1 + ".hit", Q1 + ".left"))
+point = ev("GameTooltip.point")
+check("...above the row, just past the end of the name",
+      ev("GameTooltip.anchor") == "ANCHOR_NONE" and point[1] == "BOTTOMLEFT" and point[3] == "TOPLEFT" and point[5] == 0
+      and point[4] == ev(Q1 + ".left:GetLeft() - " + Q1 + ".hit:GetLeft() + math.min(" + Q1 + ".left:GetStringWidth(), " + Q1 + ".left:GetWidth())")
+      and point[4] < ev(Q1 + ".left:GetRight() - " + Q1 + ".hit:GetLeft()"))
 check("makes money: name not red", not ev(Q1 + ".left:GetText()").startswith("|cffff2020"))
 run('__stub.items["item:2866"].sellPrice = 1; __stub.auctionPrices[2866] = 1; VendorProfit.Order.Changed()')
 check("neither vendor nor auction makes money: name in red", ev('VendorProfit.Panel.FindRow("Rough Bronze Cuirass x1").left:GetText()').startswith("|cffff2020"))
