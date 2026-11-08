@@ -26,6 +26,9 @@
 --     cost and bought per item
 --   sales = { { time, item, n, how ("vendor"/"auction"), sold, cost, bought },
 --     ... } oldest first, at most MAX_SALES
+--   items[itemID] = { n, sales, cost, sold, bought, vendor, auction, last }:
+--     every sale ever, added up per item, so totals don't shrink as old sales
+--     drop off the list (n, vendor and auction count units; last is a time)
 --   purchases = { { time, item, n, total, how }, ... } oldest first, at most
 --     MAX_PURCHASES, for the Purchase History tab
 
@@ -57,6 +60,28 @@ local function Changed()
     end
 end
 
+-- Adds a sale to (sign 1) or takes it from (sign -1) the per-item totals.
+local function AddToTotals(items, sale, sign)
+    local item = items[sale.item]
+    if item == nil then
+        item = { n = 0, sales = 0, cost = 0, sold = 0, bought = 0, vendor = 0, auction = 0, last = 0 }
+        items[sale.item] = item
+    end
+    item.n = item.n + sign * sale.n
+    item.sales = item.sales + sign
+    item.cost = item.cost + sign * sale.cost
+    item.sold = item.sold + sign * sale.sold
+    item.bought = item.bought + sign * (sale.bought or 0)
+    local how = sale.how == "vendor" and "vendor" or "auction"
+    item[how] = item[how] + sign * sale.n
+    if sign > 0 then
+        item.last = math.max(item.last, sale.time)
+    end
+    if item.sales <= 0 then
+        items[sale.item] = nil
+    end
+end
+
 local function DB()
     VendorProfitCharDB = VendorProfitCharDB or {}
     local db = VendorProfitCharDB
@@ -64,6 +89,13 @@ local function DB()
     db.history.stock = db.history.stock or {}
     db.history.sales = db.history.sales or {}
     db.history.purchases = db.history.purchases or {}
+    if db.history.items == nil then
+        -- From before the totals were kept: start them from the sales list.
+        db.history.items = {}
+        for _, sale in ipairs(db.history.sales) do
+            AddToTotals(db.history.items, sale, 1)
+        end
+    end
     return db.history
 end
 
@@ -207,13 +239,17 @@ local function AddSale(itemID, n, how, sold)
     if taken <= 0 then
         return
     end
-    local sales = DB().sales
-    sales[#sales + 1] = {
+    local db = DB()
+    local sales = db.sales
+    local sale = {
         time = time(), item = itemID, n = taken, how = how,
         -- Only the part of the sale that had recorded costs.
         sold = math.floor(sold * taken / n + 0.5),
         cost = math.floor(cost + 0.5), bought = math.floor(bought + 0.5),
     }
+    sales[#sales + 1] = sale
+    AddToTotals(db.items, sale, 1)
+    -- The list keeps the newest; the totals keep everything.
     while #sales > History.MAX_SALES do
         table.remove(sales, 1)
     end
@@ -234,6 +270,7 @@ function History.BoughtBack(itemID, n)
         local sale = sales[index]
         if sale.item == itemID and sale.how == "vendor" and sale.n == n then
             table.remove(sales, index)
+            AddToTotals(DB().items, sale, -1)
             AddStock(itemID, n, sale.cost / n, sale.bought / n, true, true)
             Changed()
             return
@@ -251,10 +288,23 @@ function History.Sales()
     return list
 end
 
--- Total profit over sales since a time (all sales without one), and how
--- many sales.
+-- Every sale ever, added up per item: { [itemID] = { n, sales, cost, sold,
+-- bought, vendor, auction, last } }.
+function History.ItemTotals()
+    return DB().items
+end
+
+-- Total profit and how many sales: every sale ever, or (given a time) those
+-- since then on the list.
 function History.Total(since)
     local profit, count = 0, 0
+    if since == nil then
+        for _, item in pairs(DB().items) do
+            profit = profit + item.sold - item.cost
+            count = count + item.sales
+        end
+        return profit, count
+    end
     for _, sale in ipairs(DB().sales) do
         if since == nil or sale.time >= since then
             profit = profit + sale.sold - sale.cost
@@ -266,6 +316,7 @@ end
 
 function History.Clear()
     DB().sales = {}
+    DB().items = {}
     Changed()
 end
 

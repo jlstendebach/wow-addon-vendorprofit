@@ -9,8 +9,11 @@
 --   Best Sellers  one row per item: how many sold, the average profit on each,
 --                 and the total, most profit first. The headings sort it.
 --
--- The search box filters both by item name as you type. The totals at the top
--- are always for every sale.
+-- The search box filters both by item name as you type, and Range narrows
+-- both to recent sales: the last so many days, or the last so many sales.
+-- Every sale ever is added up per item (History.ItemTotals), so the totals at
+-- the top and Best Sellers over All time cover sales the list has dropped;
+-- other ranges come from the list, the last History.MAX_SALES sales.
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -55,6 +58,19 @@ local WEEK = 7 * 24 * 60 * 60
 -- per character). Item sorts A to Z first.
 local SORT_DEFAULT = { key = "profit", ascending = false }
 local SORT_STARTS_ASCENDING = { name = true }
+
+-- Ranges, in the menu's order: All time, then the last so many days, then
+-- the last so many sales. Saved per character.
+local DAY = 24 * 60 * 60
+local RANGES = {
+    { key = "all" },
+    { key = "d7", days = 7 }, { key = "d30", days = 30 }, { key = "d90", days = 90 },
+    { key = "s50", sales = 50 }, { key = "s100", sales = 100 }, { key = "s250", sales = 250 },
+}
+local RANGE_BY_KEY = {}
+for _, range in ipairs(RANGES) do
+    RANGE_BY_KEY[range.key] = range
+end
 
 local frame
 local view = "sales"     -- "sales" or "items" (Best Sellers)
@@ -108,13 +124,107 @@ local function SmallButton(parent, text, width)
     return button
 end
 
+-- Range -----------------------------------------------------------------------
+
+local function Range()
+    local db = VendorProfitCharDB
+    return RANGE_BY_KEY[db and db.historyRange] or RANGES[1]
+end
+
+function HistoryPanel.Range()
+    return Range().key
+end
+
+function HistoryPanel.SetRange(key)
+    if RANGE_BY_KEY[key] then
+        VendorProfitCharDB = VendorProfitCharDB or {}
+        VendorProfitCharDB.historyRange = key
+        HistoryPanel.Refresh()
+    end
+end
+
+local function RangeLabel(range)
+    if range.days then
+        return string.format(L.HISTORY_RANGE_DAYS, range.days)
+    elseif range.sales then
+        return string.format(L.HISTORY_RANGE_SALES, range.sales)
+    end
+    return L.HISTORY_RANGE_ALL
+end
+
+-- The sales in the range, newest first.
+local function SalesInRange()
+    local range = Range()
+    local sales = History.Sales()
+    if range.sales then
+        local list = {}
+        for index = 1, math.min(range.sales, #sales) do
+            list[index] = sales[index]
+        end
+        return list
+    elseif range.days then
+        local since = time() - range.days * DAY
+        local list = {}
+        for _, sale in ipairs(sales) do
+            if sale.time >= since then
+                list[#list + 1] = sale
+            end
+        end
+        return list
+    end
+    return sales
+end
+
+local function RangeMenu(_, root)
+    for _, range in ipairs(RANGES) do
+        root:CreateRadio(RangeLabel(range),
+            function() return Range().key == range.key end,
+            function() HistoryPanel.SetRange(range.key) end)
+    end
+end
+
+-- The open Range menu, and when it last closed: as with Best Crafts' Filter,
+-- a click on the button just after the menu closed was meant to close it.
+local rangeMenu
+local rangeMenuClosed = 0
+
+local function ToggleRangeMenu(button)
+    if rangeMenu and rangeMenu:IsShown() then
+        rangeMenu:Hide()
+        return
+    end
+    if GetTime() - rangeMenuClosed < 0.25 then
+        return
+    end
+    rangeMenu = MenuUtil.CreateContextMenu(button, RangeMenu)
+    if rangeMenu then
+        -- Under the button, not at the mouse.
+        rangeMenu:ClearAllPoints()
+        rangeMenu:SetPoint("TOPLEFT", button, "BOTTOMLEFT", 0, -2)
+        if not rangeMenu.vendorProfitHooked then
+            rangeMenu.vendorProfitHooked = true
+            rangeMenu:HookScript("OnHide", function() rangeMenuClosed = GetTime() end)
+        end
+    end
+end
+
 -- Best Sellers ----------------------------------------------------------------
 
 -- Sales grouped by item: { item, n (units sold), sales, cost, sold, profit,
 -- average (profit per unit), vendor, auction (units each way), last (time) }.
+-- All time: every sale ever, from the totals; other ranges: the list's.
 function HistoryPanel.BestSellers()
     local byItem, list = {}, {}
-    for _, sale in ipairs(History.Sales()) do
+    if Range().key == "all" then
+        for itemID, totals in pairs(History.ItemTotals()) do
+            local item = { item = itemID }
+            for key, value in pairs(totals) do
+                item[key] = value
+            end
+            list[#list + 1] = item
+        end
+    end
+    for _, sale in ipairs(Range().key == "all" and {} or SalesInRange()) do
         local item = byItem[sale.item]
         if item == nil then
             item = { item = sale.item, n = 0, sales = 0, cost = 0, sold = 0, vendor = 0, auction = 0, last = sale.time }
@@ -323,7 +433,23 @@ local function Create(page)
     end
     search:SetHeight(20)
     search:SetPoint("LEFT", frame.views.items, "RIGHT", 14, 0)
-    search:SetPoint("RIGHT", frame, "TOPRIGHT", -PADDING, CONTROLS_TOP - 10)
+    -- Range: a button at the row's end, styled and opening like Best
+    -- Crafts' Filter. Left out if this client doesn't have the game's menu
+    -- system; the search box then runs to the end of the row.
+    if MenuUtil and MenuUtil.CreateContextMenu then
+        frame.range = SmallButton(frame, "", 110)
+        frame.range:SetPoint("RIGHT", frame, "TOPRIGHT", -PADDING, CONTROLS_TOP - 10)
+        frame.range:SetScript("OnClick", function(self) ToggleRangeMenu(self) end)
+        frame.range:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(string.format(L.HISTORY_RANGE_HELP, History.MAX_SALES), 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        frame.range:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        search:SetPoint("RIGHT", frame.range, "LEFT", -8, 0)
+    else
+        search:SetPoint("RIGHT", frame, "TOPRIGHT", -PADDING, CONTROLS_TOP - 10)
+    end
     search:SetAutoFocus(false)
     -- Hooked, not set, so the template's own placeholder and clear button
     -- keep working.
@@ -403,7 +529,7 @@ end
 
 local function RefreshSales()
     local shown = 0
-    for _, sale in ipairs(History.Sales()) do
+    for _, sale in ipairs(SalesInRange()) do
         if Matches(sale.item) then
             shown = shown + 1
             local row = GetRow(shown)
@@ -457,6 +583,10 @@ local function Refresh()
     local weekProfit = History.Total(time() - WEEK)
     frame.total:SetText(string.format(L.HISTORY_TOTAL, Money(profit), count, Money(weekProfit)))
 
+    if frame.range then
+        frame.range:SetText(RangeLabel(Range()))
+    end
+
     -- The selected view stays lit.
     for key, button in pairs(frame.views) do
         if key == view then
@@ -489,12 +619,18 @@ local function Refresh()
     frame.scroll:SetSize(LIST_WIDTH, visible * ROW_HEIGHT)
     frame.scroll:SetShown(shown > 0)
     -- Back to the top for another view or search.
-    local listKey = view .. "/" .. filter
+    local listKey = view .. "/" .. filter .. "/" .. Range().key
     if listKey ~= shownList then
         shownList = listKey
         frame.scroll:SetVerticalScroll(0)
     end
-    frame.empty:SetText(count == 0 and L.HISTORY_EMPTY or L.HISTORY_NO_MATCH)
+    if count == 0 then
+        frame.empty:SetText(L.HISTORY_EMPTY)
+    elseif filter ~= "" then
+        frame.empty:SetText(L.HISTORY_NO_MATCH)
+    else
+        frame.empty:SetText(L.HISTORY_NO_RANGE)
+    end
     frame.empty:SetShown(shown == 0)
 
     local listHeight = shown > 0 and visible * ROW_HEIGHT or (frame.empty:GetStringHeight() or 24)
