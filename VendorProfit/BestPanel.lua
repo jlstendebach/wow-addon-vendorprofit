@@ -15,6 +15,7 @@ local VendorProfit = ns.VendorProfit
 local BestCrafts = VendorProfit.BestCrafts
 local Recipes = VendorProfit.Recipes
 local Order = VendorProfit.Order
+local Auctions = VendorProfit.Auctions
 local L = VendorProfit.L
 
 local BestPanel = {}
@@ -31,10 +32,16 @@ local LIST_TOP = -94
 local VISIBLE_ROWS = 14
 local SCROLLBAR_WIDTH = 24
 local LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
--- Columns, from the right of the list: Show (magnifying glass), Queue (+),
+-- Columns, from the right of the list: + and - (queue and unqueue a craft),
+-- Q (crafts queued, two digits wide), AH (your auctions of it, three digits),
 -- ROI, Profit, Investment; the recipe name takes the rest.
-local ICON_BUTTON_WIDTH, MONEY_WIDTH, ROI_WIDTH, GAP = 22, 72, 48, 6
-local ROI_RIGHT = -(2 * ICON_BUTTON_WIDTH + 4 + 8)
+local ICON_BUTTON_WIDTH, MONEY_WIDTH, ROI_WIDTH, QUEUED_WIDTH, AH_WIDTH, GAP = 22, 72, 48, 16, 22, 6
+-- The count columns are narrower than their headings once a sort arrow is
+-- added, so they get wider gaps for it to grow into.
+local COUNT_GAP = 12
+local QUEUED_RIGHT = -(2 * ICON_BUTTON_WIDTH + 4 + 8)
+local AH_RIGHT = QUEUED_RIGHT - QUEUED_WIDTH - COUNT_GAP
+local ROI_RIGHT = AH_RIGHT - AH_WIDTH - COUNT_GAP
 local PROFIT_RIGHT = ROI_RIGHT - ROI_WIDTH - GAP
 local INVESTMENT_RIGHT = PROFIT_RIGHT - MONEY_WIDTH - GAP
 local NAME_WIDTH = LIST_WIDTH + INVESTMENT_RIGHT - MONEY_WIDTH - GAP
@@ -73,6 +80,11 @@ local function Gray(text)
     return GRAY_FONT_COLOR:WrapTextInColorCode(text)
 end
 
+-- A count column's text: the number, or a gray dash for none.
+local function Count(n)
+    return n > 0 and tostring(n) or Gray("-")
+end
+
 -- The list stays up after the professions window closes (the game keeps
 -- reporting the last profession), so you can scan and queue at the auction
 -- house without it. Only Show needs the window open.
@@ -80,6 +92,17 @@ local ProfessionsWindowOpen = Recipes.WindowOpen
 
 local function ShowRecipe(recipe)
     Recipes.Show(recipe.recipeID, recipe.profession)
+end
+
+-- How many crafts of a recipe the shopping order holds.
+local function Queued(recipeID)
+    local n = 0
+    for _, entry in ipairs(Order.Entries()) do
+        if entry.recipeID == recipeID then
+            n = n + entry.crafts
+        end
+    end
+    return n
 end
 
 local function QueueRecipe(entry)
@@ -90,6 +113,23 @@ local function QueueRecipe(entry)
         sellPrice = select(11, C_Item.GetItemInfo(recipe.item)),
     }, 1)
     print(string.format(L.QUEUED, 1, C_Item.GetItemInfo(recipe.item) or ("item " .. recipe.item)))
+end
+
+-- Takes one craft of a recipe off the shopping order, and the recipe once
+-- none are left.
+local function UnqueueRecipe(entry)
+    local entries = Order.Entries()
+    for index = #entries, 1, -1 do
+        local queued = entries[index]
+        if queued.recipeID == entry.recipe.recipeID then
+            if queued.crafts > 1 then
+                Order.SetCrafts(index, queued.crafts - 1)
+            else
+                Order.Remove(index)
+            end
+            return
+        end
+    end
 end
 
 local function SmallButton(parent, text, width)
@@ -128,32 +168,36 @@ local function GetRow(index)
         row.left:SetWordWrap(false)
         row.left:SetWidth(NAME_WIDTH)
         row.left:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top - 4)
+        -- Clicking the name shows the recipe in the professions window (while
+        -- it's open).
+        row.hit = CreateFrame("Frame", nil, list)
+        row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top)
+        row.hit:SetSize(NAME_WIDTH, ROW_HEIGHT)
+        row.hit:EnableMouse(true)
+        row.hit:SetScript("OnMouseUp", function(self, mouseButton)
+            if mouseButton == "LeftButton" and self.recipe and ProfessionsWindowOpen() then
+                ShowRecipe(self.recipe)
+            end
+        end)
         -- Investment: what one craft's items cost along the cheapest route.
         row.investment = Column(MONEY_WIDTH, INVESTMENT_RIGHT)
         row.right = Column(MONEY_WIDTH, PROFIT_RIGHT)
         -- Return on investment: profit as a share of the investment.
         row.roi = Column(ROI_WIDTH, ROI_RIGHT)
+        -- How many of what it makes you have up for auction (Auctions.lua).
+        row.auctions = Column(AH_WIDTH, AH_RIGHT)
+        -- How many crafts the shopping order holds.
+        row.queued = Column(QUEUED_WIDTH, QUEUED_RIGHT)
         -- Why a recipe isn't ranked, across the columns it has no number for.
         row.reason = Column(MONEY_WIDTH, ROI_RIGHT)
 
-        -- Show: a magnifying glass.
-        row.show = SmallButton(list, "", ICON_BUTTON_WIDTH)
-        row.show:SetPoint("TOPRIGHT", list, "TOPRIGHT", 0, top)
-        row.show.icon = row.show:CreateTexture(nil, "OVERLAY")
-        row.show.icon:SetTexture("Interface\\Common\\UI-Searchbox-Icon")
-        row.show.icon:SetSize(12, 12)
-        row.show.icon:SetPoint("CENTER", row.show, "CENTER", 0, 0)
-        row.show:SetMotionScriptsWhileDisabled(true)
-        Tooltip(row.show, function(self)
-            if self:IsEnabled() then
-                return L.BEST_SHOW_HELP
-            end
-            return string.format(L.BEST_SHOW_CLOSED, self.profession or "")
-        end)
-        -- Queue: a plus.
+        -- Queue: a plus, at the row's end; unqueue: a minus, before it.
         row.queue = SmallButton(list, "+", ICON_BUTTON_WIDTH)
-        row.queue:SetPoint("RIGHT", row.show, "LEFT", -4, 0)
+        row.queue:SetPoint("TOPRIGHT", list, "TOPRIGHT", 0, top)
         Tooltip(row.queue, L.BEST_QUEUE_HELP)
+        row.unqueue = SmallButton(list, "-", ICON_BUTTON_WIDTH)
+        row.unqueue:SetPoint("RIGHT", row.queue, "LEFT", -4, 0)
+        Tooltip(row.unqueue, L.BEST_UNQUEUE_HELP)
         rows[index] = row
     end
     return row
@@ -192,6 +236,10 @@ local function SortValue(entry, key)
         return entry.cost
     elseif key == "roi" then
         return entry.roi or -math.huge
+    elseif key == "queued" then
+        return Queued(entry.recipe.recipeID)
+    elseif key == "auctions" then
+        return Auctions.Count(entry.recipe.item)
     end
     return entry.profit
 end
@@ -207,6 +255,24 @@ local function SortEntries(entries)
         else
             unranked[#unranked + 1] = entry
         end
+    end
+    if sort.key == "queued" or sort.key == "auctions" then
+        -- Counts: every recipe has one, priced or not; ties keep the ranking.
+        local all, place = {}, {}
+        for _, entry in ipairs(ranked) do all[#all + 1] = entry end
+        for _, entry in ipairs(unranked) do all[#all + 1] = entry end
+        for index, entry in ipairs(all) do place[entry] = index end
+        table.sort(all, function(a, b)
+            local x, y = SortValue(a, sort.key), SortValue(b, sort.key)
+            if x ~= y then
+                if sort.ascending then
+                    return x < y
+                end
+                return x > y
+            end
+            return place[a] < place[b]
+        end)
+        return all
     end
     table.sort(ranked, function(a, b)
         local x, y = SortValue(a, sort.key), SortValue(b, sort.key)
@@ -453,7 +519,7 @@ local function Create(page)
 
     -- Column headings over the list; click one to sort by it.
     frame.headings = {}
-    local function Heading(key, text, width, right)
+    local function Heading(key, text, width, right, help)
         local heading = CreateFrame("Button", nil, frame)
         heading:SetSize(width, 14)
         if right then
@@ -466,7 +532,7 @@ local function Create(page)
         heading.text:SetJustifyH(right and "RIGHT" or "LEFT")
         heading.label = text
         heading:SetScript("OnClick", function() SetSort(key) end)
-        Tooltip(heading, L.BEST_SORT_HELP)
+        Tooltip(heading, help or L.BEST_SORT_HELP)
         frame.headings[key] = heading
         return heading
     end
@@ -474,6 +540,12 @@ local function Create(page)
     frame.investmentHeading = Heading("investment", L.BEST_INVESTMENT, MONEY_WIDTH, INVESTMENT_RIGHT)
     frame.profitHeading = Heading("profit", L.BEST_PROFIT, MONEY_WIDTH, PROFIT_RIGHT)
     frame.roiHeading = Heading("roi", L.BEST_ROI, ROI_WIDTH, ROI_RIGHT)
+    -- The count headings are wider than their columns, into the gap, to fit
+    -- the sort arrow.
+    frame.auctionsHeading = Heading("auctions", L.BEST_AUCTIONS_HEADING, AH_WIDTH + COUNT_GAP, AH_RIGHT,
+        L.BEST_AUCTIONS_HELP .. "\n" .. L.BEST_SORT_HELP)
+    frame.queuedHeading = Heading("queued", L.BEST_QUEUED_HEADING, QUEUED_WIDTH + COUNT_GAP, QUEUED_RIGHT,
+        L.BEST_QUEUED_HELP .. "\n" .. L.BEST_SORT_HELP)
 
     -- The list scrolls; the mouse wheel works over it.
     frame.scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
@@ -541,14 +613,8 @@ local function Refresh()
     if profession then
         all = SortEntries(BestCrafts.Rank(profession, tab, function() BestPanel.Refresh() end))
     end
-    -- Numbered across the whole list, then filtered by the search box, so a
-    -- recipe keeps its place in the ranking while searching.
-    local ranked, place, unknownSkillUp = {}, 0, false
+    local ranked, unknownSkillUp = {}, false
     for _, entry in ipairs(all) do
-        if entry.profit then
-            place = place + 1
-            entry.place = place
-        end
         entry.skillUp = SkillUp(entry.recipe.recipeID)
         if entry.skillUp == nil then
             unknownSkillUp = true
@@ -561,14 +627,16 @@ local function Refresh()
     for index, entry in ipairs(ranked) do
         local row = GetRow(index)
         local reason
+        row.left:SetText(ItemLabel(entry.recipe.item, entry.skillUp))
+        local queued = Queued(entry.recipe.recipeID)
+        row.queued:SetText(Count(queued))
+        row.auctions:SetText(Count(Auctions.Count(entry.recipe.item)))
         row.roi:SetText("")
         if entry.profit then
-            row.left:SetText(entry.place .. ". " .. ItemLabel(entry.recipe.item, entry.skillUp))
             row.investment:SetText(VendorProfit.FormatMoney(entry.cost))
             row.right:SetText(VendorProfit.FormatMoney(entry.profit))
             row.roi:SetText(FormatROI(entry.roi))
         else
-            row.left:SetText(Gray("-  ") .. ItemLabel(entry.recipe.item, entry.skillUp))
             local unpriced = entry.unpriced
             if unpriced.itemID then
                 reason = string.format(L.BEST_NO_PRICE_FOR, C_Item.GetItemInfo(unpriced.itemID) or ("item " .. unpriced.itemID))
@@ -593,14 +661,16 @@ local function Refresh()
         row.investment:Show()
         row.right:Show()
         row.roi:Show()
+        row.queued:Show()
+        row.auctions:Show()
         row.reason:Show()
-        row.show:SetScript("OnClick", function() ShowRecipe(entry.recipe) end)
-        row.show:SetEnabled(ProfessionsWindowOpen())
-        row.show.icon:SetDesaturated(not ProfessionsWindowOpen())
-        row.show.profession = name
-        row.show:Show()
+        row.hit.recipe = entry.recipe
+        row.hit:Show()
         row.queue:SetScript("OnClick", function() QueueRecipe(entry) end)
         row.queue:Show()
+        row.unqueue:SetScript("OnClick", function() UnqueueRecipe(entry) end)
+        row.unqueue:SetEnabled(queued > 0)
+        row.unqueue:Show()
     end
     for index = #ranked + 1, #rows do
         local row = rows[index]
@@ -608,9 +678,13 @@ local function Refresh()
         row.investment:Hide()
         row.right:Hide()
         row.roi:Hide()
+        row.queued:Hide()
+        row.auctions:Hide()
         row.reason:Hide()
-        row.show:Hide()
+        row.hit.recipe = nil
+        row.hit:Hide()
         row.queue:Hide()
+        row.unqueue:Hide()
     end
 
     -- The list shows up to VISIBLE_ROWS at a time and scrolls for the rest,
@@ -661,6 +735,8 @@ function BestPanel.Refresh()
         Panel.Refresh()
     end
 end
+
+Auctions.OnChange(BestPanel.Refresh)
 
 Panel.AddPage({
     name = "best",

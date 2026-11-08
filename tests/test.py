@@ -65,7 +65,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "History.lua", "Panel.lua", "BestCrafts.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "Auctions.lua", "History.lua", "Panel.lua", "BestCrafts.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("the .toc keeps the placeholder; releases and deploys stamp the real version", TOC_VERSION == "@project-version@")
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
@@ -1489,9 +1489,9 @@ run(B + ".tabs.vendor:Click()")
 ranked = best()
 check("vendor tab first, ranked: cuirass 600 - 438, shoulders 400 - 313, then the losing vest in red",
       ev("VendorProfit.BestPanel.Tab()") == "vendor" and ranked[:2] == [
-          "1. |Ticon2866:0|t Rough Bronze Cuirass | |cffffffff1s 62c|r",
-          "2. |Ticon2865:0|t Rough Bronze Shoulders | |cffffffff87c|r"]
-      and len(ranked) == 3 and ranked[2].startswith("3. |Ticon2867:0|t Copper Chain Vest | |cffff2020-"))
+          "|Ticon2866:0|t Rough Bronze Cuirass | |cffffffff1s 62c|r",
+          "|Ticon2865:0|t Rough Bronze Shoulders | |cffffffff87c|r"]
+      and len(ranked) == 3 and ranked[2].startswith("|Ticon2867:0|t Copper Chain Vest | |cffff2020-"))
 # Every saved recipe is listed: ones with no profit to rank go last, saying why.
 HELM = """{ recipeID = 9101, itemLink = "item:2901", quantityMin = 1, reagents = { { itemID = 7777, quantity = 1 } } }"""
 RING = """{ recipeID = 9102, itemLink = "item:2902", quantityMin = 1, reagents = { { itemID = 2841, quantity = 1 } } }"""
@@ -1500,10 +1500,10 @@ run('__stub.items["item:2902"] = { name = "Plain Ring", cached = true, sellPrice
 run('__stub.items["item:7777"] = { name = "Strange Ore", cached = true }')
 run('__stub.OpenProfession(164, "Blacksmithing", { %s, %s, %s, %s, %s }); __stub.Advance(1)' % (CUIRASS, SHOULDERS, VEST, HELM, RING))
 every = best()
-check("all recipes listed, not just the top 10: priced ones ranked, then the rest unnumbered",
-      len(every) == 5 and every[0].startswith("1. ") and every[2].startswith("3. ")
-      and every[3] == "|cff808080-  |r|Ticon2901:0|t Mystery Helm | |cff808080no price: Strange Ore|r"
-      and every[4] == "|cff808080-  |r|Ticon2902:0|t Plain Ring | |cff808080no vendor price|r")
+check("all recipes listed, not just the top 10: priced ones ranked, then the rest, no numbers",
+      len(every) == 5 and every[0].startswith("|Ticon2866:0|t Rough Bronze Cuirass")
+      and every[3] == "|Ticon2901:0|t Mystery Helm | |cff808080no price: Strange Ore|r"
+      and every[4] == "|Ticon2902:0|t Plain Ring | |cff808080no vendor price|r")
 check("investment column: what one craft's items cost along the cheapest route",
       ev("VendorProfit.BestPanel.Row(1).investment:GetText()") == "|cffffffff4s 38c|r"
       and ev("VendorProfit.BestPanel.Row(2).investment:GetText()") == "|cffffffff3s 13c|r"
@@ -1511,17 +1511,20 @@ check("investment column: what one craft's items cost along the cheapest route",
 check("ROI column: profit as a share of the investment, losses in red",
       ev("VendorProfit.BestPanel.Row(1).roi:GetText()") == "37%" and ev("VendorProfit.BestPanel.Row(2).roi:GetText()") == "28%"
       and ev("VendorProfit.BestPanel.Row(3).roi:GetText()").startswith("|cffff2020-"))
-check("+ to queue, a magnifying glass to show", ev("VendorProfit.BestPanel.Row(1).queue.__text") == "+"
-      and ev("VendorProfit.BestPanel.Row(1).show.icon.__texture") == "Interface\\Common\\UI-Searchbox-Icon"
-      and ev("VendorProfit.BestPanel.Row(1).queue:GetWidth()") == 22)
+check("+ to queue and - before it to unqueue, no Show button", ev("VendorProfit.BestPanel.Row(1).queue.__text") == "+"
+      and ev("VendorProfit.BestPanel.Row(1).unqueue.__text") == "-" and ev("VendorProfit.BestPanel.Row(1).show") is None
+      and ev("VendorProfit.BestPanel.Row(1).queue:GetWidth()") == 22 and ev("VendorProfit.BestPanel.Row(1).unqueue:GetWidth()") == 22)
+check("Q column: a gray dash with nothing queued, and - off", ev("VendorProfit.BestPanel.Row(1).queued:GetText()") == "|cff808080-|r"
+      and not ev("VendorProfit.BestPanel.Row(1).unqueue:IsEnabled()") and ev(B + ".queuedHeading.label") == "Q")
+check("AH column: a gray dash before any auctions are seen", ev("VendorProfit.BestPanel.Row(1).auctions:GetText()") == "|cff808080-|r"
+      and ev(B + ".auctionsHeading.label") == "AH")
 check("sorted by profit, highest first, by default: its heading marked",
       ev("VendorProfit.BestPanel.Sort().key") == "profit" and "Arrow-Down" in ev(B + ".profitHeading.text:GetText()")
       and "Arrow" not in ev(B + ".investmentHeading.text:GetText()"))
 run(B + ".investmentHeading:Click()")
 order = lambda: [l.split(" | ")[0] for l in best()]
 check("click Investment: biggest investment first; unpriced stay last",
-      [o.split(" ")[-1] for o in order()[:3]] == ["Cuirass", "Vest", "Shoulders"] and order()[3].startswith("|cff808080-")
-      and order()[0].startswith("1. "))
+      [o.split(" ")[-1] for o in order()[:4]] == ["Cuirass", "Vest", "Shoulders", "Helm"])
 run(B + ".investmentHeading:Click()")
 check("click again: reversed", [o.split(" ")[-1] for o in order()[:3]] == ["Shoulders", "Vest", "Cuirass"]
       and "Arrow-Up" in ev(B + ".investmentHeading.text:GetText()"))
@@ -1537,11 +1540,11 @@ check("Best Crafts is wider than the Shopping List, for the columns", ev("Vendor
 # Search: filters by name as you type, keeping each recipe's place.
 run(B + '.search:Type("bronze")')
 check("typing filters the list at once: only names containing it", [l.split(" | ")[0] for l in best()]
-      == ["1. |Ticon2866:0|t Rough Bronze Cuirass", "2. |Ticon2865:0|t Rough Bronze Shoulders"])
+      == ["|Ticon2866:0|t Rough Bronze Cuirass", "|Ticon2865:0|t Rough Bronze Shoulders"])
 run(B + '.search:Type("VEST")')
-check("any case; keeps its place in the ranking", [l.split(" | ")[0] for l in best()] == ["3. |Ticon2867:0|t Copper Chain Vest"])
+check("any case", [l.split(" | ")[0] for l in best()] == ["|Ticon2867:0|t Copper Chain Vest"])
 run(B + '.search:Type("mystery")')
-check("matches unpriced recipes too, unnumbered", [l.split(" | ")[0] for l in best()] == ["|cff808080-  |r|Ticon2901:0|t Mystery Helm"])
+check("matches unpriced recipes too", [l.split(" | ")[0] for l in best()] == ["|Ticon2901:0|t Mystery Helm"])
 run(B + '.search:Type("zzz")')
 check("nothing matches: says so", best() == [] and 'No recipes match "zzz".' in ev(B + ".status:GetText()"))
 run(B + '.search:Type("")')
@@ -1579,7 +1582,7 @@ def toggle(n):
     run('__stub.menu:Hide(); __stub.Advance(1)')
 toggle(1)
 check("profitable only: the losing vest and the unpriced ones go, places kept",
-      [l.split(" | ")[0].split("|t ")[0] for l in best()] == ["1. |Ticon2866:0", "2. |Ticon2865:0"])
+      [l.split(" | ")[0].split("|t ")[0] for l in best()] == ["|Ticon2866:0", "|Ticon2865:0"])
 run(F + ':Click()')
 check("the checkbox shows it's on, and it's saved", ev("__stub.Menu(nil)[1].checked()") and ev("VendorProfitCharDB.bestFilters.profitable"))
 run('__stub.menu:Hide(); __stub.Advance(1)')
@@ -1604,7 +1607,7 @@ check("a recipe whose color isn't known can't pass a skill-up filter, and it say
 run(B + '.filterReset:Click()')
 run('for _, id in ipairs({ 2670, 3328, 2671, 9102 }) do if __stub.recipes[id] then __stub.recipes[id].difficulty = nil end end')
 run('if __stub.recipe then __stub.recipe.difficulty = nil end; VendorProfit.BestPanel.Refresh()')
-check("unpriced ones can still be queued and shown", ev("VendorProfit.BestPanel.Row(4).queue:IsShown()") and ev("VendorProfit.BestPanel.Row(4).show:IsShown()"))
+check("unpriced ones can still be queued and shown", ev("VendorProfit.BestPanel.Row(4).queue:IsShown()") and ev("VendorProfit.BestPanel.Row(4).hit:IsShown()"))
 check("the list scrolls: a scroll frame holding the rows", ev(B + ".scroll.__scrollChild == " + B + ".list")
       and ev(B + ".scroll:GetHeight()") == 5 * 22 and ev(B + ".list:GetHeight()") == 5 * 22)
 run(B + '.scroll:SetVerticalScroll(40)')
@@ -1621,24 +1624,58 @@ run('__stub.OpenProfession(164, "Blacksmithing", { %s, %s, %s }); __stub.Advance
 check("vendor tab lit", ev(B + ".tabs.vendor.__lit") and not ev(B + ".tabs.auction.__lit"))
 run(B + ".tabs.auction:Click()")
 check("auction tab: after the cut, 1235 - 438 and 665 - 313",
-      best()[:2] == ["1. |Ticon2866:0|t Rough Bronze Cuirass | |cffffffff7s 97c|r",
-                     "2. |Ticon2865:0|t Rough Bronze Shoulders | |cffffffff3s 52c|r"])
+      best()[:2] == ["|Ticon2866:0|t Rough Bronze Cuirass | |cffffffff7s 97c|r",
+                     "|Ticon2865:0|t Rough Bronze Shoulders | |cffffffff3s 52c|r"])
 run(B + ".tabs.vendor:Click()")
 check("says prices are Auctionator's", "Prices from Auctionator's last scan." in ev(B + ".status:GetText()"))
 check("scan off away from the auction house", not ev(B + ".scan:IsEnabled()")
       and ev(B + ".scan.tooltip") == "Open the auction house to look up live prices.")
 
 # Show and Queue.
-run("__stub.professionsTab = 2; VendorProfit.BestPanel.Row(2).show:Click()")
-check("Show selects the recipe in the professions window directly, on its recipes tab, without asking the server",
+run('__stub.professionsTab = 2; VendorProfit.BestPanel.Row(2).hit:GetScript("OnMouseUp")(VendorProfit.BestPanel.Row(2).hit, "LeftButton")')
+check("clicking the name selects the recipe in the professions window directly, on its recipes tab, without asking the server",
       ev("__stub.selectedRecipe") == 3328 and ev("__stub.professionsTab") == 1 and ev("__stub.openedRecipe") is None)
-run("ProfessionsFrame.CraftingPage.SelectRecipe = nil; VendorProfit.BestPanel.Row(2).show:Click()")
+run('ProfessionsFrame.CraftingPage.SelectRecipe = nil; VendorProfit.BestPanel.Row(2).hit:GetScript("OnMouseUp")(VendorProfit.BestPanel.Row(2).hit, "LeftButton")')
 check("...falling back to opening it through the game", ev("__stub.openedRecipe") == 3328)
 run("function ProfessionsFrame.CraftingPage:SelectRecipe(info) __stub.selectedRecipe = info.recipeID end; __stub.openedRecipe = nil")
 run("VendorProfit.BestPanel.Row(1).queue:Click()")
 check("Queue adds one craft to the shopping order",
       ev("VendorProfit.Order.Entries()[1].recipeID") == 2670 and ev("VendorProfit.Order.Entries()[1].crafts") == 1
       and ev("VendorProfit.Order.Entries()[1].profession") == "Blacksmithing")
+check("...shown in its Q column, with - on", ev("VendorProfit.BestPanel.Row(1).queued:GetText()") == "1"
+      and ev("VendorProfit.BestPanel.Row(1).unqueue:IsEnabled()"))
+run("VendorProfit.BestPanel.Row(1).queue:Click(); VendorProfit.BestPanel.Row(1).queue:Click()")
+check("+ counts up", ev("VendorProfit.BestPanel.Row(1).queued:GetText()") == "3" and ev("VendorProfit.Order.Entries()[1].crafts") == 3)
+run("VendorProfit.BestPanel.Row(1).unqueue:Click()")
+check("- takes one off", ev("VendorProfit.BestPanel.Row(1).queued:GetText()") == "2" and ev("VendorProfit.Order.Entries()[1].crafts") == 2)
+check("recipes not queued show a dash", ev("VendorProfit.BestPanel.Row(2).queued:GetText()") == "|cff808080-|r")
+# Sorting by Q: every recipe, priced or not; ties keep the ranking.
+run("VendorProfit.BestPanel.Row(3).queue:Click()")
+run(B + ".queuedHeading:Click()")
+check("sort by Q: most queued first, ties in ranking order",
+      [l.split(" | ")[0].split("|t ")[-1] for l in best()][:3] == ["Rough Bronze Cuirass", "Copper Chain Vest", "Rough Bronze Shoulders"]
+      and "Arrow-Down" in ev(B + ".queuedHeading.text:GetText()"))
+run(B + ".queuedHeading:Click()")
+check("again: fewest first", [l.split(" | ")[0].split("|t ")[-1] for l in best()][-1] == "Rough Bronze Cuirass")
+run('VendorProfitCharDB.bestSort = nil; VendorProfit.BestPanel.Refresh()')
+run("VendorProfit.Order.Clear(); VendorProfit.BestPanel.Row(1).queue:Click(); VendorProfit.BestPanel.Row(1).unqueue:Click()")
+check("- on the last craft takes the recipe off the order", ev("#VendorProfit.Order.Entries()") == 0
+      and ev("VendorProfit.BestPanel.Row(1).queued:GetText()") == "|cff808080-|r" and not ev("VendorProfit.BestPanel.Row(1).unqueue:IsEnabled()"))
+
+# AH: your own auctions of what each recipe makes, read at the auction house.
+run('__stub.ah.owned = { { itemID = 2866, quantity = 3 }, { itemID = 2866, quantity = 2 }, { itemID = 2865, quantity = 4, sold = true } }')
+run('__stub.OpenAH(); __stub.Advance(1)')
+check("opening the auction house reads your auctions: active ones added up, sold ones left out",
+      ev("__stub.ah.ownedQueries") == 1 and ev("VendorProfit.BestPanel.Row(1).auctions:GetText()") == "5" and ev("VendorProfit.BestPanel.Row(2).auctions:GetText()") == "|cff808080-|r")
+run('__stub.ah.owned[#__stub.ah.owned + 1] = { itemID = 2865, quantity = 1 }; __stub.Fire("AUCTION_HOUSE_AUCTION_CREATED"); __stub.Advance(1)')
+check("posting reads them again", ev("__stub.ah.ownedQueries") == 2 and ev("VendorProfit.BestPanel.Row(2).auctions:GetText()") == "1")
+run('__stub.Fire("AUCTION_HOUSE_AUCTION_CREATED"); __stub.Fire("AUCTION_CANCELED"); __stub.Advance(1)')
+check("...once for changes close together", ev("__stub.ah.ownedQueries") == 3)
+run(B + ".auctionsHeading:Click()")
+check("sort by AH: most up for auction first", [l.split(" | ")[0].split("|t ")[-1] for l in best()][:2] == ["Rough Bronze Cuirass", "Rough Bronze Shoulders"]
+      and "Arrow-Down" in ev(B + ".auctionsHeading.text:GetText()"))
+run('VendorProfitCharDB.bestSort = nil; __stub.CloseAH(); __stub.ah.owned = {}; VendorProfit.BestPanel.Refresh()')
+check("away from the auction house: the last counts seen", ev("VendorProfit.BestPanel.Row(1).auctions:GetText()") == "5" and ev("VendorProfit.Auctions.Time()") is not None)
 check("...and stays on Best Crafts", ev("VendorProfit.BestPanel.IsShown()"))
 run("VendorProfit.Order.Clear()")
 
@@ -1671,8 +1708,8 @@ check("done", not ev("VendorProfit.BestCrafts.IsScanning()")
       and "Live prices from" in ev("" + B + ".status:GetText()")
       and "Live prices updated." in ev("" + B + ".status:GetText()"))
 check("re-ranked with live prices: bronze bars at 40c, so cuirass 600 - 280 and shoulders 400 - 200",
-      best()[:2] == ["1. |Ticon2866:0|t Rough Bronze Cuirass | |cffffffff3s 20c|r",
-                 "2. |Ticon2865:0|t Rough Bronze Shoulders | |cffffffff2s|r"])
+      best()[:2] == ["|Ticon2866:0|t Rough Bronze Cuirass | |cffffffff3s 20c|r",
+                 "|Ticon2865:0|t Rough Bronze Shoulders | |cffffffff2s|r"])
 check("items with nothing listed have no auction price now", ev("select(2, VendorProfit.BestCrafts.Prices(2771))") is None)
 
 # Results that aren't ours are ignored; no answer times out; closing the AH stops it.
@@ -1706,14 +1743,12 @@ run('VendorProfit.Order.Clear(); VendorProfit.Panel.Show("best")')
 run('__stub.CloseProfession()')
 check("stays open when the professions window closes", ev("VendorProfit.BestPanel.IsShown()"))
 check("...still listing the last profession's best crafts", len(best()) == 3)
-run('__stub.openedRecipe = nil; VendorProfit.BestPanel.Row(1).show:Click()')
-check("Show off with the professions window closed, saying to open it", ev("__stub.openedRecipe") is None and ev("__stub.selectedRecipe") == 3328
-      and not ev("VendorProfit.BestPanel.Row(1).show:IsEnabled()") and ev("VendorProfit.BestPanel.Row(1).show.icon.__desaturated"))
-run('VendorProfit.BestPanel.Row(1).show:GetScript("OnEnter")(VendorProfit.BestPanel.Row(1).show)')
-check("...in its tooltip", ev("GameTooltip.lines[1].left") == "Open Blacksmithing to see this recipe.")
+run('__stub.openedRecipe = nil; VendorProfit.BestPanel.Row(1).hit:GetScript("OnMouseUp")(VendorProfit.BestPanel.Row(1).hit, "LeftButton")')
+check("clicking a name does nothing with the professions window closed", ev("__stub.openedRecipe") is None and ev("__stub.selectedRecipe") == 3328)
 check("Queue still works", ev("VendorProfit.BestPanel.Row(1).queue:IsEnabled()"))
 run('__stub.OpenProfession(164, "Blacksmithing", { %s, %s, %s })' % (CUIRASS, SHOULDERS, VEST))
-check("reopening the profession turns Show back on", ev("VendorProfit.BestPanel.Row(1).show:IsEnabled()"))
+run('VendorProfit.BestPanel.Row(1).hit:GetScript("OnMouseUp")(VendorProfit.BestPanel.Row(1).hit, "LeftButton")')
+check("reopening the profession: clicking a name shows it again", ev("__stub.selectedRecipe") == 2670)
 run('SlashCmdList.VENDORPROFIT("best")')
 check("/vprofit best closes it", not ev("VendorProfit.Panel.IsShown()"))
 run('SlashCmdList.VENDORPROFIT("best")')

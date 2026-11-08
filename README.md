@@ -120,22 +120,23 @@ The **Vendor Profit** button in the professions window's title bar (left of Trad
 ```
 Best Crafts: Blacksmithing                                 [ Scan ]
 [Auction] [Vendor]  [🔍 Search                 ] [Filter (1)] [x]
-Recipe                     Investment    Profit▼    ROI
-1. Rough Bronze Cuirass        4s 38c    1s 62c     37%   [+] [🔍]
-2. Rough Bronze Shoulders      3s 13c       87c     28%   [+] [🔍]
-3. Copper Chain Vest           3s 60c   -2s 10c    -58%   [+] [🔍]
--  Mystery Helm             no price: Strange Ore         [+] [🔍]
+Recipe               Investment    Profit▼    ROI   AH  Q
+Rough Bronze Cuirass     4s 38c    1s 62c     37%    5  2  [-] [+]
+Rough Bronze Shoulders   3s 13c       87c     28%    -  -  [-] [+]
+Copper Chain Vest        3s 60c   -2s 10c    -58%    -  -  [-] [+]
+Mystery Helm          no price: Strange Ore          -  -  [-] [+]
 Prices from Auctionator's last scan.
 ```
 
 - **Investment** is what one craft's items cost along its cheapest route: what you'd spend, counting items you already have at what they'd cost to get. **Profit** is what one craft makes after that, and **ROI** (return on investment) is the profit as a share of the investment. The tab is wider than the Shopping List to fit them and the search and filter controls.
-- **Search.** Type in the search box to filter the list by recipe name as you type (any case); recipes keep their place number in the full ranking. Clear it to see everything.
+- **Search.** Type in the search box to filter the list by recipe name as you type (any case). Clear it to see everything.
 - **Filter.** The **Filter** button opens a menu with **Profitable only** (a positive profit on the tab you're on) and skill-up colors: **Guaranteed** (orange), **Likely** (yellow) and **Unlikely** (green). Check any colors to see only recipes of those colors. The menu opens under the button, and clicking the button again closes it. The button shows how many filters are on (*Filter (2)*), and the red X at the end of the row clears them (it's grayed out while none are on). Filters are saved per character. Recipe names are shown in their skill-up color, as in the professions window; ones that won't skill you up stay white. The game only knows skill-up colors for the profession whose window is open, so with it closed, a color filter shows nothing (and says why).
-- **Sorting.** Click a column's heading to sort by it (highest first; Recipe A to Z); click it again to reverse. The sorted column is in white with an arrow, numbers follow the sort, and recipes with no profit to rank stay at the bottom. The sort is saved per character. By default it's by Profit.
+- **Sorting.** Click a column's heading to sort by it (highest first; Recipe A to Z); click it again to reverse. The sorted column is in white with an arrow, and recipes with no profit to rank stay at the bottom. The sort is saved per character. By default it's by Profit.
 - **Auction** (the default) ranks by Auctionator's price after the 5% cut. **Vendor** ranks by selling to a vendor: usually lower, but a guaranteed sale.
-- Losses are listed too (in red), below the crafts that make money. Recipes with no profit to rank by come last, unnumbered, saying why: a reagent with no price anywhere (*no price: Strange Ore*, so their profit can't be trusted), or no vendor (or auction) price for what they make.
-- The **magnifying glass** selects the recipe in the professions window (it's off while that window is closed). **+** adds one craft to the shopping order (click again for more); the window stays on Best Crafts.
-- It ranks straight away from Auctionator's prices. At the auction house, **Scan** looks up live lowest prices for everything that matters to the profession: every recipe's crafting tree, merged into one list of unique items, looked up a couple of hundred at a time with the auction house's batch lookup (the one it uses for favorites) rather than one search per item. It takes seconds. Items with nothing listed count as unavailable until the next scan, and Auctionator saves the prices it sees too. Items that bind on pickup aren't looked up.
+- Losses are listed too (in red), below the crafts that make money. Recipes with no profit to rank by come last, saying why: a reagent with no price anywhere (*no price: Strange Ore*, so their profit can't be trusted), or no vendor (or auction) price for what they make.
+- **AH** is how many of what the recipe makes you have up for auction, and **Q** how many crafts of it your shopping order holds (a dash for none). Both sort like the other columns, every recipe included. The game only lists your auctions at the auction house, so AH is as of your last visit: it's read when the auction house opens and again after you post or cancel, and sales or expiries since then show at the next visit. **+** adds one craft to the order and **-** takes one off; the window stays on Best Crafts.
+- Clicking a recipe's name selects it in the professions window, while that window is open.
+- It ranks straight away from Auctionator's prices. At the auction house, **Scan** looks up live lowest prices for everything that matters to the profession: every recipe's crafting tree, merged into one list of unique items, looked up 100 at a time (the most the server allows in one request) with the auction house's batch lookup (the one it uses for favorites) rather than one search per item. It takes seconds. Items with nothing listed count as unavailable until the next scan, and Auctionator saves the prices it sees too. Items that bind on pickup aren't looked up.
 
 ## Shopping
 
@@ -273,6 +274,7 @@ Files:
 | `OpenButton.lua` | Opening another profession from the Craft button |
 | `Banker.lua` | Take from bank: moving exactly what's needed into your bags |
 | `Merchant.lua` | Buying what the order needs from the vendor you're talking to |
+| `Auctions.lua` | How many of each item you have up for auction, as of your last visit |
 | `Panel.lua` | The Vendor Profit window and its tabs, the Shopping List tab, moving it, and `/vprofit` |
 | `BestCrafts.lua` | Ranking a profession's recipes, and the batch price lookup |
 | `BestPanel.lua` | The Best Crafts tab, and the button in the professions window's title bar |
@@ -286,6 +288,7 @@ Saved data, per character (`VendorProfitCharDB`):
 - `order = { entries, inMail, lastSeen, spent }`: the queued crafts, purchases not seen in bags or bank yet (and the count they're waiting to rise from), and what the panel spent.
 - `panel = { left, top }`: where you moved the Vendor Profit window, if you did.
 - `bestSort = { key, ascending }` and `bestFilters`: how Best Crafts is sorted and filtered.
+- `auctions = { counts, time }`: how many of each item you had up for auction at your last visit to the auction house, and when.
 - `history = { stock, sales, purchases }`: what the items you have cost you, your sales, and your last 500 purchases.
 
 Opening a profession uses a secure action button casting the profession's spell, as TradeSkillMaster does in Forever. It's a separate invisible button laid over the Craft button rather than part of the panel, because a secure button inside the panel would make the panel protected and the game would block showing, hiding or moving it in combat. It's only placed out of combat and hidden as combat starts.
