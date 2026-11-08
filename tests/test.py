@@ -1189,8 +1189,9 @@ TITLEBTN = "VendorProfitProfessionsButton"
 B = "VendorProfit.BestPanel.Frame()"
 check("no Best Crafts button on the recipe", ev("AuctionatorCraftingInfoProfessionsFrame.VendorProfitBestButton") is None)
 check("Vendor Profit button in the professions title bar, left of the close button (and TSM's)",
-      ev(TITLEBTN + ".__text") == "Vendor Profit" and ev(TITLEBTN + ".__point[2] == ProfessionsFrame.CloseButton")
-      and ev(TITLEBTN + ".__point[1]") == "RIGHT" and ev(TITLEBTN + ".__point[3]") == "LEFT")
+      ev(TITLEBTN + ".__text") == "Vendor Profit" and ev(TITLEBTN + ".__point[2] == ProfessionsFrame")
+      and ev(TITLEBTN + ".__point[1]") == "TOPRIGHT" and ev(TITLEBTN + ".__point[4]") == -133)
+check("...above the window's border art", ev(TITLEBTN + ":GetFrameLevel()") >= 502)
 run(TITLEBTN + ":Click()")
 check("opens the Vendor Profit window on its Best Crafts tab",
       ev("VendorProfit.Panel.IsShown()") and ev("VendorProfit.Panel.ActiveTab()") == "best"

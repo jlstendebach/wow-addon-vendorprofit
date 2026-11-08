@@ -351,8 +351,12 @@ end
 events:SetScript("OnEvent", BestPanel.Refresh)
 
 -- The Vendor Profit button in the professions window's title bar, left of
--- TradeSkillMaster's button there, so it reads as being about the whole
--- profession rather than the selected recipe. Opens the Best Crafts tab.
+-- TradeSkillMaster's button there (TSM puts its own 50 from the right edge),
+-- so it reads as being about the whole profession rather than the selected
+-- recipe. Opens the Best Crafts tab.
+local TITLE_BUTTON_RIGHT = -133
+local TITLE_BUTTON_TOP = -4
+
 local titleButton
 
 local function CreateTitleButton()
@@ -360,15 +364,17 @@ local function CreateTitleButton()
         return
     end
     titleButton = CreateFrame("Button", "VendorProfitProfessionsButton", ProfessionsFrame, "UIPanelButtonTemplate")
-    titleButton:SetSize(96, 20)
+    titleButton:SetSize(96, 18)
     titleButton:SetText(L.BEST_BUTTON)
+    titleButton:SetPoint("TOPRIGHT", ProfessionsFrame, "TOPRIGHT", TITLE_BUTTON_RIGHT, TITLE_BUTTON_TOP)
+    -- The window's border and title art sit hundreds of levels above the
+    -- window itself; stay above them, level with the close button.
+    local level = ProfessionsFrame:GetFrameLevel()
     local close = ProfessionsFrame.CloseButton
     if close then
-        titleButton:SetPoint("RIGHT", close, "LEFT", -84, 0)
-    else
-        titleButton:SetPoint("TOPRIGHT", ProfessionsFrame, "TOPRIGHT", -110, -1)
+        level = math.max(level, close:GetFrameLevel())
     end
-    titleButton:SetFrameLevel(ProfessionsFrame:GetFrameLevel() + 10)
+    titleButton:SetFrameLevel(math.max(level, 500) + 2)
     titleButton:SetScript("OnClick", function() Panel.Toggle("best") end)
     titleButton:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -377,12 +383,22 @@ local function CreateTitleButton()
         GameTooltip:Show()
     end)
     titleButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    titleButton:Show()
 end
 
--- Made when the professions window first opens (it's load-on-demand).
+-- The professions window is load-on-demand: made when its addon loads, or
+-- when a profession opens (just after, in case the window is made in the
+-- same event).
 local titleEvents = CreateFrame("Frame")
+pcall(titleEvents.RegisterEvent, titleEvents, "ADDON_LOADED")
 pcall(titleEvents.RegisterEvent, titleEvents, "TRADE_SKILL_SHOW")
-titleEvents:SetScript("OnEvent", CreateTitleButton)
+titleEvents:SetScript("OnEvent", function(_, event, name)
+    if event == "ADDON_LOADED" and name ~= "Blizzard_Professions" then
+        return
+    end
+    CreateTitleButton()
+    C_Timer.After(0, CreateTitleButton)
+end)
 CreateTitleButton()
 
 function BestPanel.TitleButton()
