@@ -102,8 +102,10 @@ release notes are the commit messages, so write them for players to read.
 The PR check (`.github/workflows/test.yml`) runs the tests, fails any commit
 that isn't a Conventional Commit, and notes what merging would release.
 
-Deploying locally stamps the version from git (`scripts/stamp-version.ps1`):
-`1.26.0` on a release, `1.26.0-3` three commits past it.
+Deploying locally (`deploy.bat`) stamps the version from git
+(`scripts/stamp-version.ps1`): `1.26.0` on a release, `1.26.0-3` three
+commits past it. After a merge, `update.bat` brings the branch up to date
+with `main`, fetches the tags and deploys.
 
 ## Branches and pull requests
 
@@ -139,7 +141,13 @@ git switch -c feat/investment-column
 git add -A
 git commit -m "feat: show investment in best crafts"
 git push -u origin HEAD
+.\deploy.bat
 ```
+
+End with `.\deploy.bat` only when something in `VendorProfit/` changed, so
+the change can be tried in game; leave it out for docs, tests, scripts and
+workflows. After a merge, suggest `.\update.bat` instead of separate pull,
+fetch and deploy commands.
 
 The commit message is a short [Conventional Commit](https://www.conventionalcommits.org/):
 `type: what changed`, lowercase, under about 50 characters, no period, no
