@@ -290,6 +290,10 @@ python tests/test.py
 
 The stub is not the real client. Anything it passes still needs checking in game.
 
+## Contributing
+
+`CLAUDE.md` holds the project's rules and the routine for every change (tests, version bump, README, commit message), for Claude sessions and people alike. Personal additions go in a `CLAUDE.local.md`, which git ignores.
+
 ## Releases
 
 Releases are automatic. `.github/workflows/release.yml` runs on every push to `main` that changes the addon, and reads `## Version` from `VendorProfit.toc`. If that version hasn't been released yet, it:
