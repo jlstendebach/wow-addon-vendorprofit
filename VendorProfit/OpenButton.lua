@@ -125,9 +125,13 @@ function OpenButton.IsShown()
 end
 
 -- Combat is about to start: the last moment the secure button can be hidden.
+-- After combat, or when the screen's size or the UI scale changes (which can
+-- happen on alt-tab), the panel redraws and the cover is placed again.
 local events = CreateFrame("Frame")
 events:RegisterEvent("PLAYER_REGEN_DISABLED")
 events:RegisterEvent("PLAYER_REGEN_ENABLED")
+pcall(events.RegisterEvent, events, "DISPLAY_SIZE_CHANGED")
+pcall(events.RegisterEvent, events, "UI_SCALE_CHANGED")
 events:SetScript("OnEvent", function(_, event)
     if event == "PLAYER_REGEN_DISABLED" then
         if button then
