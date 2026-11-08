@@ -45,7 +45,7 @@ local NAME_WIDTH = LIST_WIDTH + INVESTMENT_RIGHT - MONEY_WIDTH - GAP
 local SORT_DEFAULT = { key = "profit", ascending = false }
 local SORT_STARTS_ASCENDING = { name = true }
 
-local SKILL_UP_ORDER, SKILL_UP, Filters, FiltersActive, SetFilter, ResetFilters
+local SKILL_UP_ORDER, SKILL_UP, Filters, FiltersActive, SetFilter, ResetFilters, FilterMenu
 
 local frame              -- the page
 local tab = "vendor"
@@ -244,7 +244,6 @@ SKILL_UP = {
     optimal = { label = L.BEST_SKILL_OPTIMAL, color = CreateColor and CreateColor(1, 0.5, 0.25) or ORANGE_FONT_COLOR },
     medium = { label = L.BEST_SKILL_MEDIUM, color = CreateColor and CreateColor(1, 1, 0) or YELLOW_FONT_COLOR },
     easy = { label = L.BEST_SKILL_EASY, color = CreateColor and CreateColor(0.25, 0.75, 0.25) or GREEN_FONT_COLOR },
-    trivial = { color = GRAY_FONT_COLOR },
 }
 
 -- A recipe's skill-up color key, if the game says (it only knows for the
@@ -263,6 +262,7 @@ local function SkillUp(recipeID)
     elseif difficulty == (enum.Easy or 2) then
         return "easy"
     end
+    -- No skill up (gray in the professions window): left white here.
     return "trivial"
 end
 
@@ -309,6 +309,20 @@ local function PassesFilters(entry)
     return true
 end
 
+-- The Filter menu: profitable only, then the skill-up colors.
+FilterMenu = function(_, root)
+    root:CreateCheckbox(L.BEST_FILTER_PROFITABLE,
+        function() return Filters().profitable == true end,
+        function() SetFilter("profitable", not Filters().profitable) end)
+    root:CreateTitle(L.BEST_FILTER_SKILL_UP)
+    for _, key in ipairs(SKILL_UP_ORDER) do
+        local skill = SKILL_UP[key]
+        root:CreateCheckbox(skill.color:WrapTextInColorCode(skill.label),
+            function() return Filters()[key] == true end,
+            function() SetFilter(key, not Filters()[key]) end)
+    end
+end
+
 function BestPanel.Filters()
     return Filters()
 end
@@ -343,7 +357,8 @@ local function Create(page)
     frame.tabs.auction:SetScript("OnClick", function() SetTab("auction") end)
 
     frame.scan = SmallButton(frame, L.SCAN, 90)
-    frame.scan:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -PADDING, -52)
+    -- On the heading's line: it's for the whole profession, not the list.
+    frame.scan:SetPoint("RIGHT", frame, "TOPRIGHT", -PADDING, -38)
     frame.scan:SetMotionScriptsWhileDisabled(true)
     frame.scan:SetScript("OnClick", function()
         BestCrafts.Scan(Recipes.OpenProfession())
@@ -378,38 +393,32 @@ local function Create(page)
     search:HookScript("OnEnterPressed", function(self) self:ClearFocus() end)
     frame.search = search
 
-    -- Filter: the same kind of dropdown as the professions window's own
-    -- (checkboxes, and a red X to reset). Left out if this client doesn't
-    -- have the game's menu system.
-    local hasMenus, dropdown = pcall(CreateFrame, "DropdownButton", nil, frame, "WowStyle1FilterDropdownTemplate")
-    if hasMenus and dropdown and dropdown.SetupMenu then
-        dropdown:SetSize(76, 22)
-        dropdown:SetPoint("LEFT", search, "RIGHT", 8, 0)
-        if dropdown.Text then
-            dropdown.Text:SetText(FILTER or L.BEST_FILTER)
-        elseif dropdown.SetText then
-            dropdown:SetText(FILTER or L.BEST_FILTER)
-        end
-        dropdown:SetupMenu(function(_, root)
-            root:CreateCheckbox(L.BEST_FILTER_PROFITABLE,
-                function() return Filters().profitable == true end,
-                function() SetFilter("profitable", not Filters().profitable) end)
-            root:CreateTitle(L.BEST_FILTER_SKILL_UP)
-            for _, key in ipairs(SKILL_UP_ORDER) do
-                local skill = SKILL_UP[key]
-                root:CreateCheckbox(skill.color:WrapTextInColorCode(skill.label),
-                    function() return Filters()[key] == true end,
-                    function() SetFilter(key, not Filters()[key]) end)
-            end
+    -- Filter: a button in the page's own style that opens the game's menu
+    -- of checkboxes, and a small red X beside it, shown while any filter is
+    -- on, to reset them. Left out if this client doesn't have the game's
+    -- menu system.
+    if MenuUtil and MenuUtil.CreateContextMenu then
+        local button = SmallButton(frame, L.BEST_FILTER, 76)
+        button:SetPoint("LEFT", search, "RIGHT", 8, 0)
+        button:SetScript("OnClick", function(self)
+            MenuUtil.CreateContextMenu(self, FilterMenu)
         end)
-        -- The red X beside it resets the filters.
-        if dropdown.SetIsDefaultCallback then
-            dropdown:SetIsDefaultCallback(function() return not FiltersActive() end)
-        end
-        if dropdown.SetDefaultCallback then
-            dropdown:SetDefaultCallback(function() ResetFilters() end)
-        end
-        frame.filter = dropdown
+        frame.filter = button
+
+        local reset = SmallButton(frame, "", 22)
+        reset:SetPoint("LEFT", button, "RIGHT", 4, 0)
+        reset.icon = reset:CreateTexture(nil, "OVERLAY")
+        reset.icon:SetTexture("Interface\\RaidFrame\\ReadyCheck-NotReady")
+        reset.icon:SetSize(12, 12)
+        reset.icon:SetPoint("CENTER", reset, "CENTER", 0, 0)
+        reset:SetScript("OnClick", function() ResetFilters() end)
+        reset:SetScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(L.BEST_FILTER_RESET, 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        reset:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        frame.filterReset = reset
     end
 
     -- Column headings over the list; click one to sort by it.
@@ -451,6 +460,18 @@ end
 local function Refresh()
     local profession, name = Recipes.OpenProfession()
     frame.heading:SetText(string.format(L.BEST_TITLE, name or ""))
+
+    -- Filter: how many are on, and the reset X while any are.
+    if frame.filter then
+        local on = 0
+        for _, value in pairs(Filters()) do
+            if value then
+                on = on + 1
+            end
+        end
+        frame.filter:SetText(on > 0 and string.format(L.BEST_FILTER_ON, on) or L.BEST_FILTER)
+        frame.filterReset:SetShown(on > 0)
+    end
 
     -- Tabs: the selected one stays lit.
     for key, button in pairs(frame.tabs) do

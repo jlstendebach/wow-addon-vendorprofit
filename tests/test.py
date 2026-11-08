@@ -1520,35 +1520,44 @@ run('__stub.recipes[2670].difficulty = 0; __stub.recipes[3328].difficulty = 1; _
 run('if __stub.recipe and __stub.recipe.recipeID == 2670 then __stub.recipe.difficulty = 0 end')
 run('VendorProfit.BestPanel.Refresh()')
 F = B + ".filter"
-menu = lambda: [(i.text, i.title or False) for i in ev("__stub.Menu(" + F + ")").values()]
-check("a Filter dropdown: profitable only, then skill-up colors", [t for t, _ in menu()] ==
+def menu():
+    run(F + ':Click()')
+    return [(i.text, i.title or False) for i in ev("__stub.Menu(nil)").values()]
+check("a Filter button in the page's style (not the game's dropdown) opens the menu: profitable only, then skill-up colors",
+      ev(F + ".__text") == "Filter" and [t for t, _ in menu()] ==
       ["Profitable only", "Skill up", "|cffff8040Guaranteed|r", "|cffffff00Likely|r", "|cff40bf40Unlikely|r"])
 check("names in their skill-up color, as the professions window shows them",
       "|cffff8040Rough Bronze Cuirass|r" in best()[0] and "|cffffff00Rough Bronze Shoulders|r" in best()[1])
+check("no skill up: left white, not gray", "|Ticon2902:0|t Plain Ring |" in best()[4])
+check("no reset X while no filter is on", not ev(B + ".filterReset:IsShown()"))
+check("Scan sits on the heading's line, apart from the list controls", ev(B + ".scan.__point[5]") == -38)
 def toggle(n):
-    run('local items = __stub.Menu(%s); items[%d].toggle()' % (F, n))
+    run(F + ':Click()')
+    run('local items = __stub.Menu(nil); items[%d].toggle()' % n)
 toggle(1)
 check("profitable only: the losing vest and the unpriced ones go, places kept",
       [l.split(" | ")[0].split("|t ")[0] for l in best()] == ["1. |Ticon2866:0", "2. |Ticon2865:0"])
-check("the checkbox shows it's on, and it's saved", ev("__stub.Menu(%s)[1].checked()" % F) and ev("VendorProfitCharDB.bestFilters.profitable"))
+run(F + ':Click()')
+check("the checkbox shows it's on, and it's saved", ev("__stub.Menu(nil)[1].checked()") and ev("VendorProfitCharDB.bestFilters.profitable"))
+check("the button says how many are on, and the reset X shows", ev(F + ".__text") == "Filter (1)" and ev(B + ".filterReset:IsShown()"))
 toggle(1)
 toggle(3)
 check("guaranteed only: just the orange recipe", len(best()) == 1 and "Rough Bronze Cuirass" in best()[0])
 toggle(5)
 check("guaranteed or unlikely: orange and green", [("Cuirass" in l, "Vest" in l) for l in best()] == [(True, False), (False, True)])
-check("red X shows the filters aren't at their defaults", not ev(F + ".__isDefault()"))
-run(F + '.__default()')
-check("red X resets them all", len(best()) == 5 and ev("VendorProfitCharDB.bestFilters") is None and ev(F + ".__isDefault()"))
+run(B + '.filterReset:Click()')
+check("the red X resets them all, and goes", len(best()) == 5 and ev("VendorProfitCharDB.bestFilters") is None
+      and not ev(B + ".filterReset:IsShown()") and ev(F + ".__text") == "Filter")
 toggle(1); toggle(5); run(B + '.search:Type("cuirass")')
 check("nothing passes: says so", best() == [] and 'No recipes match "cuirass".' in ev(B + ".status:GetText()"))
 run(B + '.search:Type("")')
 check("...and with no search text, that it's the filters", best() == [] and "No recipes pass the filters." in ev(B + ".status:GetText()"))
-run(F + '.__default()')
+run(B + '.filterReset:Click()')
 run('__stub.recipes[3328].difficulty = nil; VendorProfit.BestPanel.Refresh()')
 toggle(4)
 check("a recipe whose color isn't known can't pass a skill-up filter, and it says why",
       best() == [] and "only known for the profession whose window is open" in ev(B + ".status:GetText()"))
-run(F + '.__default()')
+run(B + '.filterReset:Click()')
 run('for _, id in ipairs({ 2670, 3328, 2671, 9102 }) do if __stub.recipes[id] then __stub.recipes[id].difficulty = nil end end')
 run('if __stub.recipe then __stub.recipe.difficulty = nil end; VendorProfit.BestPanel.Refresh()')
 check("unpriced ones can still be queued and shown", ev("VendorProfit.BestPanel.Row(4).queue:IsShown()") and ev("VendorProfit.BestPanel.Row(4).show:IsShown()"))

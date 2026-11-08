@@ -69,6 +69,8 @@ FILTER = "Filter"
 function FrameMethods:SetupMenu(generator) self.__menu = generator end
 function FrameMethods:SetIsDefaultCallback(fn) self.__isDefault = fn end
 function FrameMethods:SetDefaultCallback(fn) self.__default = fn end
+-- MenuUtil.CreateContextMenu keeps its generator in stub.menu.
+MenuUtil = { CreateContextMenu = function(owner, generator) stub.menu = { owner = owner, generator = generator } end }
 function stub.Menu(dropdown)
     local items = {}
     local root = {
@@ -78,7 +80,8 @@ function stub.Menu(dropdown)
         CreateTitle = function(_, text) items[#items + 1] = { text = text, title = true } end,
         CreateDivider = function() end,
     }
-    dropdown.__menu(dropdown, root)
+    local generator = dropdown and dropdown.__menu or stub.menu.generator
+    generator(dropdown, root)
     return items
 end
 -- Typing into an edit box: its text changes and OnTextChanged fires.
