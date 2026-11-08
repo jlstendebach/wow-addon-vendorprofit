@@ -319,6 +319,11 @@ local function BuyButton(plan)
     if #plan.buyOrder == 0 and status ~= "quoting" and status ~= "confirm" and status ~= "buying" then
         return nil
     end
+    -- At a vendor, while a purchase is on its way to your bags: wait.
+    if Merchant.IsOpen() and Merchant.IsBuying() then
+        button.text, button.tooltip = L.BUY_BUYING, L.VENDOR_BUYING
+        return button
+    end
     -- At a vendor that sells some of it: buy that here.
     local offers = Merchant.Offers(plan)
     if #offers > 0 then

@@ -127,6 +127,7 @@ VendorProfit.L = {
     VENDOR_BOUGHT = "|cffffd100Vendor Profit:|r bought %s from the vendor for %s.",
     VENDOR_SHORT = "|cffffd100Vendor Profit:|r not enough gold for all of: %s.",
     VENDOR_FIND = "The rest is sold by vendors. Talk to one that sells it to buy it here.",
+    VENDOR_BUYING = "Waiting for your purchase to reach your bags.",
     BUY_OPEN_AH_HELP = "Talk to an auctioneer to buy. Until you scan there, prices are from Auctionator's last scan.",
     BUY_SCAN_HELP = "Scans the auction house for live prices of what's left to buy.",
     BUY_SCANNING = "Scanning...",

@@ -1040,13 +1040,32 @@ check("nothing left to buy: the Buy step is gone", ev(BUY) is None)
 check("spent recorded", ev("VendorProfitCharDB.order.spent") == 270)
 check("says what it bought", any("bought 3 Weak Flux from the vendor" in m for m in ev("__stub.printed").values()))
 
+# A double click: the second click finds the purchase on its way, not still needed.
+run('__stub.Advance(0.1); __stub.bags[2880] = 0; __stub.merchantBuys = {}; __stub.merchantDelay = 0.5; VendorProfit.Order.Changed()')
+run('__stub.CloseMerchant(); __stub.OpenMerchant({ { itemID = 2880, price = 90 } })')
+run(BUY + ":Click()")
+check("after buying, Buy waits for the purchase to arrive", ev(BUY + ".__text") == "Buying..." and not ev(BUY + ":IsEnabled()")
+      and ev(BUY + ".tooltip") == "Waiting for your purchase to reach your bags.")
+run(BUY + ":Click(); VendorProfit.Merchant.Buy(VendorProfit.Merchant.Offers(VendorProfit.Shopper.Summary().plan))")
+check("double click (or a second call): bought once", len(list(ev("__stub.merchantBuys").values())) == 1)
+check("nothing more offered while it's on its way", ev("#VendorProfit.Merchant.Offers(VendorProfit.Shopper.Summary().plan)") == 0)
+run('__stub.Advance(1)')
+check("arrived: nothing left to buy", ev(BUY) is None and ev("__stub.bags[2880]") == 3)
+# Never arrives: Buy comes back after a while.
+run('__stub.bags[2880] = 0; __stub.merchantBuys = {}; __stub.merchantLost = true; VendorProfit.Order.Changed()')
+run(BUY + ":Click()")
+check("lost purchase: waiting", ev(BUY + ".__text") == "Buying...")
+run('__stub.Advance(11)')
+check("...then Buy is back", ev(BUY + ".__text") == "Buy" and ev(BUY + ":IsEnabled()"))
+run('__stub.merchantLost = false; __stub.merchantDelay = nil')
+
 # Sold in batches of 5, and limited stock; short of gold.
-run('__stub.bags[2880] = 0; __stub.merchantBuys = {}; VendorProfit.Order.Changed()')
+run('__stub.Advance(0.1); __stub.bags[2880] = 0; __stub.merchantBuys = {}; VendorProfit.Order.Changed()')
 run('__stub.CloseMerchant(); __stub.OpenMerchant({ { itemID = 2880, price = 400, stackCount = 5 } })')
 check("batches: buys whole batches", ev(BUY + ".tooltip") == "Buy from this vendor: 5 Weak Flux, for |cffffffff4s|r.")
 run(BUY + ":Click()")
 check("one batch at a time (no quantity)", [(b.itemID, b.quantity) for b in ev("__stub.merchantBuys").values()] == [(2880, None)])
-run('__stub.bags[2880] = 0; __stub.merchantBuys = {}; __stub.money = 150; VendorProfit.Order.Changed()')
+run('__stub.Advance(0.1); __stub.bags[2880] = 0; __stub.merchantBuys = {}; __stub.money = 150; VendorProfit.Order.Changed()')
 run('__stub.CloseMerchant(); __stub.OpenMerchant({ { itemID = 2880, price = 100 } })')
 run(BUY + ":Click()")
 check("short of gold: buys what it can, and says so", [(b.itemID, b.quantity) for b in ev("__stub.merchantBuys").values()] == [(2880, 1)]
@@ -1057,7 +1076,7 @@ check("items that cost more than gold aren't bought", not ev(BUY + ":IsEnabled()
 run('__stub.CloseMerchant()')
 
 # Something planned from the auction house that a vendor sells for less.
-run('__stub.bags[2880] = 5; VendorProfit.Order.Clear()')
+run('__stub.Advance(0.1); __stub.bags[2880] = 5; VendorProfit.Order.Clear()')
 run('__stub.SetRecipe(%s)' % CUIRASS)
 run('__stub.createCount = 10'); run(QUEUE + ':Click()')
 run('__stub.OpenMerchant({ { itemID = 3576, price = 60 }, { itemID = 2770, price = 99 } })')

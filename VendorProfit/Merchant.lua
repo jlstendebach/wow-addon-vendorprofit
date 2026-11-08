@@ -3,8 +3,9 @@
 -- would get from a vendor (or has no price for), and anything planned from
 -- the auction house that this merchant sells for no more.
 --
--- Vendor purchases land in your bags straight away, so the plan picks them
--- up from there; only the gold spent is recorded on the order.
+-- Vendor purchases land in your bags a moment later, and the plan picks them
+-- up from there; only the gold spent is recorded on the order. Until they
+-- land, Buy is off, so clicking twice can't buy twice.
 
 local ADDON_NAME, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -15,6 +16,12 @@ local Merchant = {}
 VendorProfit.Merchant = Merchant
 
 local open = false
+
+-- Purchases the vendor hasn't delivered yet: [itemID] = { target (bag count
+-- once they arrive), expires }. Until they arrive, Buy is off and they don't
+-- count as still needed, so a double click can't buy twice.
+local pending = {}
+local PENDING_TIMEOUT = 10
 
 function Merchant.IsOpen()
     return open
@@ -62,6 +69,25 @@ local function Catalog()
     return catalog
 end
 
+local function Bags(itemID)
+    return (VendorProfit.Inventory.Count(itemID))
+end
+
+-- Drops purchases that have arrived or timed out. Returns whether any are
+-- still on their way.
+function Merchant.IsBuying()
+    local now = GetTime()
+    local any = false
+    for itemID, purchase in pairs(pending) do
+        if Bags(itemID) >= purchase.target or now >= purchase.expires then
+            pending[itemID] = nil
+        else
+            any = true
+        end
+    end
+    return any
+end
+
 -- What to buy here for the plan: a list of { itemID, quantity (needed),
 -- index, batches, count (items bought, whole batches), cost }, in the
 -- plan's buy order. Empty when no merchant is open.
@@ -71,18 +97,25 @@ function Merchant.Offers(plan)
         return offers
     end
     local catalog = Catalog()
+    Merchant.IsBuying()
     for _, line in ipairs(plan.buyOrder) do
         local item = catalog[line.itemID]
-        if item and line.quantity > 0 then
+        -- Less what's bought and still on its way.
+        local quantity = line.quantity
+        local purchase = pending[line.itemID]
+        if purchase then
+            quantity = quantity - math.max(purchase.target - Bags(line.itemID), 0)
+        end
+        if item and quantity > 0 then
             local each = item.price / item.stackCount
             local worthIt = line.source ~= "auction" or each <= (line.total or 0) / line.quantity
             if worthIt then
-                local batches = math.ceil(line.quantity / item.stackCount)
+                local batches = math.ceil(quantity / item.stackCount)
                 if item.numAvailable > 0 then
                     batches = math.min(batches, item.numAvailable)
                 end
                 offers[#offers + 1] = {
-                    itemID = line.itemID, quantity = line.quantity, index = item.index,
+                    itemID = line.itemID, quantity = quantity, index = item.index,
                     stackCount = item.stackCount, batches = batches,
                     count = batches * item.stackCount, cost = batches * item.price, price = item.price,
                 }
@@ -101,6 +134,17 @@ function Merchant.Cost(offers)
     return total
 end
 
+local listeners = {}
+function Merchant.OnChange(fn)
+    listeners[#listeners + 1] = fn
+end
+
+local function Changed()
+    for _, fn in ipairs(listeners) do
+        xpcall(fn, geterrorhandler())
+    end
+end
+
 local function ItemName(itemID)
     return C_Item.GetItemInfo(itemID) or ("item " .. itemID)
 end
@@ -109,6 +153,9 @@ end
 -- Items sold one at a time are bought in the largest stacks the merchant
 -- allows; items sold in batches (5 vials, say) a batch at a time.
 function Merchant.Buy(offers)
+    if Merchant.IsBuying() then
+        return
+    end
     local money = GetMoney()
     local spent = 0
     local bought, short = {}, {}
@@ -118,6 +165,7 @@ function Merchant.Buy(offers)
             short[#short + 1] = ItemName(offer.itemID)
         end
         if batches > 0 then
+            local before = Bags(offer.itemID)
             if offer.stackCount == 1 then
                 local left = batches
                 local maxStack = math.max(GetMerchantItemMaxStack(offer.index) or 1, 1)
@@ -131,6 +179,10 @@ function Merchant.Buy(offers)
                     BuyMerchantItem(offer.index)
                 end
             end
+            pending[offer.itemID] = {
+                target = before + batches * offer.stackCount,
+                expires = GetTime() + PENDING_TIMEOUT,
+            }
             local cost = batches * offer.price
             money = money - cost
             spent = spent + cost
@@ -138,6 +190,8 @@ function Merchant.Buy(offers)
         end
     end
     if spent > 0 then
+        -- Buy comes back on by itself if something never arrives.
+        C_Timer.After(PENDING_TIMEOUT, Changed)
         Order.AddSpent(spent)
         print(string.format(L.VENDOR_BOUGHT, table.concat(bought, ", "), VendorProfit.FormatMoney(spent)))
     end
@@ -146,13 +200,9 @@ function Merchant.Buy(offers)
     end
 end
 
-local listeners = {}
-function Merchant.OnChange(fn)
-    listeners[#listeners + 1] = fn
-end
 
 local events = CreateFrame("Frame")
-for _, event in ipairs({ "MERCHANT_SHOW", "MERCHANT_CLOSED", "MERCHANT_UPDATE" }) do
+for _, event in ipairs({ "MERCHANT_SHOW", "MERCHANT_CLOSED", "MERCHANT_UPDATE", "BAG_UPDATE_DELAYED" }) do
     pcall(events.RegisterEvent, events, event)
 end
 events:SetScript("OnEvent", function(_, event)
@@ -160,8 +210,10 @@ events:SetScript("OnEvent", function(_, event)
         open = true
     elseif event == "MERCHANT_CLOSED" then
         open = false
+    elseif event == "BAG_UPDATE_DELAYED" then
+        -- Purchases that have arrived stop being pending.
+        Merchant.IsBuying()
+        return
     end
-    for _, fn in ipairs(listeners) do
-        xpcall(fn, geterrorhandler())
-    end
+    Changed()
 end)

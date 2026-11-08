@@ -697,7 +697,19 @@ function BuyMerchantItem(index, quantity)
     local count = quantity or stackCount
     stub.merchantBuys[#stub.merchantBuys + 1] = { itemID = m.itemID, quantity = quantity }
     stub.money = stub.money - m.price * count / stackCount
-    stub.bags[m.itemID] = (stub.bags[m.itemID] or 0) + count
+    -- stub.merchantDelay: the items arrive that much later (never, if
+    -- stub.merchantLost), as in the game.
+    local function Deliver()
+        stub.bags[m.itemID] = (stub.bags[m.itemID] or 0) + count
+    end
+    if stub.merchantLost then
+        return
+    elseif stub.merchantDelay then
+        C_Timer.After(stub.merchantDelay, function() Deliver(); stub.Fire("BAG_UPDATE_DELAYED") end)
+    else
+        Deliver()
+        C_Timer.After(0, function() stub.Fire("BAG_UPDATE_DELAYED") end)
+    end
 end
 function stub.OpenMerchant(items)
     stub.merchant = items
