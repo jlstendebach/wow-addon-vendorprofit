@@ -24,6 +24,15 @@ VendorProfit.BestCrafts = BestCrafts
 BestCrafts.BATCH = 100          -- items per lookup: the server's limit, more disconnects you
 BestCrafts.LOOKUP_TIMEOUT = 15  -- seconds
 BestCrafts.THROTTLE_POLL = 0.2
+-- Browse results are shared with the auction house's own Browse tab and
+-- other addons (TradeSkillMaster, Auctionator), which browse too, often as
+-- the auction house opens. When their results replace ours, ours are sent
+-- again this long after, rather than waiting out the timeout, at most
+-- RESENDS times per batch. The same when the game drops a request.
+BestCrafts.RESEND_DELAY = 1
+BestCrafts.RESENDS = 2
+-- Item info that never loads doesn't hold a lookup up longer than this.
+BestCrafts.LOAD_TIMEOUT = 5
 
 local BIND_ON_PICKUP = 1
 local SORTS = { { sortOrder = 0, reverseSort = false } } -- by price
@@ -180,6 +189,7 @@ local function BatchDone()
         current.live.checked[itemID] = true
     end
     current.batch = current.batch + 1
+    current.resends = 0
     if current.batch > #current.batches then
         if current.profession then
             current.live.time = time()
@@ -235,14 +245,31 @@ function SendBatch()
     end
     current.inBatch = inBatch
     current.waiting = true
-    local batch = current.batch
+    current.sends = (current.sends or 0) + 1
+    local sent = current.sends
     C_AuctionHouse.SearchForItemKeys(keys, SORTS)
     C_Timer.After(BestCrafts.LOOKUP_TIMEOUT, function()
-        if scan == current and current.batch == batch and current.waiting then
+        if scan == current and current.sends == sent and current.waiting then
             Finish(L.BEST_SCAN_FAILED, true)
         end
     end)
     Changed()
+end
+
+-- Our results were replaced, or the request dropped: send the batch again
+-- soon, unless an answer comes first.
+local function Resend()
+    local current = scan
+    if current == nil or not current.waiting or (current.resends or 0) >= BestCrafts.RESENDS then
+        return
+    end
+    current.resends = (current.resends or 0) + 1
+    local sent = current.sends
+    C_Timer.After(BestCrafts.RESEND_DELAY, function()
+        if scan == current and current.sends == sent and current.waiting then
+            SendBatch()
+        end
+    end)
 end
 
 local function OnResults(event, added)
@@ -252,6 +279,8 @@ local function OnResults(event, added)
     end
     local results = event == "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED" and C_AuctionHouse.GetBrowseResults() or added
     if not AddResults(results) then
+        -- Someone else's browse: it may have replaced ours.
+        Resend()
         return
     end
     if C_AuctionHouse.HasFullBrowseResults and not C_AuctionHouse.HasFullBrowseResults() then
@@ -275,7 +304,7 @@ local function LookUp(itemIDs, profession, onDone)
     local current = scan
     local pending = #itemIDs
     local function Start()
-        if scan ~= current then
+        if scan ~= current or not current.loading then
             return
         end
         -- Only items that can be listed.
@@ -315,6 +344,8 @@ local function LookUp(itemIDs, profession, onDone)
             end
         end)
     end
+    -- Some item's info never came: go on without waiting for it.
+    C_Timer.After(BestCrafts.LOAD_TIMEOUT, Start)
 end
 
 function BestCrafts.Scan(profession)
@@ -352,7 +383,7 @@ end
 
 local events = CreateFrame("Frame")
 for _, event in ipairs({ "AUCTION_HOUSE_BROWSE_RESULTS_UPDATED", "AUCTION_HOUSE_BROWSE_RESULTS_ADDED",
-    "AUCTION_HOUSE_CLOSED" }) do
+    "AUCTION_HOUSE_CLOSED", "AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED" }) do
     pcall(events.RegisterEvent, events, event)
 end
 events:SetScript("OnEvent", function(_, event, ...)
@@ -360,6 +391,10 @@ events:SetScript("OnEvent", function(_, event, ...)
         if scan then
             Finish(L.BEST_AH_CLOSED, true)
         end
+        return
+    end
+    if event == "AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED" then
+        Resend()
         return
     end
     local args = { ... }

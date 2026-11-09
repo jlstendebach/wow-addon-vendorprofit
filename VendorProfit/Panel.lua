@@ -373,7 +373,11 @@ local function ScanningText()
         return L.BUTTON_LOOKING_UP
     end
     local done, total = Shopper.ScanProgress()
-    return string.format(L.BUTTON_SCANNING, math.min(done + 1, total), total)
+    local text = string.format(L.BUTTON_SCANNING, math.min(done + 1, total), total)
+    if Shopper.WaitingForLimit() then
+        text = text .. " " .. string.format(L.SCAN_LIMIT_WAIT, Shopper.SEARCH_LIMIT)
+    end
+    return text
 end
 
 -- Whether to hold off buying: the order loses money and "Buy anyway" hasn't

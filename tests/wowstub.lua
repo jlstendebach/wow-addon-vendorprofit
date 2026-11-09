@@ -594,6 +594,7 @@ C_AuctionHouse = {
     end,
     StartCommoditiesPurchase = function(id, quantity)
         ah.starts[#ah.starts + 1] = { id, quantity }
+        if (ah.dropQuotes or 0) > 0 then ah.dropQuotes = ah.dropQuotes - 1 return end
         Later(function()
             local total, got = WalkListings(id, quantity)
             if got < quantity then

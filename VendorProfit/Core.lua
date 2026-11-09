@@ -191,6 +191,8 @@ VendorProfit.L = {
     BUY_OPEN_AH_HELP = "Talk to an auctioneer to buy. Until you scan there, prices are from Auctionator's last scan.",
     BUY_SCAN_HELP = "Scans the auction house for live prices of what's left to buy.",
     BUY_SCANNING = "Scanning...",
+    SCAN_LIMIT_WAIT = "Waiting: the auction house answers %d searches a minute, from all addons together.",
+    ACTION_BLOCKED = "|cffffd100Vendor Profit:|r the game blocked %s (it blamed %s). Please report this line.",
     BUY_PRICING = "Pricing...",
     BUY_BUY = "Buy",
     BUY_CONFIRM = "Confirm",
@@ -584,5 +586,22 @@ events:SetScript("OnEvent", function(self, event)
     elseif event == "TRADE_SKILL_SHOW" then
         -- Auctionator may handle this same event after us.
         C_Timer.After(0, VendorProfit.TryAttach)
+    end
+end)
+
+-- When the game blocks an action ("Interface action failed because of an
+-- AddOn"), its message doesn't say what was blocked. Say it once per action,
+-- so a report can name it. The game blames whichever addon touched things
+-- last, which isn't always the one at fault, so every block is reported.
+local blocked = CreateFrame("Frame")
+local reported = {}
+for _, event in ipairs({ "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN" }) do
+    pcall(blocked.RegisterEvent, blocked, event)
+end
+blocked:SetScript("OnEvent", function(_, _, addon, action)
+    local key = tostring(addon) .. "/" .. tostring(action)
+    if not reported[key] then
+        reported[key] = true
+        print(string.format(VendorProfit.L.ACTION_BLOCKED, tostring(action), tostring(addon)))
     end
 end)
