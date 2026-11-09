@@ -533,7 +533,7 @@ run('''
 run('__stub.OpenAH()')
 check("panel docks beside the auction house", ev("VendorProfitPanel.__point[2] == AuctionHouseFrame"))
 check("Buy on before a scan: it scans first", ev("VendorProfit.Shopper.Status()") == "idle" and ev(BUY + ".__text") == "Buy"
-      and ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip") == "Scans prices, then starts buying. You confirm each purchase.")
+      and ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip") == "Scans prices first. Then click Buy for each purchase, and confirm it.")
 check("Scan is on the Profit heading", ev(SCAN + ".__text") == "Scan" and ev(SCAN + ":IsEnabled()"))
 click(run, "scan")
 check("scanning", ev("VendorProfit.Shopper.Status()") == "scanning")
@@ -1120,8 +1120,11 @@ run('__stub.OpenAH()')
 click(run, "buy")
 check("Buy before a scan: scans", ev("VendorProfit.Shopper.Status()") == "scanning")
 run('__stub.Advance(2)')
-check("...then asks for the first quote, no second click", ev("VendorProfit.Shopper.Status()") in ("quoting", "confirm")
-      and list(ev("__stub.ah.starts[1]").values()) == [COPPER_ORE, 24])
+check("...then doesn't ask for a quote by itself (the game only gives one for a click): says Buy is ready",
+      ev("VendorProfit.Shopper.Status()") == "ready" and ev("#__stub.ah.starts") == 0
+      and any("Prices are in. Click Buy for Copper Ore." in l for l in lines(ev)))
+click(run, "buy")
+check("...one click asks for the quote", list(ev("__stub.ah.starts[1]").values()) == [COPPER_ORE, 24])
 run('__stub.Advance(0.5)')
 check("...and waits for you to confirm", ev("VendorProfit.Shopper.Status()") == "confirm" and ev("#__stub.ah.confirms") == 0)
 run('VendorProfit.Shopper.Cancel()')
@@ -1210,32 +1213,21 @@ check("100 searches this minute already (anyone's): the scan waits for room, and
 run('__stub.Advance(60)')
 check("...then carries on", ev("VendorProfit.Shopper.Status()") == "ready" and not ev("VendorProfit.Shopper.WaitingForLimit()"))
 
-# A quote asked for while the game's throttle is busy waits for it, rather than being dropped.
-run('__stub.ah.ready = false'); click(run, "buy")
-check("throttle busy: the quote waits", ev("VendorProfit.Shopper.Status()") == "quoting" and ev("#__stub.ah.starts") == 0)
+# Quotes are only ever asked for in a click: never by themselves, not after a dropped request.
+run('__stub.ah.ready = false; __stub.ah.starts = {}'); click(run, "buy")
+check("Buy asks for the quote within the click, busy throttle or not", ev("#__stub.ah.starts") == 1)
 run('__stub.ah.ready = true; __stub.Advance(0.5)')
-check("...and is asked for once it's ready", ev("#__stub.ah.starts") == 1 and ev("VendorProfit.Shopper.Status()") == "confirm")
+check("...and gets it", ev("VendorProfit.Shopper.Status()") == "confirm")
 run('VendorProfit.Shopper.Cancel()')
-# A dropped quote: asked again straight away.
-run('__stub.ah.dropQuotes = 1'); click(run, "buy"); run('__stub.Advance(0.5)')
-check("quote request dropped: no quote yet", ev("VendorProfit.Shopper.Status()") == "quoting")
-run('__stub.Fire("AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED"); __stub.Advance(1)')
-check("...asked again at once, not after the 10 second timeout", ev("#__stub.ah.starts") == 3 and ev("VendorProfit.Shopper.Status()") == "confirm")
-run('VendorProfit.Shopper.Cancel()')
-# A quote that silently never comes: the item is searched again and the quote asked again, well inside the timeout.
-run('__stub.ah.dropQuotes = 1; __stub.ah.searches = {}; __stub.ah.starts = {}'); click(run, "buy"); run('__stub.Advance(3)')
-check("no quote yet after 3 seconds: still waiting, nothing searched", ev("VendorProfit.Shopper.Status()") == "quoting" and ev("#__stub.ah.searches") == 0)
-run('__stub.Advance(1.5)')
-check("after 4: the item searched again and the quote asked again", list(ev("__stub.ah.searches").values()) == [COPPER_ORE]
-      and ev("#__stub.ah.starts") == 2)
-run('__stub.Advance(0.5)')
-check("...and the quote comes, well before the 10 second timeout", ev("VendorProfit.Shopper.Status()") == "confirm")
-run('VendorProfit.Shopper.Cancel()')
-# Never any quote: says so after the timeout, once.
-run('__stub.ah.dropQuotes = 5'); click(run, "buy"); run('__stub.Advance(11)')
-check("no quote at all: says so after the timeout", ev("VendorProfit.Shopper.Status()") == "ready"
-      and any("didn't give a price" in l for l in lines(ev)))
-run('__stub.ah.dropQuotes = 0; __stub.CloseAH()')
+run('__stub.ah.dropQuotes = 5; __stub.ah.starts = {}'); click(run, "buy")
+run('__stub.Fire("AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED"); __stub.Advance(6)')
+check("a quote that never comes: not asked again by itself; after 5 seconds, says to click Buy again",
+      ev("#__stub.ah.starts") == 1 and ev("VendorProfit.Shopper.Status()") == "ready"
+      and any("Click Buy to try again" in l for l in lines(ev)))
+run('__stub.ah.dropQuotes = 0')
+click(run, "buy"); run('__stub.Advance(0.5)')
+check("...and clicking it works", ev("VendorProfit.Shopper.Status()") == "confirm")
+run('VendorProfit.Shopper.Cancel(); __stub.CloseAH()')
 
 # The game blocking an action: says which, once.
 run('__stub.Fire("ADDON_ACTION_BLOCKED", "VendorProfit", "C_AuctionHouse.StartCommoditiesPurchase()")')

@@ -17,7 +17,8 @@
 -- two clicks, the same flow as Auctionator's and Blizzard's own:
 --   Buy      asks the game for a price quote for the amount
 --   Confirm  buys at that quote
--- The game only allows the purchase as part of a click. Before Confirm is
+-- The game only gives a quote, and only buys, as part of a click, so neither
+-- is ever done by itself (not after a scan, not as a retry). Before Confirm is
 -- offered, the quote is checked against the scanned price; if it's higher,
 -- the purchase is cancelled and the item scanned again. Each purchase also
 -- needs finishing the order to still be profitable, unless you choose Buy
@@ -37,11 +38,8 @@ VendorProfit.Shopper = Shopper
 Shopper.SEARCH_TIMEOUT = 10
 Shopper.SEARCH_RETRIES = 3
 Shopper.MORE_RESULTS_REQUESTS = 3
-Shopper.QUOTE_TIMEOUT = 10
--- No quote this long after asking: search the item again (so it's the one
--- the auction house last looked up, as when you buy in its own window) and
--- ask again, within QUOTE_TIMEOUT.
-Shopper.QUOTE_RETRY = 4
+-- A quote normally comes within a second; past this, Buy is offered again.
+Shopper.QUOTE_TIMEOUT = 5
 Shopper.PURCHASE_TIMEOUT = 15
 Shopper.THROTTLE_POLL = 0.2
 -- The server answers at most this many item searches in this many seconds,
@@ -50,9 +48,8 @@ Shopper.THROTTLE_POLL = 0.2
 -- So searches wait for room rather than wait out a timeout.
 Shopper.SEARCH_LIMIT = 100
 Shopper.SEARCH_WINDOW = 60
--- A request the game reports dropped (its throttle) is sent again this soon.
+-- A search the game reports dropped (its throttle) is sent again this soon.
 Shopper.RESEND_DELAY = 0.5
-Shopper.QUOTE_RESENDS = 2
 -- Planning passes with live prices before settling.
 Shopper.PLAN_PASSES = 4
 
@@ -69,7 +66,7 @@ local SORTS = { { sortOrder = 0, reverseSort = false } } -- by price, cheapest f
 --   "confirm"   quote is within budget; waiting for Confirm
 --   "buying"    waiting for the purchase to go through
 local status = "closed"
-local buyAfterScan = false   -- Buy clicked before scanning: buy once scanned
+local buyAfterScan = false   -- Buy clicked before scanning: say to click it again once scanned
 local message, messageIsError
 local listings = {}     -- itemID -> { commodity = bool, rows = { { unitPrice, quantity }, ... } }
 local scanQueue = {}    -- itemIDs waiting to be scanned
@@ -439,11 +436,15 @@ function ScanNext()
         end
         status = "ready"
         Changed()
-        -- Buy was clicked before a scan: go straight on to the first purchase
-        -- (Buy stops there itself if the order loses money).
+        -- Buy was clicked before a scan. The first quote can't follow by
+        -- itself (the game only gives one for a click), so say it's ready.
         if buyAfterScan then
             buyAfterScan = false
-            Shopper.Buy()
+            local nextPurchase = Shopper.NextPurchase()
+            if nextPurchase and (Shopper.IsProfitable() or override) then
+                SetMessage(string.format(L.SCANNED_CLICK_BUY, ItemName(nextPurchase.itemID)))
+                Changed()
+            end
         end
         return
     end
@@ -470,7 +471,7 @@ function Shopper.WaitingForLimit()
     return scanning ~= nil and scanning.waitingForLimit == true
 end
 
--- Buy before a scan: scans first, then starts the first purchase.
+-- Buy before a scan: scans first; then Buy is ready for the first purchase.
 function Shopper.ScanAndBuy()
     if status == "idle" then
         buyAfterScan = true
@@ -567,36 +568,17 @@ local function EndPurchase(newStatus)
     Changed()
 end
 
--- Asks the game for a quote, once its throttle is ready: asked while it's
--- busy, the request is dropped and no quote ever comes.
+-- Asks the game for a quote. Only ever from a click (Buy): the game only
+-- answers a quote request made as part of one, and ignores any other, which
+-- is why a quote is never asked for again by itself.
 local function RequestQuote(current)
-    if purchase ~= current or status ~= "quoting" then
-        return
-    end
-    if not C_AuctionHouse.IsThrottledMessageSystemReady() then
-        C_Timer.After(Shopper.THROTTLE_POLL, function() RequestQuote(current) end)
-        return
-    end
     current.quotes = (current.quotes or 0) + 1
     C_AuctionHouse.StartCommoditiesPurchase(current.itemID, current.quantity)
 end
 
--- No quote yet: searches the item again, then asks again when its results
--- come (OnCommodityResults). Its listings are brought up to date too.
-local function RefreshForQuote(current)
-    if purchase ~= current or status ~= "quoting" then
-        return
-    end
-    if not C_AuctionHouse.IsThrottledMessageSystemReady() or Shopper.SearchWait() > 0 then
-        C_Timer.After(Shopper.THROTTLE_POLL, function() RefreshForQuote(current) end)
-        return
-    end
-    current.refreshing = true
-    C_AuctionHouse.SendSearchQuery(C_AuctionHouse.MakeItemKey(current.itemID), SORTS, false)
-end
-
--- The game dropped a request: the search or quote waiting on one is sent
--- again (a few times at most), rather than waiting out its timeout.
+-- The game dropped a request: the search waiting on one is sent again (a
+-- few times at most), rather than waiting out its timeout. (A dropped quote
+-- can't be asked for again without a click; it times out and says so.)
 local function OnMessageDropped()
     local current = scanning
     if current and current.tries > 0 and current.tries < Shopper.SEARCH_RETRIES then
@@ -604,15 +586,6 @@ local function OnMessageDropped()
         C_Timer.After(Shopper.RESEND_DELAY, function()
             if scanning == current and current.tries == tries then
                 SendSearch()
-            end
-        end)
-    end
-    local quoting = purchase
-    if quoting and status == "quoting" and (quoting.quotes or 0) <= Shopper.QUOTE_RESENDS then
-        local quotes = quoting.quotes
-        C_Timer.After(Shopper.RESEND_DELAY, function()
-            if purchase == quoting and status == "quoting" and quoting.quotes == quotes then
-                RequestQuote(quoting)
             end
         end)
     end
@@ -643,11 +616,6 @@ function Shopper.Buy()
     Order.BeforePurchase(purchase.itemID)
     RequestQuote(purchase)
     local current = purchase
-    C_Timer.After(Shopper.QUOTE_RETRY, function()
-        if purchase == current and status == "quoting" and not current.refreshing and not current.refreshed then
-            RefreshForQuote(current)
-        end
-    end)
     C_Timer.After(Shopper.QUOTE_TIMEOUT, function()
         if purchase == current and status == "quoting" then
             C_AuctionHouse.CancelCommoditiesPurchase()
@@ -757,15 +725,6 @@ end
 -- Search results ---------------------------------------------------------------
 
 local function OnCommodityResults(itemID)
-    -- The search made while waiting for a quote: read it, ask again.
-    local quoting = purchase
-    if quoting and status == "quoting" and quoting.refreshing and itemID == quoting.itemID then
-        quoting.refreshing = nil
-        quoting.refreshed = true
-        listings[itemID] = { commodity = true, rows = ReadCommodityResults(itemID) }
-        RequestQuote(quoting)
-        return
-    end
     local current = scanning
     if current == nil or current.itemID ~= itemID then
         return
