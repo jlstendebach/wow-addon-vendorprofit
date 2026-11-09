@@ -380,7 +380,10 @@ local function FindRecipe(recipeID)
 end
 
 stub.tradeSkill = { ready = true, linked = false, guild = false, npc = false, changing = false }
+-- Crafting stations: stub.requirements[recipeID] = { { name, met }, ... }.
+stub.requirements = {}
 C_TradeSkillUI = {
+    GetRecipeRequirements = function(recipeID) return stub.requirements[recipeID] or {} end,
     GetRecipeSchematic = function(recipeID)
         local r = FindRecipe(recipeID)
         return r and Schematic(r)

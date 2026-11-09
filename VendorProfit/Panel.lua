@@ -528,7 +528,9 @@ local function CraftButton()
         return button, nextCraft.step, nextCraft.open
     end
     button.text = L.CRAFT_LABEL
-    if nextCraft.materials then
+    if nextCraft.station then
+        button.tooltip = string.format(L.NEED_STATION, nextCraft.station, name)
+    elseif nextCraft.materials then
         button.tooltip = string.format(L.NEED_MATERIALS, name)
     elseif nextCraft.crafts == 1 then
         button.tooltip, button.enabled = string.format(L.CRAFT_ONCE, name), true
@@ -1109,6 +1111,29 @@ events:SetScript("OnEvent", function(_, event)
     Panel.Refresh()
 end)
 
+-- /vprofit stations: each queued step's crafting station and whether the
+-- game says you're at it, to check what it reports away from a profession.
+function Panel.PrintStations()
+    local list = Crafter.Stations()
+    if #list == 0 then
+        print(L.STATIONS_NONE)
+        return
+    end
+    for _, entry in ipairs(list) do
+        local where
+        if entry.station == nil then
+            where = L.STATIONS_NEEDS_NONE
+        elseif entry.at == true then
+            where = string.format(L.STATIONS_HERE, entry.station)
+        elseif entry.at == false then
+            where = string.format(L.STATIONS_AWAY, entry.station)
+        else
+            where = string.format(L.STATIONS_UNKNOWN, entry.station)
+        end
+        print(string.format(L.STATIONS_LINE, ItemName(entry.step.itemID), entry.step.profession or "?", where))
+    end
+end
+
 SLASH_VENDORPROFIT1 = "/vprofit"
 SLASH_VENDORPROFIT2 = "/vendorprofit"
 SlashCmdList.VENDORPROFIT = function(arg)
@@ -1124,6 +1149,8 @@ SlashCmdList.VENDORPROFIT = function(arg)
         Panel.Toggle("purchases")
     elseif command == "prices" then
         VendorProfit.Merchant.ShowPriceLines()
+    elseif command == "stations" then
+        Panel.PrintStations()
     else
         Panel.Toggle()
     end
