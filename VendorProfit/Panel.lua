@@ -416,6 +416,9 @@ end
 -- What clicking the To buy heading's button does, by status.
 local function BuyClick()
     local status = Shopper.Status()
+    if not Shopper.ThrottleReady() then
+        return
+    end
     if status == "confirm" then
         Shopper.Confirm()
     elseif status == "ready" then
@@ -490,6 +493,13 @@ local function BuyButton(plan)
             button.enabled = true
             button.tooltip = string.format(L.BUTTON_BUY, nextPurchase.quantity, ItemName(nextPurchase.itemID), Money(nextPurchase.budget))
         end
+    end
+    -- The game is busy (just after a purchase, say) and would drop the
+    -- request: held until it isn't, so the click always counts.
+    if button.enabled and (status == "ready" or status == "confirm") and not Shopper.ThrottleReady() then
+        button.enabled = false
+        button.tooltip = L.BUTTON_AH_BUSY
+        Shopper.WatchThrottle()
     end
     return button
 end

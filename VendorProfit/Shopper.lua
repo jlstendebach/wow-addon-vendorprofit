@@ -38,8 +38,10 @@ VendorProfit.Shopper = Shopper
 Shopper.SEARCH_TIMEOUT = 10
 Shopper.SEARCH_RETRIES = 3
 Shopper.MORE_RESULTS_REQUESTS = 3
--- A quote normally comes within a second; past this, Buy is offered again.
-Shopper.QUOTE_TIMEOUT = 5
+Shopper.QUOTE_TIMEOUT = 10
+-- A dropped request reported this soon after asking for a quote was the
+-- quote: say so at once rather than wait out the timeout.
+Shopper.QUOTE_DROP_WINDOW = 1
 Shopper.PURCHASE_TIMEOUT = 15
 Shopper.THROTTLE_POLL = 0.2
 -- The server answers at most this many item searches in this many seconds,
@@ -573,13 +575,46 @@ end
 -- is why a quote is never asked for again by itself.
 local function RequestQuote(current)
     current.quotes = (current.quotes or 0) + 1
+    current.askedAt = GetTime()
     C_AuctionHouse.StartCommoditiesPurchase(current.itemID, current.quantity)
+end
+
+-- Whether the game will take a quote or purchase now. Just after one (or
+-- while other addons are busy) it won't, and drops the request without a
+-- word, so the panel holds Buy and Confirm until it will (see WatchThrottle).
+function Shopper.ThrottleReady()
+    return C_AuctionHouse.IsThrottledMessageSystemReady()
+end
+
+-- Redraws the panel once the game is ready again.
+local watchingThrottle = false
+function Shopper.WatchThrottle()
+    if watchingThrottle then
+        return
+    end
+    watchingThrottle = true
+    C_Timer.After(Shopper.THROTTLE_POLL, function()
+        watchingThrottle = false
+        if Shopper.ThrottleReady() then
+            Changed()
+        else
+            Shopper.WatchThrottle()
+        end
+    end)
 end
 
 -- The game dropped a request: the search waiting on one is sent again (a
 -- few times at most), rather than waiting out its timeout. (A dropped quote
 -- can't be asked for again without a click; it times out and says so.)
 local function OnMessageDropped()
+    -- Our quote request, just sent: it won't come, so Buy is offered again.
+    local quoting = purchase
+    if quoting and status == "quoting" and quoting.askedAt
+        and GetTime() - quoting.askedAt <= Shopper.QUOTE_DROP_WINDOW then
+        C_AuctionHouse.CancelCommoditiesPurchase()
+        SetMessage(string.format(L.QUOTE_BUSY, ItemName(quoting.itemID)), true)
+        EndPurchase("ready")
+    end
     local current = scanning
     if current and current.tries > 0 and current.tries < Shopper.SEARCH_RETRIES then
         local tries = current.tries

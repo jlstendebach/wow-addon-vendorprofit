@@ -1213,21 +1213,35 @@ check("100 searches this minute already (anyone's): the scan waits for room, and
 run('__stub.Advance(60)')
 check("...then carries on", ev("VendorProfit.Shopper.Status()") == "ready" and not ev("VendorProfit.Shopper.WaitingForLimit()"))
 
-# Quotes are only ever asked for in a click: never by themselves, not after a dropped request.
-run('__stub.ah.ready = false; __stub.ah.starts = {}'); click(run, "buy")
-check("Buy asks for the quote within the click, busy throttle or not", ev("#__stub.ah.starts") == 1)
-run('__stub.ah.ready = true; __stub.Advance(0.5)')
-check("...and gets it", ev("VendorProfit.Shopper.Status()") == "confirm")
-run('VendorProfit.Shopper.Cancel()')
-run('__stub.ah.dropQuotes = 5; __stub.ah.starts = {}'); click(run, "buy")
-run('__stub.Fire("AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED"); __stub.Advance(6)')
-check("a quote that never comes: not asked again by itself; after 5 seconds, says to click Buy again",
-      ev("#__stub.ah.starts") == 1 and ev("VendorProfit.Shopper.Status()") == "ready"
-      and any("Click Buy to try again" in l for l in lines(ev)))
-run('__stub.ah.dropQuotes = 0')
+# Quotes are only ever asked for in a click. While the game is busy (it would drop the
+# request), Buy and Confirm are held, so a click always counts.
+run('__stub.ah.ready = false; __stub.ah.starts = {}; VendorProfit.Panel.Refresh()')
+check("game busy: Buy held, saying why", not ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip") == "Waiting a moment for the auction house to be ready...")
+click(run, "buy")
+check("...a click does nothing", ev("#__stub.ah.starts") == 0 and ev("VendorProfit.Shopper.Status()") == "ready")
+run('__stub.ah.ready = true; __stub.Advance(0.3)')
+check("ready again: Buy back on by itself", ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip").startswith("Buy "))
 click(run, "buy"); run('__stub.Advance(0.5)')
-check("...and clicking it works", ev("VendorProfit.Shopper.Status()") == "confirm")
-run('VendorProfit.Shopper.Cancel(); __stub.CloseAH()')
+check("...and clicking it gets the quote", ev("#__stub.ah.starts") == 1 and ev("VendorProfit.Shopper.Status()") == "confirm")
+run('__stub.ah.ready = false; VendorProfit.Panel.Refresh()')
+check("Confirm held too while busy", not ev(BUY + ":IsEnabled()"))
+run('__stub.ah.ready = true; __stub.Advance(0.3); VendorProfit.Shopper.Cancel()')
+# The quote request dropped anyway: said at once, Buy offered again.
+run('__stub.ah.dropQuotes = 1; __stub.ah.starts = {}'); click(run, "buy")
+run('__stub.Advance(0.2); __stub.Fire("AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED")')
+check("quote dropped: says so straight away, not after the timeout; not asked again by itself",
+      ev("VendorProfit.Shopper.Status()") == "ready" and ev("#__stub.ah.starts") == 1
+      and any("was busy and didn't price Copper Ore" in l for l in lines(ev)))
+click(run, "buy"); run('__stub.Advance(0.5)')
+check("...clicking Buy again works", ev("VendorProfit.Shopper.Status()") == "confirm")
+run('VendorProfit.Shopper.Cancel()')
+# Someone else's dropped request, well after ours: our quote is left alone.
+run('__stub.ah.noQuoteReply = true'); click(run, "buy"); run('__stub.Advance(2); __stub.Fire("AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED")')
+check("a drop long after asking isn't ours: still waiting for the quote", ev("VendorProfit.Shopper.Status()") == "quoting")
+run('__stub.Advance(9)')
+check("no quote at all: says so after the timeout", ev("VendorProfit.Shopper.Status()") == "ready"
+      and any("Click Buy to try again" in l for l in lines(ev)))
+run('__stub.ah.noQuoteReply = false; __stub.CloseAH()')
 
 # The game blocking an action: says which, once.
 run('__stub.Fire("ADDON_ACTION_BLOCKED", "VendorProfit", "C_AuctionHouse.StartCommoditiesPurchase()")')
