@@ -986,11 +986,68 @@ run('__craft = ' + CRAFT + '; __craft:Hide(); VendorProfit.OpenButton.Follow()')
 check("the button gone from view: the cover goes too", not ev(OPEN + ":IsShown()"))
 run('__craft:Show(); VendorProfit.Panel.Refresh()')
 check("...and comes back with it", ev(OPEN + ":IsShown()"))
+run('__stub.requirements[2670] = { { name = "Anvil", met = false } }')
 run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
+check("blacksmithing open away from an anvil: says so, not clickable", ev(CRAFT + ".__text") == "Craft"
+      and ev(CRAFT + ".tooltip") == "Needs Anvil nearby to craft Rough Bronze Cuirass" and not ev(CRAFT + ":IsEnabled()"))
+run('__stub.requirements[2670] = { { name = "Anvil", met = true } }; VendorProfit.Panel.Refresh()')
 check("blacksmithing open: craft the cuirasses", ev(CRAFT + ".tooltip") == "Craft Rough Bronze Cuirass, 2 times")
+run('__stub.requirements = {}')
 run('VendorProfit.Order.Clear()')
 check("empty order: no craft button", ev(CRAFT) is None)
 check("no errors from crafting", ev("#__stub.errors") == 0)
+
+
+# --- Crafting stations ---------------------------------------------------------------
+# Which step the Craft button offers, by materials in hand and crafting stations.
+run, ev = shop_client()
+run('__stub.CloseProfession()')
+# A fake order: smelting (no ore), the cuirass (bars in hand), cooking (meat in hand).
+run('''
+    __stub.realSummary = VendorProfit.Shopper.Summary
+    VendorProfit.Shopper.Summary = function() return { plan = { crafts = {
+        { recipeID = 2657, profession = "Mining", itemID = 2840, crafts = 7, reagents = { { items = { 2770 }, quantity = 1 } } },
+        { recipeID = 2670, profession = "Blacksmithing", itemID = 2866, crafts = 1, reagents = { { items = { 2841 }, quantity = 7 } } },
+        { recipeID = 9900, profession = "Cooking", itemID = 9901, crafts = 2, reagents = { { items = { 9902 }, quantity = 1 } } },
+    } } } end
+    __stub.bags[2770] = 0; __stub.bags[2841] = 7; __stub.bags[9902] = 2
+    __stub.requirements[2657] = { { name = "Forge", met = false } }
+    __stub.requirements[2670] = { { name = "Anvil", met = false } }
+    __stub.requirements[9900] = { { name = "Cooking Fire", met = true } }
+''')
+nxt = lambda: dict(ev("VendorProfit.Crafter.Next()").items())
+step = lambda n: ev("VendorProfit.Crafter.Next().step.recipeID")
+check("by a cooking fire, nothing open: offers Cooking, not the Mining step you've no ore for",
+      nxt().get("open") == "Cooking" and step(0) == 9900)
+run('__stub.requirements[9900] = { { name = "Cooking Fire", met = false } }')
+check("away from everything: a step you can make, not the first one", nxt().get("open") == "Blacksmithing")
+run('__stub.requirements[2670] = { { name = "Anvil", met = true } }; __stub.requirements[9900] = { { name = "Cooking Fire", met = true } }')
+check("at both: the first one you can make", nxt().get("open") == "Blacksmithing")
+# Blacksmithing open.
+run('__stub.profession = { professionID = 164, professionName = "Blacksmithing" }; ProfessionsFrame:Show()')
+check("blacksmithing open at an anvil: crafts the cuirass", nxt().get("crafts") == 1 and step(0) == 2670)
+run('__stub.requirements[2670] = { { name = "Anvil", met = false } }')
+check("blacksmithing open, no anvil, a cooking fire here: offers Cooking", nxt().get("open") == "Cooking")
+run('__stub.requirements[9900] = { { name = "Cooking Fire", met = false } }')
+check("no anvil and no fire: says to find an anvil", nxt().get("station") == "Anvil" and step(0) == 2670)
+run('__stub.requirements[9900] = nil')
+check("a recipe needing no station counts as ready anywhere", nxt().get("open") == "Cooking")
+run('__stub.bags[2841] = 0; __stub.bags[9902] = 0')
+check("nothing you can make: the first step's profession", nxt().get("open") == "Mining")
+run('VendorProfit.Panel.PrintStations()')
+printed = [p for p in ev("__stub.printed").values()][-3:]
+check("/vprofit stations lists each step's station and what the game says",
+      printed[0].endswith("(Mining): Forge, and you're not at one") and printed[2].endswith("(Cooking): needs no station"))
+run('VendorProfit.Shopper.Summary = __stub.realSummary; __stub.requirements = {}')
+
+# Stations are saved with the recipes, so a profession that isn't open still says what it needs.
+run('__stub.requirements[2657] = { { name = "Forge", met = true } }')
+run('__stub.OpenProfession(186, "Mining", %s)' % MINING)
+check("saved with the recipe", list(ev("VendorProfit.Recipes.Get(2657).stations").values()) == ["Forge"])
+run('__stub.requirements = {}')
+station, at = ev("VendorProfit.Recipes.Station(2657)")
+check("the game silent about it: its station is known, being at it isn't", station == "Forge" and at is None)
+check("no errors from stations", ev("#__stub.errors") == 0)
 
 
 # --- Search button -------------------------------------------------------------------

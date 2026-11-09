@@ -12,6 +12,7 @@
 --         item = outputItemID,
 --         count = minimum number made,
 --         reagents = { { items = { itemID, ... }, quantity = n }, ... },
+--         stations = { "Anvil", ... } or nil: what it must be crafted at
 --     } },
 -- }
 -- A reagent slot lists every item that can fill it.
@@ -47,6 +48,7 @@ local function RebuildIndex()
                 item = saved.item,
                 count = saved.count,
                 reagents = saved.reagents,
+                stations = saved.stations,
             }
             list[#list + 1] = entry
             byRecipe[recipeID] = entry
@@ -79,6 +81,43 @@ end
 
 -- Known recipes that make an item.
 -- A saved recipe by its ID (the craft's spell ID), or nil.
+-- What a recipe must be crafted at (Anvil, Forge, Cooking Fire), as the
+-- game lists it while the recipe's profession is open; nil for nothing.
+function Recipes.StationsFromRequirements(recipeID)
+    local requirements = C_TradeSkillUI.GetRecipeRequirements and C_TradeSkillUI.GetRecipeRequirements(recipeID)
+    local stations
+    for _, requirement in ipairs(requirements or NONE) do
+        if requirement.name then
+            stations = stations or {}
+            stations[#stations + 1] = requirement.name
+        end
+    end
+    return stations
+end
+
+-- The station a recipe needs, and whether you're at it right now: true,
+-- false, or nil when the game doesn't say. The game reports this for the
+-- open profession's recipes; for others it may not (then it's nil, unless the
+-- recipe needs no station at all, which is true).
+function Recipes.Station(recipeID)
+    local requirements = C_TradeSkillUI.GetRecipeRequirements and C_TradeSkillUI.GetRecipeRequirements(recipeID)
+    if requirements and #requirements > 0 then
+        local name
+        for _, requirement in ipairs(requirements) do
+            if requirement.met == false then
+                return requirement.name, false
+            end
+            name = name or requirement.name
+        end
+        return name, true
+    end
+    local entry = byRecipe[recipeID]
+    if entry and entry.stations and #entry.stations > 0 then
+        return entry.stations[1], nil
+    end
+    return nil, true
+end
+
 function Recipes.Get(recipeID)
     return byRecipe[recipeID]
 end
@@ -212,6 +251,7 @@ function Recipes.Scan()
                     item = schematic.outputItemID,
                     count = math.max(schematic.quantityMin or 1, 1),
                     reagents = Recipes.ReagentsFromSchematic(schematic),
+                    stations = Recipes.StationsFromRequirements(recipeID),
                 }
             end
         end
