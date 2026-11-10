@@ -191,6 +191,8 @@ VendorProfit.L = {
     BUY_OPEN_AH_HELP = "Talk to an auctioneer to buy. Until you scan there, prices are from Auctionator's last scan.",
     BUY_SCAN_HELP = "Scans the auction house for live prices of what's left to buy.",
     BUY_SCANNING = "Scanning...",
+    SCAN_LIMIT_WAIT = "Waiting: the auction house answers %d searches a minute, from all addons together.",
+    ACTION_BLOCKED = "|cffffd100Vendor Profit:|r the game blocked %s (it blamed %s). Please report this line.",
     BUY_PRICING = "Pricing...",
     BUY_BUY = "Buy",
     BUY_CONFIRM = "Confirm",
@@ -226,7 +228,7 @@ VendorProfit.L = {
     BUY_ANYWAY = "Buy anyway",
     BUY_ANYWAY_HELP = "Click to buy anyway, until the next scan.",
     ORDER_DONE = "|cffffd100Vendor Profit:|r order done: everything queued is crafted.",
-    BUY_SCAN_FIRST = "Scans prices, then starts buying. You confirm each purchase.",
+    BUY_SCAN_FIRST = "Scans prices first. Then click Buy for each purchase, and confirm it.",
     SCAN_OPEN_AH = "Open the auction house to scan live prices.",
     FROM_AUCTION = "auction",
     FROM_VENDOR = "vendor",
@@ -246,7 +248,10 @@ VendorProfit.L = {
     SCAN_FAILED = "Couldn't scan %s. Scan again to retry.",
     NOT_PROFITABLE_STOPPED = "Neither selling to a vendor nor at auction makes money at these prices. Scan again, or choose Buy anyway.",
     NOT_ENOUGH_GOLD = "Not enough gold for the next purchase.",
-    NO_QUOTE = "The auction house didn't give a price for %s. Try again.",
+    NO_QUOTE = "The auction house didn't give a price for %s. Click Buy to try again.",
+    SCANNED_CLICK_BUY = "Prices are in. Click Buy for %s.",
+    QUOTE_BUSY = "The auction house was busy and didn't price %s. Click Buy again.",
+    BUTTON_AH_BUSY = "Waiting a moment for the auction house to be ready...",
     NO_PURCHASE_REPLY = "No reply buying %s. Scanning it again: check your mailbox before buying more.",
     PRICE_WENT_UP = "%s costs more than scanned (%s, now %s). Scanning it again.",
     PRICE_UNAVAILABLE = "%s isn't available at that price any more. Scanning it again.",
@@ -584,5 +589,22 @@ events:SetScript("OnEvent", function(self, event)
     elseif event == "TRADE_SKILL_SHOW" then
         -- Auctionator may handle this same event after us.
         C_Timer.After(0, VendorProfit.TryAttach)
+    end
+end)
+
+-- When the game blocks an action ("Interface action failed because of an
+-- AddOn"), its message doesn't say what was blocked. Say it once per action,
+-- so a report can name it. The game blames whichever addon touched things
+-- last, which isn't always the one at fault, so every block is reported.
+local blocked = CreateFrame("Frame")
+local reported = {}
+for _, event in ipairs({ "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN" }) do
+    pcall(blocked.RegisterEvent, blocked, event)
+end
+blocked:SetScript("OnEvent", function(_, _, addon, action)
+    local key = tostring(addon) .. "/" .. tostring(action)
+    if not reported[key] then
+        reported[key] = true
+        print(string.format(VendorProfit.L.ACTION_BLOCKED, tostring(action), tostring(addon)))
     end
 end)

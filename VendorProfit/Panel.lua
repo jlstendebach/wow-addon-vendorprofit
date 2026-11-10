@@ -373,7 +373,11 @@ local function ScanningText()
         return L.BUTTON_LOOKING_UP
     end
     local done, total = Shopper.ScanProgress()
-    return string.format(L.BUTTON_SCANNING, math.min(done + 1, total), total)
+    local text = string.format(L.BUTTON_SCANNING, math.min(done + 1, total), total)
+    if Shopper.WaitingForLimit() then
+        text = text .. " " .. string.format(L.SCAN_LIMIT_WAIT, Shopper.SEARCH_LIMIT)
+    end
+    return text
 end
 
 -- Whether to hold off buying: the order loses money and "Buy anyway" hasn't
@@ -412,6 +416,9 @@ end
 -- What clicking the To buy heading's button does, by status.
 local function BuyClick()
     local status = Shopper.Status()
+    if not Shopper.ThrottleReady() then
+        return
+    end
     if status == "confirm" then
         Shopper.Confirm()
     elseif status == "ready" then
@@ -486,6 +493,13 @@ local function BuyButton(plan)
             button.enabled = true
             button.tooltip = string.format(L.BUTTON_BUY, nextPurchase.quantity, ItemName(nextPurchase.itemID), Money(nextPurchase.budget))
         end
+    end
+    -- The game is busy (just after a purchase, say) and would drop the
+    -- request: held until it isn't, so the click always counts.
+    if button.enabled and (status == "ready" or status == "confirm") and not Shopper.ThrottleReady() then
+        button.enabled = false
+        button.tooltip = L.BUTTON_AH_BUSY
+        Shopper.WatchThrottle()
     end
     return button
 end
