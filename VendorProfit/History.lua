@@ -53,8 +53,6 @@ History.DAY = 24 * 60 * 60
 -- How long after an item comes in or goes out before its count is trusted
 -- again (purchases and crafts land a moment later).
 local SETTLE = 5
--- A mail taken twice this quickly is one mail (a double click).
-local MAIL_REPEAT = 10
 
 local listeners = {}
 function History.OnChange(fn)
@@ -492,8 +490,12 @@ end
 
 -- Mail: auction purchases and sales --------------------------------------------------
 
-local recentMail = {}   -- mail key -> GetTime() it was handled
 local inbox = {}        -- what each mail held at the last inbox update
+-- Mails already recorded since the last inbox update, by position. Taking a
+-- mail again before the inbox updates (a double click) is the same mail; once
+-- it updates, the next mail has moved up into that position and is a new one,
+-- even if it reads exactly the same (a purchase arrives as one mail per
+-- stack, all with the same invoice).
 
 -- A mail's auction details: { invoiceType, itemName, bid, consignment,
 -- count, itemID, n, key }, or nil if it isn't an auction mail.
@@ -512,8 +514,11 @@ local function ReadMail(index)
     }
 end
 
+local takenSinceUpdate = {}
+
 local function SnapshotInbox()
     inbox = {}
+    takenSinceUpdate = {}
     local shown = GetInboxNumItems()
     for index = 1, shown or 0 do
         inbox[index] = ReadMail(index) or false
@@ -538,22 +543,24 @@ local function TakeMail(index, takingItem, takingMoney)
     if before and (mail == nil or (mail.key == before.key and takingItem and mail.itemID == nil)) then
         mail = before
     end
-    if mail == nil then
-        return
-    end
-    local now = GetTime()
-    if recentMail[mail.key] and now - recentMail[mail.key] < MAIL_REPEAT then
+    if mail == nil or takenSinceUpdate[index] then
         return
     end
     if mail.invoiceType == "buyer" and takingItem then
         if mail.itemID and mail.bid then
-            recentMail[mail.key] = now
-            History.Bought(mail.itemID, mail.n or mail.count or 1, mail.bid, "auction")
+            takenSinceUpdate[index] = true
+            -- The invoice is for the whole purchase (bid for count items),
+            -- but a purchase of more than a stack comes as one mail per
+            -- stack: this mail's share is its own stack (n) at the price
+            -- each.
+            local count = math.max(mail.count or mail.n or 1, 1)
+            local n = mail.n or count
+            History.Bought(mail.itemID, n, mail.bid * n / count, "auction")
         end
     elseif mail.invoiceType == "seller" and takingMoney then
         local itemID = ItemByName(mail.itemName)
         if itemID and mail.bid then
-            recentMail[mail.key] = now
+            takenSinceUpdate[index] = true
             History.Sold(itemID, mail.count or 1, mail.bid - (mail.consignment or 0), "auction")
         end
     end

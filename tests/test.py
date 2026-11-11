@@ -1552,6 +1552,24 @@ check("2,000 purchases: only the rows that fit on screen are built", ev("VendorP
 run('local scroll = VendorProfit.PurchasePanel.Frame().scroll; scroll:SetVerticalScroll(100 * 18); scroll:GetScript("OnVerticalScroll")(scroll, 100 * 18)')
 check("...scrolling refills them", ev("VendorProfit.PurchasePanel.Row(1).purchase.total") == 2000 - 100)
 
+# One auction purchase of 100 arrives as five mails of 20, each with the invoice for all 100.
+run('''
+    __stub.items["item:7912"] = { name = "Solid Stone", cached = true }
+    __stub.invoiceMails = {}
+    for i = 1, 5 do
+        __stub.invoiceMails[i] = { itemID = 7912, n = 20, subject = "Auction won: Solid Stone",
+            invoice = { type = "buyer", itemName = "Solid Stone", bid = 31500, count = 100 } }
+    end
+    __stub.Fire("MAIL_INBOX_UPDATE")
+''')
+run('TakeInboxItem(1)')
+check("a stack's mail: its 20 at the price each (315c), not the whole purchase's 315s", ev(H + ".Recorded(7912)") == 20
+      and ev("VendorProfitCharDB.history.stock[7912][1].cost") == 315)
+run('for i = 1, 4 do __stub.Fire("MAIL_INBOX_UPDATE"); TakeInboxItem(1) end')
+check("the other four mails, though they read the same: all 100 recorded, at 315c each, 315s in all",
+      ev(H + ".Recorded(7912)") == 100 and ev("VendorProfit.History.Purchase(1).total") == 6300
+      and ev('(function() local t = 0; for i = 1, 5 do t = t + VendorProfit.History.Purchase(i).total end; return t end)()') == 31500)
+
 
 # --- Known vendor prices ---------------------------------------------------------------
 run, ev = shop_client()
