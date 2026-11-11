@@ -1452,8 +1452,54 @@ run(HF + ".views.items:Click()")
 check("Best Sellers over All time: every copper bar sold", any(l.split(" | ")[1] == "9" for l in ev("VendorProfit.HistoryPanel.Lines()").values()))
 run('VendorProfit.HistoryPanel.SetRange("s50")')
 check("...over a range: only the list's", [l.split(" | ")[1] for l in ev("VendorProfit.HistoryPanel.Lines()").values()] == ["3"])
-run('VendorProfit.HistoryPanel.SetRange("all"); VendorProfit.History.MAX_SALES = 500')
+run('VendorProfit.HistoryPanel.SetRange("all"); VendorProfit.History.MAX_SALES = 10000')
 run('table.remove(VendorProfitCharDB.history.purchases)')  # the copper bars bought for this
+
+# Thousands of sales: only the rows that fit are built, refilled as the list scrolls.
+run('''
+    __stub.savedSales, __stub.savedItems = VendorProfitCharDB.history.sales, VendorProfitCharDB.history.items
+    local list = {}
+    for i = 1, 10000 do
+        list[i] = { item = 2840, n = 1, cost = 100, sold = 100 + i, bought = 100, how = "vendor", time = time() - (10000 - i) }
+    end
+    VendorProfitCharDB.history.sales = list
+    VendorProfitCharDB.history.items = nil
+    VendorProfit.HistoryPanel.SetRange("all")
+''')
+run(HF + ".views.sales:Click()")
+check("10,000 sales: only the rows that fit on screen are built", ev("VendorProfit.HistoryPanel.Row(19) ~= nil")
+      and ev("VendorProfit.HistoryPanel.Row(20) == nil") and len(list(ev("VendorProfit.HistoryPanel.Lines()").values())) == 19)
+check("...newest first", ev("VendorProfit.HistoryPanel.Row(1).sale.sold") == 100 + 10000)
+run('local scroll = ' + HF + '.scroll; scroll:SetVerticalScroll(5000 * 18); scroll:GetScript("OnVerticalScroll")(scroll, 5000 * 18)')
+check("scrolled half way: the rows show the 5,001st newest sale on", ev("VendorProfit.HistoryPanel.Row(1).sale.sold") == 100 + 5000
+      and ev("VendorProfit.HistoryPanel.Row(20) == nil"))
+run(HF + '.search:Type("zzz")')
+check("searching back to the top, nothing matching", ev(HF + ".scroll:GetVerticalScroll()") == 0 and ev(HF + ".empty:IsShown()"))
+run(HF + '.search:Type("")')
+run('VendorProfitCharDB.history.sales, VendorProfitCharDB.history.items = __stub.savedSales, __stub.savedItems; VendorProfit.HistoryPanel.Refresh()')
+
+# Sales past the cap are added up per item per day: date ranges still reach them.
+run('VendorProfit.History.MAX_SALES = 5; VendorProfit.History.Bought(2840, 8, 800, "vendor")')
+run('for i = 1, 8 do VendorProfit.History.Sold(2840, 1, 300, "auction") end')
+check("past the cap: the oldest sales added up by day", len(list(ev("VendorProfit.History.Sales()").values())) == 5
+      and ev("(function() local n = 0; for _, items in pairs(VendorProfitCharDB.history.daily) do if items[2840] then n = n + items[2840].n end end; return n end)()") >= 3)
+run('VendorProfit.HistoryPanel.SetRange("d7"); ' + HF + '.views.items:Click()')
+bars = [l for l in ev("VendorProfit.HistoryPanel.Lines()").values() if "Copper Bar" in l]
+recent = ev('''(function()
+    local since, n = time() - 7 * 24 * 60 * 60, 0
+    for _, sale in ipairs(VendorProfitCharDB.history.sales) do if sale.item == 2840 and sale.time >= since then n = n + sale.n end end
+    for day, items in pairs(VendorProfitCharDB.history.daily) do
+        if day >= math.floor(since / VendorProfit.History.DAY) and items[2840] then n = n + items[2840].n end
+    end
+    return n end)()''')
+check("Best Sellers over the last 7 days counts the added-up sales too", len(bars) == 1 and int(bars[0].split(" | ")[1]) == recent and recent >= 8)
+week_profit, week_count = ev("VendorProfit.History.Total(time() - 7 * 24 * 60 * 60)")
+check("...and so does the last 7 days total", week_count >= 8)
+run('VendorProfit.HistoryPanel.SetRange("s50")')
+bars = [l for l in ev("VendorProfit.HistoryPanel.Lines()").values() if "Copper Bar" in l]
+check("a last-so-many-sales range only has the sales on the list", bars[0].split(" | ")[1] == "5")
+run('VendorProfit.HistoryPanel.SetRange("all"); VendorProfit.History.MAX_SALES = 10000; table.remove(VendorProfitCharDB.history.purchases)')
+run(HF + ".views.sales:Click()")
 check("window wider for the history's columns", ev("VendorProfitPanel:GetWidth()") == 540)
 run('SlashCmdList.VENDORPROFIT("history")')
 check("/vprofit history toggles it", not ev("VendorProfit.Panel.IsShown()"))
@@ -1487,8 +1533,17 @@ run('VendorProfitCharDB.history.purchases = {}; VendorProfit.Panel.Refresh()')
 check("none yet: says where they come from", ev("VendorProfit.PurchasePanel.Frame().empty:IsShown()"))
 run('SlashCmdList.VENDORPROFIT("purchases")')
 check("/vprofit purchases toggles it", not ev("VendorProfit.Panel.IsShown()"))
-run('for i = 1, 510 do VendorProfit.History.Bought(2840, 1, 100, "vendor") end')
-check("keeps the last 500", ev("#VendorProfitCharDB.history.purchases") == 500)
+check("keeps up to 5,000 purchases, and 10,000 sales", ev("VendorProfit.History.MAX_PURCHASES") == 5000
+      and ev("VendorProfit.History.MAX_SALES") == 10000)
+run('VendorProfit.History.MAX_PURCHASES = 50; for i = 1, 60 do VendorProfit.History.Bought(2840, 1, 100, "vendor") end')
+check("past the cap: the newest kept", ev("#VendorProfitCharDB.history.purchases") == 50)
+run('VendorProfit.History.MAX_PURCHASES = 5000')
+# Thousands of purchases: only the rows that fit are built.
+run('for i = 1, 2000 do VendorProfit.History.Bought(2840, 1, i, "vendor") end; VendorProfit.Panel.Show("purchases")')
+check("2,000 purchases: only the rows that fit on screen are built", ev("VendorProfit.PurchasePanel.Row(19) ~= nil")
+      and ev("VendorProfit.PurchasePanel.Row(20) == nil") and len(list(ev("VendorProfit.PurchasePanel.Lines()").values())) == 19)
+run('local scroll = VendorProfit.PurchasePanel.Frame().scroll; scroll:SetVerticalScroll(100 * 18); scroll:GetScript("OnVerticalScroll")(scroll, 100 * 18)')
+check("...scrolling refills them", ev("VendorProfit.PurchasePanel.Row(1).purchase.total") == 2000 - 100)
 
 
 # --- Known vendor prices ---------------------------------------------------------------

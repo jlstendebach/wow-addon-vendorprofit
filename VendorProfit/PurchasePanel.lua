@@ -2,6 +2,9 @@
 -- purchases (History.lua), newest first, with what you paid for each one,
 -- for a gut check against today's price. Auction house purchases show up
 -- when you take them out of the mailbox; vendor purchases straight away.
+--
+-- The list can hold thousands of purchases, so it only builds the rows that
+-- fit on screen and refills them as it scrolls.
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -90,33 +93,79 @@ local function ShowTooltip(row)
     GameTooltip:Show()
 end
 
-local function GetRow(index)
-    local row = rows[index]
+-- The slot-th of the rows that fit on screen.
+local function GetRow(slot)
+    local row = rows[slot]
     if row == nil then
         local list = frame.list
-        local top = -(index - 1) * ROW_HEIGHT - 2
         row = {}
         row.date = Column(list, DATE_WIDTH, "LEFT")
-        row.date:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top)
         row.item = Column(list, ITEM_WIDTH, "LEFT")
-        row.item:SetPoint("TOPLEFT", list, "TOPLEFT", ITEM_LEFT, top)
         row.from = Column(list, FROM_WIDTH, "LEFT")
-        row.from:SetPoint("TOPRIGHT", list, "TOPRIGHT", FROM_RIGHT, top)
         row.each = Column(list, MONEY_WIDTH, "RIGHT")
-        row.each:SetPoint("TOPRIGHT", list, "TOPRIGHT", EACH_RIGHT, top)
         row.total = Column(list, MONEY_WIDTH, "RIGHT")
-        row.total:SetPoint("TOPRIGHT", list, "TOPRIGHT", TOTAL_RIGHT, top)
         row.market = Column(list, MONEY_WIDTH, "RIGHT")
-        row.market:SetPoint("TOPRIGHT", list, "TOPRIGHT", MARKET_RIGHT, top)
         row.hit = CreateFrame("Frame", nil, list)
-        row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top + 2)
         row.hit:SetSize(LIST_WIDTH, ROW_HEIGHT)
         row.hit:EnableMouse(true)
         row.hit:SetScript("OnEnter", function() ShowTooltip(row) end)
         row.hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
-        rows[index] = row
+        row.regions = { row.date, row.item, row.from, row.each, row.total, row.market, row.hit }
+        rows[slot] = row
     end
     return row
+end
+
+-- Puts a row at a place in the list (1 = top of the whole list).
+local function PlaceRow(row, index)
+    if row.index == index then
+        return
+    end
+    row.index = index
+    local list = frame.list
+    local top = -(index - 1) * ROW_HEIGHT - 2
+    local function At(region, point, x)
+        region:ClearAllPoints()
+        region:SetPoint(point, list, point, x, top)
+    end
+    At(row.date, "TOPLEFT", 0)
+    At(row.item, "TOPLEFT", ITEM_LEFT)
+    At(row.from, "TOPRIGHT", FROM_RIGHT)
+    At(row.each, "TOPRIGHT", EACH_RIGHT)
+    At(row.total, "TOPRIGHT", TOTAL_RIGHT)
+    At(row.market, "TOPRIGHT", MARKET_RIGHT)
+    row.hit:ClearAllPoints()
+    row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top + 2)
+end
+
+-- Fills the rows that fit on screen from where the list is scrolled to.
+local function Render()
+    local count = History.PurchaseCount()
+    local first = math.floor((frame.scroll:GetVerticalScroll() or 0) / ROW_HEIGHT)
+    local needed = math.min(VISIBLE_ROWS + 1, math.max(count - first, 0))
+    for slot = 1, math.max(needed, #rows) do
+        local purchase = slot <= needed and History.Purchase(first + slot)
+        local row = (purchase or rows[slot]) and GetRow(slot)
+        if purchase then
+            PlaceRow(row, first + slot)
+            row.purchase = purchase
+            row.date:SetText(date(L.HISTORY_DATE_FORMAT, purchase.time))
+            row.item:SetText(ItemLabel(purchase.item, purchase.n))
+            row.from:SetText(purchase.how == "vendor" and L.HISTORY_VENDOR or L.HISTORY_AUCTION)
+            row.each:SetText(Money(purchase.total / purchase.n))
+            row.total:SetText(Money(purchase.total))
+            local now = MarketNow(purchase.item)
+            row.market:SetText(now and Money(now) or Gray("-"))
+            for _, region in ipairs(row.regions) do
+                region:Show()
+            end
+        elseif row then
+            row.purchase = nil
+            for _, region in ipairs(row.regions) do
+                region:Hide()
+            end
+        end
+    end
 end
 
 local function Create(page)
@@ -152,6 +201,8 @@ local function Create(page)
     frame.list = CreateFrame("Frame", nil, frame.scroll)
     frame.list:SetSize(LIST_WIDTH, ROW_HEIGHT)
     frame.scroll:SetScrollChild(frame.list)
+    -- Scrolling refills the rows on screen.
+    frame.scroll:HookScript("OnVerticalScroll", Render)
 
     frame.empty = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.empty:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, LIST_TOP)
@@ -161,39 +212,23 @@ local function Create(page)
 end
 
 local function Refresh()
-    local purchases = History.Purchases()
-    for index, purchase in ipairs(purchases) do
-        local row = GetRow(index)
-        row.purchase = purchase
-        row.date:SetText(date(L.HISTORY_DATE_FORMAT, purchase.time))
-        row.item:SetText(ItemLabel(purchase.item, purchase.n))
-        row.from:SetText(purchase.how == "vendor" and L.HISTORY_VENDOR or L.HISTORY_AUCTION)
-        row.each:SetText(Money(purchase.total / purchase.n))
-        row.total:SetText(Money(purchase.total))
-        local now = MarketNow(purchase.item)
-        row.market:SetText(now and Money(now) or Gray("-"))
-        for _, region in ipairs({ row.date, row.item, row.from, row.each, row.total, row.market, row.hit }) do
-            region:Show()
-        end
+    local count = History.PurchaseCount()
+    local maxScroll = math.max(count - VISIBLE_ROWS, 0) * ROW_HEIGHT
+    if (frame.scroll:GetVerticalScroll() or 0) > maxScroll then
+        frame.scroll:SetVerticalScroll(maxScroll)
     end
-    for index = #purchases + 1, #rows do
-        local row = rows[index]
-        row.purchase = nil
-        for _, region in ipairs({ row.date, row.item, row.from, row.each, row.total, row.market, row.hit }) do
-            region:Hide()
-        end
-    end
+    Render()
 
-    local shown = math.max(math.min(#purchases, VISIBLE_ROWS), 1)
-    frame.list:SetHeight(math.max(#purchases, 1) * ROW_HEIGHT)
+    local shown = math.max(math.min(count, VISIBLE_ROWS), 1)
+    frame.list:SetHeight(math.max(count, 1) * ROW_HEIGHT)
     frame.scroll:SetSize(LIST_WIDTH, shown * ROW_HEIGHT)
-    frame.scroll:SetShown(#purchases > 0)
-    frame.empty:SetShown(#purchases == 0)
+    frame.scroll:SetShown(count > 0)
+    frame.empty:SetShown(count == 0)
     for _, heading in ipairs(frame.headings) do
-        heading:SetShown(#purchases > 0)
+        heading:SetShown(count > 0)
     end
 
-    local listHeight = #purchases > 0 and shown * ROW_HEIGHT or (frame.empty:GetStringHeight() or 24)
+    local listHeight = count > 0 and shown * ROW_HEIGHT or (frame.empty:GetStringHeight() or 24)
     return -LIST_TOP + listHeight + PADDING
 end
 

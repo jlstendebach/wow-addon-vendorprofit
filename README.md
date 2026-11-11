@@ -226,7 +226,7 @@ The window's **Profit History** tab (or `/vprofit history`) shows what you've ma
 - **Best Sellers**: one row per item: how many **Sold**, the **Avg profit** on each, and the total **Profit**, most profit first. Click a heading to sort by it (again to reverse); the sort is saved per character. Hover a row for its average cost and sale price, how many went to vendors and to the auction house, and when it last sold.
 - **Range** (the button at the end of the row): **All time**, the **last 7, 30 or 90 days**, or the **last 50, 100 or 250 sales**. It's saved per character. Use All time for each item's long-run average, and a range to see how it's doing lately.
 
-The list keeps your last 500 sales; older ones drop off it. Every sale is also added up per item as it happens, and those totals never drop anything, so the totals at the top and Best Sellers over All time cover every sale since tracking began. The other ranges look back over the 500 on the list.
+The list keeps your last 10,000 sales in full. Older ones aren't thrown away: each is added up with that item's other sales that day, so the day ranges and Best Sellers reach back as far as you've been selling; only the per-sale detail (the exact sale, its cost split) is gone. Every sale is also added up per item as it happens, so the totals at the top and Best Sellers over All time cover every sale since tracking began. The last-so-many-sales ranges use the full list. However long the list, only the rows on screen are built, and they're refilled as you scroll, so it opens and scrolls as fast with 10,000 sales as with 10.
 
 ```
 Profit History
@@ -248,11 +248,11 @@ Sales use up the item's costs oldest first. Vendor sales are read from the vendo
 
 - Only crafts made since installing are tracked. Selling something made before that leaves it out rather than inventing a cost.
 - Bought reagents that leave some other way (mailed to an alt, destroyed) stop counting once you no longer have them. Crafted items out of your bags keep counting, since they may be up for auction.
-- The last 500 sales are kept, per character.
+- The last 10,000 sales are kept in full, older ones added up by item and day, per character.
 
 ## Purchase History
 
-The **Purchase History** tab (or `/vprofit purchases`) lists your last 500 purchases, newest first, for a gut check: the date (mm/dd), the item and how many, whether it came from the auction house or a vendor, what you paid **each** and in **total**, and what one costs **now** (the cheaper of the vendor and auction prices). Hover a purchase for the exact time.
+The **Purchase History** tab (or `/vprofit purchases`) lists your last 5,000 purchases, newest first, for a gut check: the date (mm/dd), the item and how many, whether it came from the auction house or a vendor, what you paid **each** and in **total**, and what one costs **now** (the cheaper of the vendor and auction prices). Hover a purchase for the exact time.
 
 Vendor purchases show up straight away, from any vendor. Auction house purchases show up when you take them out of the mailbox, read from their mail, however you bought them. These are the same purchases whose costs feed the Profit History.
 
@@ -301,7 +301,7 @@ Saved data, per character (`VendorProfitCharDB`):
 - `bestSort = { key, ascending }` and `bestFilters`: how Best Crafts is sorted and filtered.
 - `bestSellersSort = { key, ascending }`: how Profit History's Best Sellers is sorted.
 - `auctions = { counts, time }`: how many of each item you had up for auction at your last visit to the auction house, and when.
-- `history = { stock, sales, items, purchases }`: what the items you have cost you, your last 500 sales, every sale added up per item, and your last 500 purchases.
+- `history = { stock, sales, items, daily, purchases }`: what the items you have cost you, your last 10,000 sales, every sale added up per item, older sales added up per item per day, and your last 5,000 purchases.
 - `historyRange`: Profit History's range.
 
 Opening a profession uses a secure action button casting the profession's spell, as TradeSkillMaster does in Forever. It's a separate invisible button laid over the Craft button rather than part of the panel, because a secure button inside the panel would make the panel protected and the game would block showing, hiding or moving it in combat. It's only placed out of combat and hidden as combat starts.

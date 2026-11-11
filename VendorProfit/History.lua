@@ -29,6 +29,10 @@
 --   items[itemID] = { n, sales, cost, sold, bought, vendor, auction, last }:
 --     every sale ever, added up per item, so totals don't shrink as old sales
 --     drop off the list (n, vendor and auction count units; last is a time)
+--   daily[day][itemID] = { n, sales, cost, sold, bought, vendor, auction }:
+--     sales that dropped off the list, added up per item per day (day =
+--     days since 1970, UTC), kept for good: date ranges and Best Sellers
+--     reach back through them; only the per-sale detail is gone
 --   purchases = { { time, item, n, total, how }, ... } oldest first, at most
 --     MAX_PURCHASES, for the Purchase History tab
 
@@ -41,8 +45,11 @@ local Inventory = VendorProfit.Inventory
 local History = {}
 VendorProfit.History = History
 
-History.MAX_SALES = 500
-History.MAX_PURCHASES = 500
+-- The newest sales are kept in full; older ones are added up per item per
+-- day. Purchases are a gut check, so fewer are kept.
+History.MAX_SALES = 10000
+History.MAX_PURCHASES = 5000
+History.DAY = 24 * 60 * 60
 -- How long after an item comes in or goes out before its count is trusted
 -- again (purchases and crafts land a moment later).
 local SETTLE = 5
@@ -54,7 +61,15 @@ function History.OnChange(fn)
     listeners[#listeners + 1] = fn
 end
 
+-- Goes up with every change, so views can cache what they work out from
+-- the history until it changes.
+local version = 0
+function History.Version()
+    return version
+end
+
 local function Changed()
+    version = version + 1
     for _, fn in ipairs(listeners) do
         xpcall(fn, geterrorhandler())
     end
@@ -82,6 +97,27 @@ local function AddToTotals(items, sale, sign)
     end
 end
 
+-- Adds a sale dropping off the list to its day's totals.
+local function RollUp(daily, sale)
+    if sale == nil then
+        return
+    end
+    local day = math.floor(sale.time / History.DAY)
+    daily[day] = daily[day] or {}
+    local item = daily[day][sale.item]
+    if item == nil then
+        item = { n = 0, sales = 0, cost = 0, sold = 0, bought = 0, vendor = 0, auction = 0 }
+        daily[day][sale.item] = item
+    end
+    item.n = item.n + sale.n
+    item.sales = item.sales + 1
+    item.cost = item.cost + sale.cost
+    item.sold = item.sold + sale.sold
+    item.bought = item.bought + (sale.bought or 0)
+    local how = sale.how == "vendor" and "vendor" or "auction"
+    item[how] = item[how] + sale.n
+end
+
 local function DB()
     VendorProfitCharDB = VendorProfitCharDB or {}
     local db = VendorProfitCharDB
@@ -89,6 +125,7 @@ local function DB()
     db.history.stock = db.history.stock or {}
     db.history.sales = db.history.sales or {}
     db.history.purchases = db.history.purchases or {}
+    db.history.daily = db.history.daily or {}
     if db.history.items == nil then
         -- From before the totals were kept: start them from the sales list.
         db.history.items = {}
@@ -190,7 +227,18 @@ function History.Bought(itemID, n, total, how)
     end
 end
 
--- Purchases, newest first.
+-- How many purchases the list holds, and the index-th newest, without
+-- copying the list.
+function History.PurchaseCount()
+    return #DB().purchases
+end
+
+function History.Purchase(index)
+    local purchases = DB().purchases
+    return purchases[#purchases - index + 1]
+end
+
+-- Purchases, newest first (a copy; for tests and small lists).
 function History.Purchases()
     local list = {}
     local purchases = DB().purchases
@@ -249,9 +297,10 @@ local function AddSale(itemID, n, how, sold)
     }
     sales[#sales + 1] = sale
     AddToTotals(db.items, sale, 1)
-    -- The list keeps the newest; the totals keep everything.
+    -- The list keeps the newest; older sales are added up per item per day,
+    -- and the totals keep everything.
     while #sales > History.MAX_SALES do
-        table.remove(sales, 1)
+        RollUp(db.daily, table.remove(sales, 1))
     end
     Changed()
 end
@@ -278,7 +327,32 @@ function History.BoughtBack(itemID, n)
     end
 end
 
--- Sales, newest first.
+-- How many sales the list holds, and the index-th newest (1 = newest),
+-- without copying the list.
+function History.SaleCount()
+    return #DB().sales
+end
+
+function History.Sale(index)
+    local sales = DB().sales
+    return sales[#sales - index + 1]
+end
+
+-- Sales that dropped off the list, added up per item for each day that
+-- overlaps since onward (all of them without a time): calls fn(itemID,
+-- totals, dayStart) for each.
+function History.EachDaily(since, fn)
+    local first = since and math.floor(since / History.DAY) or -math.huge
+    for day, items in pairs(DB().daily) do
+        if day >= first then
+            for itemID, totals in pairs(items) do
+                fn(itemID, totals, day * History.DAY)
+            end
+        end
+    end
+end
+
+-- Sales, newest first (a copy; for tests and small lists).
 function History.Sales()
     local list = {}
     local sales = DB().sales
@@ -306,17 +380,22 @@ function History.Total(since)
         return profit, count
     end
     for _, sale in ipairs(DB().sales) do
-        if since == nil or sale.time >= since then
+        if sale.time >= since then
             profit = profit + sale.sold - sale.cost
             count = count + 1
         end
     end
+    History.EachDaily(since, function(_, totals)
+        profit = profit + totals.sold - totals.cost
+        count = count + totals.sales
+    end)
     return profit, count
 end
 
 function History.Clear()
     DB().sales = {}
     DB().items = {}
+    DB().daily = {}
     Changed()
 end
 
