@@ -229,6 +229,7 @@ VendorProfit.L = {
     BUY_ANYWAY_HELP = "Click to buy anyway, until the next scan.",
     ORDER_DONE = "|cffffd100Vendor Profit:|r order done: everything queued is crafted.",
     BUY_SCAN_FIRST = "Scans prices first. Then click Buy for each purchase, and confirm it.",
+    BUY_SCAN_NEW = "Scans prices for what was queued since the last scan. Then click Buy for each purchase.",
     SCAN_OPEN_AH = "Open the auction house to scan live prices.",
     FROM_AUCTION = "auction",
     FROM_VENDOR = "vendor",

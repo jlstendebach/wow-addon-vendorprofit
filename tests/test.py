@@ -990,8 +990,15 @@ run('__stub.requirements[2670] = { { name = "Anvil", met = false } }')
 run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
 check("blacksmithing open away from an anvil: says so, not clickable", ev(CRAFT + ".__text") == "Craft"
       and ev(CRAFT + ".tooltip") == "Needs Anvil nearby to craft Rough Bronze Cuirass" and not ev(CRAFT + ":IsEnabled()"))
-run('__stub.requirements[2670] = { { name = "Anvil", met = true } }; VendorProfit.Panel.Refresh()')
-check("blacksmithing open: craft the cuirasses", ev(CRAFT + ".tooltip") == "Craft Rough Bronze Cuirass, 2 times")
+run('VendorProfit.Panel.PollCraft()')
+check("nothing changed: the check doesn't redraw", ev(CRAFT + ".tooltip") == "Needs Anvil nearby to craft Rough Bronze Cuirass")
+# Walking up to an anvil: no event, but the panel notices within a second.
+run('__stub.requirements[2670] = { { name = "Anvil", met = true } }; VendorProfit.Panel.PollCraft()')
+check("walked up to an anvil (no event): the panel notices, craft the cuirasses", ev(CRAFT + ".tooltip") == "Craft Rough Bronze Cuirass, 2 times"
+      and ev(CRAFT + ":IsEnabled()"))
+run('__stub.requirements[2670] = { { name = "Anvil", met = false } }; VendorProfit.Panel.PollCraft()')
+check("...and walking away", ev(CRAFT + ".tooltip") == "Needs Anvil nearby to craft Rough Bronze Cuirass")
+run('__stub.requirements[2670] = { { name = "Anvil", met = true } }; VendorProfit.Panel.PollCraft()')
 run('__stub.requirements = {}')
 run('VendorProfit.Order.Clear()')
 check("empty order: no craft button", ev(CRAFT) is None)
@@ -1181,6 +1188,27 @@ run('__stub.Advance(3)')
 check("...and done", ev("VendorProfit.Shopper.Status()") == "ready" and ev(BUY + ".tooltip").startswith("Buy 24 Copper Ore"))
 run('__stub.CloseAH()')
 check("no errors", ev("#__stub.errors") == 0)
+
+# Queued after a scan: Buy scans the new items, not "Nothing to buy".
+run, ev = batch_client()
+click(run, "scan"); run('__stub.Advance(3)')
+run('''
+    __stub.items["item:9901"] = { name = "Test Stew", cached = true, sellPrice = 500 }
+    __stub.items["item:9902"] = { name = "Test Meat", cached = true }
+    __stub.auctionPrices[9902] = 10
+    __stub.ah.listings[9902] = { { unitPrice = 10, quantity = 50 } }
+    __stub.ah.searches = {}
+    VendorProfit.Order.AddRecipe({ itemID = 9901, recipeID = 9900, profession = "Cooking", count = 1,
+        reagents = { { items = { 9902 }, quantity = 1 } }, sellPrice = 500 }, 2)
+''')
+# Everything from the first order already bought (it's in the bags).
+run('__stub.bags[2770] = 24; __stub.bags[3576] = 29; __stub.Fire("BAG_UPDATE_DELAYED")')
+check("queued after the scan: Buy offers to scan the new items, not 'Nothing to buy'",
+      ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip") == "Scans prices for what was queued since the last scan. Then click Buy for each purchase.")
+click(run, "buy"); run('__stub.Advance(2)')
+check("...scans just those, then Buy is ready", list(ev("__stub.ah.searches").values()) == [9902]
+      and ev("VendorProfit.Shopper.Status()") == "ready" and ev(BUY + ":IsEnabled()") and ev("#__stub.ah.starts") == 0)
+run('__stub.CloseAH()')
 
 # Another addon's browse replaces our batch lookup: sent again, not waited out.
 run, ev = batch_client()
