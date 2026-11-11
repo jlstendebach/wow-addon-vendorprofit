@@ -756,10 +756,14 @@ local function AddQueued(index, entry)
         -- Right to left: cancel, +, -.
         icons = {
             { texture = CANCEL_TEXTURE, tooltip = L.QUEUED_REMOVE, onClick = function() Order.Remove(index) end },
-            { text = "+", tooltip = L.QUEUED_MORE, onClick = function() Order.SetCrafts(index, entry.crafts + 1) end },
+            -- One at a time, or five with Shift; never below one (cancel
+            -- takes it off).
+            { text = "+", tooltip = L.QUEUED_MORE, onClick = function()
+                Order.SetCrafts(index, entry.crafts + VendorProfit.QueueStep())
+            end },
             {
                 text = "-", enabled = entry.crafts > 1, tooltip = L.QUEUED_FEWER,
-                onClick = function() Order.SetCrafts(index, entry.crafts - 1) end,
+                onClick = function() Order.SetCrafts(index, entry.crafts - VendorProfit.QueueStep()) end,
             },
         },
     })
