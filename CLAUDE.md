@@ -5,7 +5,9 @@ retail APIs: `C_TradeSkillUI`, `ProfessionsFrame`, `C_AuctionHouse`). It adds
 vendor-sale profit to Auctionator's crafting info, works out the cheapest
 crafting route, shops for an order, ranks a profession's best crafts and
 keeps a profit and purchase history. `README.md` describes every feature and
-file; read it before changing anything.
+file; read it before changing anything. `docs/decisions.md` says why things
+are the way they are, including ideas tried and dropped: read it before
+changing a feature, so a rejected idea isn't tried again by accident.
 
 ## Rules
 
