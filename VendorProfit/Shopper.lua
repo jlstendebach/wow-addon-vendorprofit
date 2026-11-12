@@ -473,6 +473,35 @@ function Shopper.WaitingForLimit()
     return scanning ~= nil and scanning.waitingForLimit == true
 end
 
+-- Whether the plan buys something at auction that hasn't been scanned: it
+-- was queued after the last scan.
+function Shopper.HasUnscanned()
+    return #Shopper.Summary().unscanned > 0
+end
+
+-- Buy with newly queued items not scanned yet: scans just those (not the
+-- whole order again); then Buy is ready for the first purchase.
+function Shopper.ScanMissing()
+    if status ~= "ready" then
+        return
+    end
+    local s = Shopper.Recompute()
+    if #s.unscanned == 0 then
+        return
+    end
+    scanQueue = {}
+    for _, itemID in ipairs(s.unscanned) do
+        failed[itemID] = nil
+        scanQueue[#scanQueue + 1] = itemID
+    end
+    scanTotal, scanDone = #scanQueue, 0
+    status = "scanning"
+    buyAfterScan = true
+    SetMessage(nil)
+    Changed()
+    ScanNext()
+end
+
 -- Buy before a scan: scans first; then Buy is ready for the first purchase.
 function Shopper.ScanAndBuy()
     if status == "idle" then

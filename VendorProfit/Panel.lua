@@ -484,7 +484,11 @@ local function BuyButton(plan)
     else
         local nextPurchase = Shopper.NextPurchase()
         button.text = L.BUY_BUY
-        if nextPurchase == nil then
+        if nextPurchase == nil and status == "ready" and Shopper.HasUnscanned() then
+            -- Queued after the last scan: Buy scans those first.
+            button.enabled, button.tooltip = true, L.BUY_SCAN_NEW
+            button.onClick = Shopper.ScanMissing
+        elseif nextPurchase == nil then
             button.tooltip = L.BUTTON_NOTHING
         elseif Unprofitable() then
             button.text, button.enabled = L.BUY_ANYWAY, true
@@ -508,12 +512,27 @@ end
 -- onMouseDown }, plus the next step (to mark in the list) and, when the next
 -- step is in a profession that isn't open, that profession (OpenButton.lua
 -- covers the button to open it).
+-- What the Craft button is about, as text: which step, and whether it's
+-- crafting, opening a profession, missing materials, away from its station or
+-- loading. Compared each second (PollCraft) to notice changes the game sends
+-- no event for, such as walking up to an anvil.
+local function CraftKey(nextCraft)
+    if nextCraft == nil then
+        return "none"
+    end
+    local state = nextCraft.crafts and ("craft" .. nextCraft.crafts) or nextCraft.open and ("open " .. nextCraft.open)
+        or nextCraft.station and "station" or nextCraft.materials and "materials" or "loading"
+    return tostring(nextCraft.step.recipeID) .. ":" .. state
+end
+local shownCraft          -- CraftKey of the Craft button shown, nil when there's none to watch
+
 local function CraftButton()
     local button = {
         width = HEADING_BUTTON_WIDTH, enabled = false,
         -- Mouse down prepares, the click crafts: see Crafter.lua.
         onClick = function() Crafter.Craft() end, onMouseDown = Crafter.Prepare,
     }
+    shownCraft = nil
     if Crafter.IsCasting() then
         button.text = L.CRAFTING
         return button
@@ -522,6 +541,7 @@ local function CraftButton()
     if nextCraft == nil then
         return nil
     end
+    shownCraft = CraftKey(nextCraft)
     local name = ItemName(nextCraft.step.itemID)
     -- Opening: wait, rather than offer a click that would close it again.
     local waitingFor = nextCraft.loading or (nextCraft.open and OpenButton.IsOpening(nextCraft.open) and nextCraft.open)
@@ -656,6 +676,7 @@ local function AddToDo(plan)
         end
     end
 
+    shownCraft = nil
     local craftButton, nextStep, openProfession = CraftButton()
     local craftRow = Step(L.STEP_CRAFT, craftButton)
     craftCover = openProfession and { button = craftRow.button, profession = openProfession } or nil
@@ -735,10 +756,14 @@ local function AddQueued(index, entry)
         -- Right to left: cancel, +, -.
         icons = {
             { texture = CANCEL_TEXTURE, tooltip = L.QUEUED_REMOVE, onClick = function() Order.Remove(index) end },
-            { text = "+", tooltip = L.QUEUED_MORE, onClick = function() Order.SetCrafts(index, entry.crafts + 1) end },
+            -- One at a time, or five with Shift; never below one (cancel
+            -- takes it off).
+            { text = "+", tooltip = L.QUEUED_MORE, onClick = function()
+                Order.SetCrafts(index, entry.crafts + VendorProfit.QueueStep())
+            end },
             {
                 text = "-", enabled = entry.crafts > 1, tooltip = L.QUEUED_FEWER,
-                onClick = function() Order.SetCrafts(index, entry.crafts - 1) end,
+                onClick = function() Order.SetCrafts(index, entry.crafts - VendorProfit.QueueStep()) end,
             },
         },
     })
@@ -1103,6 +1128,31 @@ Merchant.OnChange(function()
     end
     merchantWasOpen = open
     Panel.Refresh()
+end)
+
+-- Walking up to a crafting station (or away from one) changes what can be
+-- crafted, but the game sends no event for it, so the panel would keep saying
+-- "Needs Anvil nearby" until something else redrew it. While a Craft step is
+-- shown, the next craft is checked each second and the panel redrawn when it
+-- changed.
+Panel.CRAFT_POLL = 1
+function Panel.PollCraft()
+    if shownCraft == nil or not Panel.IsShown() or activeTab ~= "shopping" or Order.IsEmpty()
+        or Crafter.IsCasting() then
+        return
+    end
+    if CraftKey(Crafter.Next()) ~= shownCraft then
+        Panel.Refresh()
+    end
+end
+local poller = CreateFrame("Frame")
+local sincePoll = 0
+poller:SetScript("OnUpdate", function(_, elapsed)
+    sincePoll = sincePoll + elapsed
+    if sincePoll >= Panel.CRAFT_POLL then
+        sincePoll = 0
+        xpcall(Panel.PollCraft, geterrorhandler())
+    end
 end)
 
 local events = CreateFrame("Frame")

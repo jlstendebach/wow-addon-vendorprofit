@@ -105,25 +105,28 @@ local function Queued(recipeID)
     return n
 end
 
+-- Adds one craft of a recipe to the shopping order, or five with Shift.
 local function QueueRecipe(entry)
     local recipe = entry.recipe
+    local crafts = VendorProfit.QueueStep()
     Order.AddRecipe({
         itemID = recipe.item, recipeID = recipe.recipeID, profession = recipe.profession,
         count = recipe.count, reagents = recipe.reagents,
         sellPrice = select(11, C_Item.GetItemInfo(recipe.item)),
-    }, 1)
-    print(string.format(L.QUEUED, 1, C_Item.GetItemInfo(recipe.item) or ("item " .. recipe.item)))
+    }, crafts)
+    print(string.format(L.QUEUED, crafts, C_Item.GetItemInfo(recipe.item) or ("item " .. recipe.item)))
 end
 
--- Takes one craft of a recipe off the shopping order, and the recipe once
--- none are left.
+-- Takes one craft of a recipe off the shopping order (five with Shift), and
+-- the recipe once none are left.
 local function UnqueueRecipe(entry)
+    local step = VendorProfit.QueueStep()
     local entries = Order.Entries()
     for index = #entries, 1, -1 do
         local queued = entries[index]
         if queued.recipeID == entry.recipe.recipeID then
-            if queued.crafts > 1 then
-                Order.SetCrafts(index, queued.crafts - 1)
+            if queued.crafts > step then
+                Order.SetCrafts(index, queued.crafts - step)
             else
                 Order.Remove(index)
             end

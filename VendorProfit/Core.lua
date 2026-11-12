@@ -72,8 +72,8 @@ VendorProfit.L = {
     BEST_SORT_DOWN = "|TInterface\\Buttons\\Arrow-Down-Up:10:10|t",
     BEST_INVESTMENT = "Investment",
     BEST_PROFIT = "Profit",
-    BEST_QUEUE_HELP = "Adds one craft to your shopping order.",
-    BEST_UNQUEUE_HELP = "Removes one craft from your shopping order.",
+    BEST_QUEUE_HELP = "Adds one craft to your shopping order. Shift-click: five.",
+    BEST_UNQUEUE_HELP = "Removes one craft from your shopping order. Shift-click: five.",
     BEST_QUEUED_HEADING = "Q",
     BEST_AUCTIONS_HEADING = "AH",
     BEST_AUCTIONS_HELP = "How many you have up for auction, as of your last visit to the auction house.",
@@ -162,8 +162,8 @@ VendorProfit.L = {
     HEAD_PROFIT = "Profit",
     NOTHING_QUEUED = "Nothing queued. Use Queue in a recipe's Cheapest Route section in the professions window.",
     QUEUED_REMOVE = "Remove from the order.",
-    QUEUED_MORE = "Craft one more.",
-    QUEUED_FEWER = "Craft one fewer.",
+    QUEUED_MORE = "Craft one more. Shift-click: five more.",
+    QUEUED_FEWER = "Craft one fewer. Shift-click: five fewer.",
     QUEUED_COST = "Cost (cheapest route)",
     QUEUED_NO_VENDOR = "can't be sold to vendors",
     BUY_YOURSELF = "buy yourself",
@@ -229,6 +229,7 @@ VendorProfit.L = {
     BUY_ANYWAY_HELP = "Click to buy anyway, until the next scan.",
     ORDER_DONE = "|cffffd100Vendor Profit:|r order done: everything queued is crafted.",
     BUY_SCAN_FIRST = "Scans prices first. Then click Buy for each purchase, and confirm it.",
+    BUY_SCAN_NEW = "Scans prices for what was queued since the last scan. Then click Buy for each purchase.",
     SCAN_OPEN_AH = "Open the auction house to scan live prices.",
     FROM_AUCTION = "auction",
     FROM_VENDOR = "vendor",
@@ -412,6 +413,13 @@ function VendorProfit.FormatCoins(copper)
         parts[#parts + 1] = string.format(#parts > 0 and "%02d" or "%d", cop) .. coins.copper
     end
     return table.concat(parts, " ")
+end
+
+-- How many crafts a + or - click on a queue adds or takes off: one, or
+-- SHIFT_STEP with Shift held.
+VendorProfit.SHIFT_STEP = 5
+function VendorProfit.QueueStep()
+    return IsShiftKeyDown() and VendorProfit.SHIFT_STEP or 1
 end
 
 -- Money text styled like Auctionator's Profit line: white, or red with a

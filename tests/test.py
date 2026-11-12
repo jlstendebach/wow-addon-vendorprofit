@@ -628,6 +628,13 @@ Q1 = 'VendorProfit.Panel.FindRow("Rough Bronze Cuirass x1")'
 check("...then - is off", not ev(Q1 + ".icons[3]:IsEnabled()"))
 run('VendorProfit.Order.SetCrafts(1, 0)')
 check("never below one", ev("VendorProfit.Order.Entries()[1].crafts") == 1)
+run('__stub.shift = true; ' + Q1 + '.icons[2]:Click()')
+check("shift-click +: five more", ev("VendorProfit.Order.Entries()[1].crafts") == 6)
+run('VendorProfit.Panel.FindRow("Rough Bronze Cuirass x6").icons[3]:Click()')
+check("shift-click -: five fewer", ev("VendorProfit.Order.Entries()[1].crafts") == 1)
+run('VendorProfit.Order.SetCrafts(1, 3); VendorProfit.Panel.FindRow("Rough Bronze Cuirass x3").icons[3]:Click()')
+check("...never below one", ev("VendorProfit.Order.Entries()[1].crafts") == 1)
+run('__stub.shift = false')
 run('__stub.openedRecipe = nil; __stub.selectedRecipe = nil; ' + Q1 + '.hit:GetScript("OnMouseUp")(' + Q1 + '.hit, "LeftButton")')
 check("clicking the item shows its recipe in the professions window", ev("__stub.selectedRecipe") == 2670)
 run(Q1 + '.hit:GetScript("OnEnter")(' + Q1 + '.hit)')
@@ -990,8 +997,15 @@ run('__stub.requirements[2670] = { { name = "Anvil", met = false } }')
 run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
 check("blacksmithing open away from an anvil: says so, not clickable", ev(CRAFT + ".__text") == "Craft"
       and ev(CRAFT + ".tooltip") == "Needs Anvil nearby to craft Rough Bronze Cuirass" and not ev(CRAFT + ":IsEnabled()"))
-run('__stub.requirements[2670] = { { name = "Anvil", met = true } }; VendorProfit.Panel.Refresh()')
-check("blacksmithing open: craft the cuirasses", ev(CRAFT + ".tooltip") == "Craft Rough Bronze Cuirass, 2 times")
+run('VendorProfit.Panel.PollCraft()')
+check("nothing changed: the check doesn't redraw", ev(CRAFT + ".tooltip") == "Needs Anvil nearby to craft Rough Bronze Cuirass")
+# Walking up to an anvil: no event, but the panel notices within a second.
+run('__stub.requirements[2670] = { { name = "Anvil", met = true } }; VendorProfit.Panel.PollCraft()')
+check("walked up to an anvil (no event): the panel notices, craft the cuirasses", ev(CRAFT + ".tooltip") == "Craft Rough Bronze Cuirass, 2 times"
+      and ev(CRAFT + ":IsEnabled()"))
+run('__stub.requirements[2670] = { { name = "Anvil", met = false } }; VendorProfit.Panel.PollCraft()')
+check("...and walking away", ev(CRAFT + ".tooltip") == "Needs Anvil nearby to craft Rough Bronze Cuirass")
+run('__stub.requirements[2670] = { { name = "Anvil", met = true } }; VendorProfit.Panel.PollCraft()')
 run('__stub.requirements = {}')
 run('VendorProfit.Order.Clear()')
 check("empty order: no craft button", ev(CRAFT) is None)
@@ -1181,6 +1195,27 @@ run('__stub.Advance(3)')
 check("...and done", ev("VendorProfit.Shopper.Status()") == "ready" and ev(BUY + ".tooltip").startswith("Buy 24 Copper Ore"))
 run('__stub.CloseAH()')
 check("no errors", ev("#__stub.errors") == 0)
+
+# Queued after a scan: Buy scans the new items, not "Nothing to buy".
+run, ev = batch_client()
+click(run, "scan"); run('__stub.Advance(3)')
+run('''
+    __stub.items["item:9901"] = { name = "Test Stew", cached = true, sellPrice = 500 }
+    __stub.items["item:9902"] = { name = "Test Meat", cached = true }
+    __stub.auctionPrices[9902] = 10
+    __stub.ah.listings[9902] = { { unitPrice = 10, quantity = 50 } }
+    __stub.ah.searches = {}
+    VendorProfit.Order.AddRecipe({ itemID = 9901, recipeID = 9900, profession = "Cooking", count = 1,
+        reagents = { { items = { 9902 }, quantity = 1 } }, sellPrice = 500 }, 2)
+''')
+# Everything from the first order already bought (it's in the bags).
+run('__stub.bags[2770] = 24; __stub.bags[3576] = 29; __stub.Fire("BAG_UPDATE_DELAYED")')
+check("queued after the scan: Buy offers to scan the new items, not 'Nothing to buy'",
+      ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip") == "Scans prices for what was queued since the last scan. Then click Buy for each purchase.")
+click(run, "buy"); run('__stub.Advance(2)')
+check("...scans just those, then Buy is ready", list(ev("__stub.ah.searches").values()) == [9902]
+      and ev("VendorProfit.Shopper.Status()") == "ready" and ev(BUY + ":IsEnabled()") and ev("#__stub.ah.starts") == 0)
+run('__stub.CloseAH()')
 
 # Another addon's browse replaces our batch lookup: sent again, not waited out.
 run, ev = batch_client()
@@ -1424,8 +1459,54 @@ run(HF + ".views.items:Click()")
 check("Best Sellers over All time: every copper bar sold", any(l.split(" | ")[1] == "9" for l in ev("VendorProfit.HistoryPanel.Lines()").values()))
 run('VendorProfit.HistoryPanel.SetRange("s50")')
 check("...over a range: only the list's", [l.split(" | ")[1] for l in ev("VendorProfit.HistoryPanel.Lines()").values()] == ["3"])
-run('VendorProfit.HistoryPanel.SetRange("all"); VendorProfit.History.MAX_SALES = 500')
+run('VendorProfit.HistoryPanel.SetRange("all"); VendorProfit.History.MAX_SALES = 10000')
 run('table.remove(VendorProfitCharDB.history.purchases)')  # the copper bars bought for this
+
+# Thousands of sales: only the rows that fit are built, refilled as the list scrolls.
+run('''
+    __stub.savedSales, __stub.savedItems = VendorProfitCharDB.history.sales, VendorProfitCharDB.history.items
+    local list = {}
+    for i = 1, 10000 do
+        list[i] = { item = 2840, n = 1, cost = 100, sold = 100 + i, bought = 100, how = "vendor", time = time() - (10000 - i) }
+    end
+    VendorProfitCharDB.history.sales = list
+    VendorProfitCharDB.history.items = nil
+    VendorProfit.HistoryPanel.SetRange("all")
+''')
+run(HF + ".views.sales:Click()")
+check("10,000 sales: only the rows that fit on screen are built", ev("VendorProfit.HistoryPanel.Row(19) ~= nil")
+      and ev("VendorProfit.HistoryPanel.Row(20) == nil") and len(list(ev("VendorProfit.HistoryPanel.Lines()").values())) == 19)
+check("...newest first", ev("VendorProfit.HistoryPanel.Row(1).sale.sold") == 100 + 10000)
+run('local scroll = ' + HF + '.scroll; scroll:SetVerticalScroll(5000 * 18); scroll:GetScript("OnVerticalScroll")(scroll, 5000 * 18)')
+check("scrolled half way: the rows show the 5,001st newest sale on", ev("VendorProfit.HistoryPanel.Row(1).sale.sold") == 100 + 5000
+      and ev("VendorProfit.HistoryPanel.Row(20) == nil"))
+run(HF + '.search:Type("zzz")')
+check("searching back to the top, nothing matching", ev(HF + ".scroll:GetVerticalScroll()") == 0 and ev(HF + ".empty:IsShown()"))
+run(HF + '.search:Type("")')
+run('VendorProfitCharDB.history.sales, VendorProfitCharDB.history.items = __stub.savedSales, __stub.savedItems; VendorProfit.HistoryPanel.Refresh()')
+
+# Sales past the cap are added up per item per day: date ranges still reach them.
+run('VendorProfit.History.MAX_SALES = 5; VendorProfit.History.Bought(2840, 8, 800, "vendor")')
+run('for i = 1, 8 do VendorProfit.History.Sold(2840, 1, 300, "auction") end')
+check("past the cap: the oldest sales added up by day", len(list(ev("VendorProfit.History.Sales()").values())) == 5
+      and ev("(function() local n = 0; for _, items in pairs(VendorProfitCharDB.history.daily) do if items[2840] then n = n + items[2840].n end end; return n end)()") >= 3)
+run('VendorProfit.HistoryPanel.SetRange("d7"); ' + HF + '.views.items:Click()')
+bars = [l for l in ev("VendorProfit.HistoryPanel.Lines()").values() if "Copper Bar" in l]
+recent = ev('''(function()
+    local since, n = time() - 7 * 24 * 60 * 60, 0
+    for _, sale in ipairs(VendorProfitCharDB.history.sales) do if sale.item == 2840 and sale.time >= since then n = n + sale.n end end
+    for day, items in pairs(VendorProfitCharDB.history.daily) do
+        if day >= math.floor(since / VendorProfit.History.DAY) and items[2840] then n = n + items[2840].n end
+    end
+    return n end)()''')
+check("Best Sellers over the last 7 days counts the added-up sales too", len(bars) == 1 and int(bars[0].split(" | ")[1]) == recent and recent >= 8)
+week_profit, week_count = ev("VendorProfit.History.Total(time() - 7 * 24 * 60 * 60)")
+check("...and so does the last 7 days total", week_count >= 8)
+run('VendorProfit.HistoryPanel.SetRange("s50")')
+bars = [l for l in ev("VendorProfit.HistoryPanel.Lines()").values() if "Copper Bar" in l]
+check("a last-so-many-sales range only has the sales on the list", bars[0].split(" | ")[1] == "5")
+run('VendorProfit.HistoryPanel.SetRange("all"); VendorProfit.History.MAX_SALES = 10000; table.remove(VendorProfitCharDB.history.purchases)')
+run(HF + ".views.sales:Click()")
 check("window wider for the history's columns", ev("VendorProfitPanel:GetWidth()") == 540)
 run('SlashCmdList.VENDORPROFIT("history")')
 check("/vprofit history toggles it", not ev("VendorProfit.Panel.IsShown()"))
@@ -1459,8 +1540,35 @@ run('VendorProfitCharDB.history.purchases = {}; VendorProfit.Panel.Refresh()')
 check("none yet: says where they come from", ev("VendorProfit.PurchasePanel.Frame().empty:IsShown()"))
 run('SlashCmdList.VENDORPROFIT("purchases")')
 check("/vprofit purchases toggles it", not ev("VendorProfit.Panel.IsShown()"))
-run('for i = 1, 510 do VendorProfit.History.Bought(2840, 1, 100, "vendor") end')
-check("keeps the last 500", ev("#VendorProfitCharDB.history.purchases") == 500)
+check("keeps up to 5,000 purchases, and 10,000 sales", ev("VendorProfit.History.MAX_PURCHASES") == 5000
+      and ev("VendorProfit.History.MAX_SALES") == 10000)
+run('VendorProfit.History.MAX_PURCHASES = 50; for i = 1, 60 do VendorProfit.History.Bought(2840, 1, 100, "vendor") end')
+check("past the cap: the newest kept", ev("#VendorProfitCharDB.history.purchases") == 50)
+run('VendorProfit.History.MAX_PURCHASES = 5000')
+# Thousands of purchases: only the rows that fit are built.
+run('for i = 1, 2000 do VendorProfit.History.Bought(2840, 1, i, "vendor") end; VendorProfit.Panel.Show("purchases")')
+check("2,000 purchases: only the rows that fit on screen are built", ev("VendorProfit.PurchasePanel.Row(19) ~= nil")
+      and ev("VendorProfit.PurchasePanel.Row(20) == nil") and len(list(ev("VendorProfit.PurchasePanel.Lines()").values())) == 19)
+run('local scroll = VendorProfit.PurchasePanel.Frame().scroll; scroll:SetVerticalScroll(100 * 18); scroll:GetScript("OnVerticalScroll")(scroll, 100 * 18)')
+check("...scrolling refills them", ev("VendorProfit.PurchasePanel.Row(1).purchase.total") == 2000 - 100)
+
+# One auction purchase of 100 arrives as five mails of 20, each with the invoice for all 100.
+run('''
+    __stub.items["item:7912"] = { name = "Solid Stone", cached = true }
+    __stub.invoiceMails = {}
+    for i = 1, 5 do
+        __stub.invoiceMails[i] = { itemID = 7912, n = 20, subject = "Auction won: Solid Stone",
+            invoice = { type = "buyer", itemName = "Solid Stone", bid = 31500, count = 100 } }
+    end
+    __stub.Fire("MAIL_INBOX_UPDATE")
+''')
+run('TakeInboxItem(1)')
+check("a stack's mail: its 20 at the price each (315c), not the whole purchase's 315s", ev(H + ".Recorded(7912)") == 20
+      and ev("VendorProfitCharDB.history.stock[7912][1].cost") == 315)
+run('for i = 1, 4 do __stub.Fire("MAIL_INBOX_UPDATE"); TakeInboxItem(1) end')
+check("the other four mails, though they read the same: all 100 recorded, at 315c each, 315s in all",
+      ev(H + ".Recorded(7912)") == 100 and ev("VendorProfit.History.Purchase(1).total") == 6300
+      and ev('(function() local t = 0; for i = 1, 5 do t = t + VendorProfit.History.Purchase(i).total end; return t end)()') == 31500)
 
 
 # --- Known vendor prices ---------------------------------------------------------------
@@ -1888,6 +1996,14 @@ run("VendorProfit.BestPanel.Row(1).queue:Click(); VendorProfit.BestPanel.Row(1).
 check("+ counts up", ev("VendorProfit.BestPanel.Row(1).queued:GetText()") == "3" and ev("VendorProfit.Order.Entries()[1].crafts") == 3)
 run("VendorProfit.BestPanel.Row(1).unqueue:Click()")
 check("- takes one off", ev("VendorProfit.BestPanel.Row(1).queued:GetText()") == "2" and ev("VendorProfit.Order.Entries()[1].crafts") == 2)
+run("__stub.shift = true; VendorProfit.BestPanel.Row(1).queue:Click()")
+check("shift-click +: five more", ev("VendorProfit.Order.Entries()[1].crafts") == 7
+      and any("queued 5 x Rough Bronze Cuirass" in p for p in ev("__stub.printed").values()))
+run("VendorProfit.BestPanel.Row(1).unqueue:Click()")
+check("shift-click -: five fewer", ev("VendorProfit.Order.Entries()[1].crafts") == 2)
+run("VendorProfit.BestPanel.Row(1).unqueue:Click(); __stub.shift = false")
+check("...fewer than five left: the recipe comes off", ev("#VendorProfit.Order.Entries()") == 0)
+run("VendorProfit.BestPanel.Row(1).queue:Click(); VendorProfit.BestPanel.Row(1).queue:Click()")
 check("recipes not queued show a dash", ev("VendorProfit.BestPanel.Row(2).queued:GetText()") == "|cff808080-|r")
 # Sorting by Q: every recipe, priced or not; ties keep the ranking.
 run("VendorProfit.BestPanel.Row(3).queue:Click()")

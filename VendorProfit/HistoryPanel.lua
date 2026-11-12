@@ -13,7 +13,13 @@
 -- both to recent sales: the last so many days, or the last so many sales.
 -- Every sale ever is added up per item (History.ItemTotals), so the totals at
 -- the top and Best Sellers over All time cover sales the list has dropped;
--- other ranges come from the list, the last History.MAX_SALES sales.
+-- other ranges come from the list (the last History.MAX_SALES sales, in
+-- full) and, for days, from older sales added up per item per day.
+--
+-- The Sales list can hold thousands of sales, so it only ever builds the
+-- rows that fit on screen and refills them as it scrolls, and what it shows
+-- (the sales in range matching the search) is worked out once per change,
+-- not on every scroll.
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -61,7 +67,7 @@ local SORT_STARTS_ASCENDING = { name = true }
 
 -- Ranges, in the menu's order: All time, then the last so many days, then
 -- the last so many sales. Saved per character.
-local DAY = 24 * 60 * 60
+local DAY = History.DAY
 local RANGES = {
     { key = "all" },
     { key = "d7", days = 7 }, { key = "d30", days = 30 }, { key = "d90", days = 90 },
@@ -76,19 +82,39 @@ local frame
 local view = "sales"     -- "sales" or "items" (Best Sellers)
 local filter = ""        -- the search box's text, lowercased
 local shownList          -- view and filter the list was last scrolled for
-local rows = {}          -- Sales rows
+local rows = {}          -- Sales rows: only as many as fit, refilled as it scrolls
 local sellerRows = {}    -- Best Sellers rows
+local salesData = {}     -- the sales the list shows, newest first
+local salesKey           -- what salesData was worked out for
+local RenderSales        -- fills the Sales rows on screen (below)
 
 local function Gray(text)
     return GRAY_FONT_COLOR:WrapTextInColorCode(text)
 end
 
+-- Item names, once the game has them, and in lower case for the search:
+-- looked up once per item, not once per sale.
+local names, lowerNames, loadingNames = {}, {}, {}
+local namesVersion = 0
 local function ItemName(itemID)
-    local name = C_Item.GetItemInfo(itemID)
+    local name = names[itemID]
+    if name then
+        return name
+    end
+    name = C_Item.GetItemInfo(itemID)
     if name == nil then
-        Item:CreateFromItemID(itemID):ContinueOnItemLoad(function() HistoryPanel.Refresh() end)
+        if not loadingNames[itemID] then
+            loadingNames[itemID] = true
+            Item:CreateFromItemID(itemID):ContinueOnItemLoad(function()
+                loadingNames[itemID] = nil
+                namesVersion = namesVersion + 1
+                HistoryPanel.Refresh()
+            end)
+        end
         return "item " .. itemID
     end
+    names[itemID] = name
+    lowerNames[itemID] = name:lower()
     return name
 end
 
@@ -106,7 +132,11 @@ local function Money(copper)
 end
 
 local function Matches(itemID)
-    return filter == "" or ItemName(itemID):lower():find(filter, 1, true) ~= nil
+    if filter == "" then
+        return true
+    end
+    local lower = lowerNames[itemID] or ItemName(itemID):lower()
+    return lower:find(filter, 1, true) ~= nil
 end
 
 local function Column(parent, width, justify)
@@ -152,27 +182,40 @@ local function RangeLabel(range)
     return L.HISTORY_RANGE_ALL
 end
 
--- The sales in the range, newest first.
-local function SalesInRange()
+-- Calls fn(sale) for each sale on the list in the range, newest first.
+local function EachSaleInRange(fn)
     local range = Range()
-    local sales = History.Sales()
-    if range.sales then
-        local list = {}
-        for index = 1, math.min(range.sales, #sales) do
-            list[index] = sales[index]
+    local count = History.SaleCount()
+    local limit = range.sales and math.min(range.sales, count) or count
+    local since = range.days and (time() - range.days * DAY)
+    for index = 1, limit do
+        local sale = History.Sale(index)
+        -- The list is oldest to newest, so the rest are older still.
+        if since and sale.time < since then
+            break
         end
-        return list
-    elseif range.days then
-        local since = time() - range.days * DAY
-        local list = {}
-        for _, sale in ipairs(sales) do
-            if sale.time >= since then
-                list[#list + 1] = sale
-            end
-        end
-        return list
+        fn(sale)
     end
-    return sales
+end
+
+-- The sales the Sales list shows: in range and matching the search, newest
+-- first. Worked out again only when the history, search, range or a loaded
+-- name changes (and, for day ranges, each minute as days roll over).
+local function SalesData()
+    local range = Range()
+    local key = table.concat({ History.Version(), History.SaleCount(), filter, range.key, namesVersion,
+        range.days and math.floor(time() / 60) or 0 }, "/")
+    if key ~= salesKey then
+        salesKey = key
+        local data = {}
+        EachSaleInRange(function(sale)
+            if Matches(sale.item) then
+                data[#data + 1] = sale
+            end
+        end)
+        salesData = data
+    end
+    return salesData
 end
 
 local function RangeMenu(_, root)
@@ -212,10 +255,12 @@ end
 
 -- Sales grouped by item: { item, n (units sold), sales, cost, sold, profit,
 -- average (profit per unit), vendor, auction (units each way), last (time) }.
--- All time: every sale ever, from the totals; other ranges: the list's.
+-- All time: every sale ever, from the totals. Other ranges: the list's,
+-- plus for days, older sales added up by day (whose time is their day).
 function HistoryPanel.BestSellers()
     local byItem, list = {}, {}
-    if Range().key == "all" then
+    local range = Range()
+    if range.key == "all" then
         for itemID, totals in pairs(History.ItemTotals()) do
             local item = { item = itemID }
             for key, value in pairs(totals) do
@@ -224,23 +269,31 @@ function HistoryPanel.BestSellers()
             list[#list + 1] = item
         end
     end
-    for _, sale in ipairs(Range().key == "all" and {} or SalesInRange()) do
-        local item = byItem[sale.item]
+    local function Add(itemID, n, sales, cost, sold, vendor, auction, when)
+        local item = byItem[itemID]
         if item == nil then
-            item = { item = sale.item, n = 0, sales = 0, cost = 0, sold = 0, vendor = 0, auction = 0, last = sale.time }
-            byItem[sale.item] = item
+            item = { item = itemID, n = 0, sales = 0, cost = 0, sold = 0, vendor = 0, auction = 0, last = when }
+            byItem[itemID] = item
             list[#list + 1] = item
         end
-        item.n = item.n + sale.n
-        item.sales = item.sales + 1
-        item.cost = item.cost + sale.cost
-        item.sold = item.sold + sale.sold
-        if sale.how == "vendor" then
-            item.vendor = item.vendor + sale.n
-        else
-            item.auction = item.auction + sale.n
+        item.n = item.n + n
+        item.sales = item.sales + sales
+        item.cost = item.cost + cost
+        item.sold = item.sold + sold
+        item.vendor = item.vendor + vendor
+        item.auction = item.auction + auction
+        item.last = math.max(item.last, when)
+    end
+    if range.key ~= "all" then
+        EachSaleInRange(function(sale)
+            local vendor = sale.how == "vendor" and sale.n or 0
+            Add(sale.item, sale.n, 1, sale.cost, sale.sold, vendor, sale.n - vendor, sale.time)
+        end)
+        if range.days then
+            History.EachDaily(time() - range.days * DAY, function(itemID, t, dayStart)
+                Add(itemID, t.n, t.sales, t.cost, t.sold, t.vendor, t.auction, dayStart)
+            end)
         end
-        item.last = math.max(item.last, sale.time)
     end
     for _, item in ipairs(list) do
         item.profit = item.sold - item.cost
@@ -347,25 +400,41 @@ local function HitArea(row, list, top, onEnter)
     row.hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
-local function GetRow(index)
-    local row = rows[index]
+-- Puts a Sales row at a place in the list (1 = top of the whole list).
+local function PlaceRow(row, index)
+    if row.index == index then
+        return
+    end
+    row.index = index
+    local list = frame.list
+    local top = -(index - 1) * ROW_HEIGHT - 2
+    local function At(region, point, x)
+        region:ClearAllPoints()
+        region:SetPoint(point, list, point, x, top)
+    end
+    At(row.date, "TOPLEFT", 0)
+    At(row.item, "TOPLEFT", ITEM_LEFT)
+    At(row.cost, "TOPRIGHT", COST_RIGHT)
+    At(row.sold, "TOPRIGHT", SOLD_RIGHT)
+    At(row.profit, "TOPRIGHT", PROFIT_RIGHT)
+    row.hit:ClearAllPoints()
+    row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top + 2)
+end
+
+-- The slot-th of the Sales rows that fit on screen.
+local function GetRow(slot)
+    local row = rows[slot]
     if row == nil then
         local list = frame.list
-        local top = -(index - 1) * ROW_HEIGHT - 2
         row = {}
         row.date = Column(list, DATE_WIDTH, "LEFT")
-        row.date:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top)
         row.item = Column(list, ITEM_WIDTH, "LEFT")
-        row.item:SetPoint("TOPLEFT", list, "TOPLEFT", ITEM_LEFT, top)
         row.cost = Column(list, MONEY_WIDTH, "RIGHT")
-        row.cost:SetPoint("TOPRIGHT", list, "TOPRIGHT", COST_RIGHT, top)
         row.sold = Column(list, MONEY_WIDTH, "RIGHT")
-        row.sold:SetPoint("TOPRIGHT", list, "TOPRIGHT", SOLD_RIGHT, top)
         row.profit = Column(list, MONEY_WIDTH, "RIGHT")
-        row.profit:SetPoint("TOPRIGHT", list, "TOPRIGHT", PROFIT_RIGHT, top)
-        HitArea(row, list, top, ShowSaleTooltip)
+        HitArea(row, list, 0, ShowSaleTooltip)
         row.regions = { row.date, row.item, row.cost, row.sold, row.profit, row.hit }
-        rows[index] = row
+        rows[slot] = row
     end
     return row
 end
@@ -520,6 +589,12 @@ local function Create(page)
     frame.list = CreateFrame("Frame", nil, frame.scroll)
     frame.list:SetSize(LIST_WIDTH, ROW_HEIGHT)
     frame.scroll:SetScrollChild(frame.list)
+    -- Scrolling refills the rows on screen; nothing else needs redoing.
+    frame.scroll:HookScript("OnVerticalScroll", function()
+        if view == "sales" then
+            RenderSales()
+        end
+    end)
 
     frame.empty = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.empty:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, LIST_TOP)
@@ -527,25 +602,46 @@ local function Create(page)
     frame.empty:SetWidth(WIDTH - 2 * PADDING)
 end
 
-local function RefreshSales()
-    local shown = 0
-    for _, sale in ipairs(SalesInRange()) do
-        if Matches(sale.item) then
-            shown = shown + 1
-            local row = GetRow(shown)
-            row.sale = sale
-            row.date:SetText(date(L.HISTORY_DATE_FORMAT, sale.time))
-            row.item:SetText(ItemLabel(sale.item, sale.n))
-            row.cost:SetText(Money(sale.cost))
-            row.sold:SetText(Money(sale.sold))
-            row.profit:SetText(Money(sale.sold - sale.cost))
+-- Fills the Sales rows that fit on screen from where the list is scrolled
+-- to: a row more than fits, for the one half in view while scrolling.
+function RenderSales()
+    local data = salesData
+    local first = math.floor((frame.scroll:GetVerticalScroll() or 0) / ROW_HEIGHT)
+    local needed = math.min(VISIBLE_ROWS + 1, math.max(#data - first, 0))
+    for slot = 1, math.max(needed, #rows) do
+        local sale = slot <= needed and data[first + slot]
+        local row = (sale or rows[slot]) and GetRow(slot)
+        if sale then
+            PlaceRow(row, first + slot)
+            if row.sale ~= sale then
+                row.sale = sale
+                row.date:SetText(date(L.HISTORY_DATE_FORMAT, sale.time))
+                row.item:SetText(ItemLabel(sale.item, sale.n))
+                row.cost:SetText(Money(sale.cost))
+                row.sold:SetText(Money(sale.sold))
+                row.profit:SetText(Money(sale.sold - sale.cost))
+            end
             ShowRegions(row, true)
+        elseif row then
+            row.sale = nil
+            ShowRegions(row, false)
         end
     end
-    for index = shown + 1, #rows do
-        rows[index].sale = nil
-        ShowRegions(rows[index], false)
+end
+
+local function RefreshSales()
+    local data = SalesData()
+    local shown = #data
+    -- Data got shorter: don't leave the list scrolled past its end.
+    local maxScroll = math.max(shown - VISIBLE_ROWS, 0) * ROW_HEIGHT
+    if (frame.scroll:GetVerticalScroll() or 0) > maxScroll then
+        frame.scroll:SetVerticalScroll(maxScroll)
     end
+    -- Names may have loaded, or the history changed: refill every row.
+    for _, row in ipairs(rows) do
+        row.sale = nil
+    end
+    RenderSales()
     for _, row in ipairs(sellerRows) do
         row.seller = nil
         ShowRegions(row, false)
@@ -596,6 +692,13 @@ local function Refresh()
         end
     end
 
+    -- Back to the top for another view, search or range.
+    local listKey = view .. "/" .. filter .. "/" .. Range().key
+    if listKey ~= shownList then
+        shownList = listKey
+        frame.scroll:SetVerticalScroll(0)
+    end
+
     local shown = view == "items" and RefreshSellers() or RefreshSales()
 
     -- Headings: the view's own; Best Sellers' sorted one in white, with an
@@ -618,12 +721,6 @@ local function Refresh()
     frame.list:SetHeight(math.max(shown, 1) * ROW_HEIGHT)
     frame.scroll:SetSize(LIST_WIDTH, visible * ROW_HEIGHT)
     frame.scroll:SetShown(shown > 0)
-    -- Back to the top for another view or search.
-    local listKey = view .. "/" .. filter .. "/" .. Range().key
-    if listKey ~= shownList then
-        shownList = listKey
-        frame.scroll:SetVerticalScroll(0)
-    end
     if count == 0 then
         frame.empty:SetText(L.HISTORY_EMPTY)
     elseif filter ~= "" then
