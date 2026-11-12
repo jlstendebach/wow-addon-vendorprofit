@@ -182,7 +182,6 @@ VendorProfit.L = {
     QUEUED_FEWER = "Craft one fewer. Shift-click: five fewer.",
     QUEUED_COST = "Cost (cheapest route)",
     QUEUED_NO_VENDOR = "can't be sold to vendors",
-    BUY_YOURSELF = "buy yourself",
     NOT_SCANNED = "not scanned",
     ONLY_LISTED = "only %d listed",
     CRAFTS = "%d crafts",
@@ -274,6 +273,7 @@ VendorProfit.L = {
     PRICE_UNAVAILABLE = "%s isn't available at that price any more. Scanning it again.",
     BOUGHT = "Bought %d %s for %s.",
     PURCHASE_FAILED = "Buying %s failed. Scanning it again.",
+    AUCTION_GONE = "%s was bought by someone else first. Buy goes on to the next cheapest.",
 }
 
 -- Prices ---------------------------------------------------------------------

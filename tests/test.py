@@ -812,7 +812,64 @@ check("asks for more listings when the first page isn't enough", ev("__stub.ah.m
       and ev("VendorProfit.Shopper.Summary().plan.buy[2770].listed") == 10)
 check("only 10 listed: says so", has_line(ev, "Copper Ore x24", "only 10 listed"))
 check("buys what's there", ev(BUY + ".tooltip").startswith("Buy 10 Copper Ore"))
-check("item that doesn't stack: buy it yourself", has_line(ev, "Tin Bar x29", "buy yourself"))
+check("item that doesn't stack, nothing up with a buyout: not left to buy yourself", not has_line(ev, "buy yourself")
+      and not ev(BUY + ".tooltip").startswith("Buy 29 Tin Bar"))
+
+# --- Items that don't stack: single auctions, one click each -----------------------
+run, ev = shop_client()
+run('__stub.createCount = 4; __stub.bags[2840] = 20; __stub.auctionPrices[3576] = 80'); run(QUEUE + ':Click()')
+run('''
+    __stub.ah.nonCommodity[3576] = true
+    __stub.ah.auctions[3576] = {
+        { auctionID = 105, buyout = 95 }, { auctionID = 101, buyout = 70 }, { auctionID = 103, buyout = 80 },
+        { auctionID = 200, bid = 10 },                -- bid only: never bought
+        { auctionID = 300, buyout = 5, own = true },  -- yours: can't be bought
+        { auctionID = 102, buyout = 75 }, { auctionID = 104, buyout = 90 }, { auctionID = 106, buyout = 99 },
+        { auctionID = 107, buyout = 99 }, { auctionID = 108, buyout = 99 },
+    }
+''')
+run('__stub.OpenAH()'); click(run, "scan"); run('__stub.Advance(3)')
+tin = ev("VendorProfit.Shopper.Summary().plan.buy[3576]")
+n = tin.quantity
+cheapest = [70, 75, 80, 90, 95, 99, 99, 99][:n]
+check("scanned as single auctions: priced at the cheapest buyouts (%d needed)" % n, n >= 2
+      and tin.total == sum(cheapest) and tin.listed == n
+      and has_line(ev, "Tin Bar x%d" % n, "auction") and not has_line(ev, "buy yourself"))
+check("bid-only and your own auctions left out", [r.auctionID for r in ev("VendorProfit.Shopper.Listing(3576).rows").values()]
+      == [101, 102, 103, 104, 105, 106, 107, 108])
+check("Buy offers the cheapest auction", ev(BUY + ".__text") == "Buy"
+      and ev(BUY + ".tooltip") == "Buy 1 Tin Bar for |cffffffff70c|r")
+money = ev("__stub.money")
+click(run, "buy")
+check("one click buys it outright at its buyout: no quote, no Confirm", list(ev("__stub.ah.bids[1]").values()) == [101, 70]
+      and ev("#__stub.ah.starts") == 0 and ev("VendorProfit.Shopper.Status()") == "buying")
+run('__stub.Advance(0.5)')
+check("won: recorded, and Buy moves to the next", ev("VendorProfit.Shopper.Status()") == "ready"
+      and ev("VendorProfitCharDB.order.spent") == 70 and ev("__stub.money") == money - 70 and ev("__stub.bags[3576]") == 1
+      and ev("(VendorProfit.Shopper.Message())") == "Bought 1 Tin Bar for |cffffffff70c|r."
+      and ev(BUY + ".tooltip") == "Buy 1 Tin Bar for |cffffffff75c|r")
+check("one fewer to buy", ev("VendorProfit.Shopper.Summary().plan.buy[3576].quantity") == n - 1)
+searches = ev("#__stub.ah.searches")
+run('__stub.ah.goneNext = true'); click(run, "buy"); run('__stub.Advance(0.5)')
+check("bought by someone else first: says so, and Buy goes on to the next cheapest without a new scan",
+      "bought by someone else first" in ev("(VendorProfit.Shopper.Message())")
+      and ev("VendorProfit.Shopper.Status()") == "ready" and ev("#__stub.ah.searches") == searches
+      and ev(BUY + ".tooltip") == "Buy 1 Tin Bar for |cffffffff80c|r" and ev("VendorProfitCharDB.order.spent") == 70)
+run('__stub.ah.bidError = ERR_NOT_ENOUGH_MONEY'); click(run, "buy"); run('__stub.Advance(2)')
+check("any other error: nothing recorded, and it scans the item again",
+      ev("VendorProfitCharDB.order.spent") == 70 and ev("#__stub.ah.searches") == searches + 1
+      and ev("VendorProfit.Shopper.Status()") == "ready")
+run('__stub.ah.noBidReply = true'); click(run, "buy"); run('__stub.Advance(16)')
+check("no reply: not recorded, and says so", ev("VendorProfitCharDB.order.spent") == 70
+      and "No reply buying Tin Bar" in ev("(VendorProfit.Shopper.Message())"))
+run('__stub.Advance(3); __stub.Fire("AUCTION_HOUSE_SHOW_NOTIFICATION", Enum.AuctionHouseNotification.AuctionWon)')
+check("...a late win is still recorded", ev("VendorProfitCharDB.order.spent") == 70 + 80)
+run('__stub.Fire("AUCTION_HOUSE_SHOW_NOTIFICATION", Enum.AuctionHouseNotification.AuctionWon)')
+check("...once", ev("VendorProfitCharDB.order.spent") == 70 + 80)
+run('__stub.ah.noBidReply = false; VendorProfitCharDB.order.spent = 0; VendorProfit.Order.Changed()')
+run('__stub.Fire("UI_ERROR_MESSAGE", 0, ERR_ITEM_NOT_FOUND)')
+check("an error while not buying is left alone", ev("VendorProfit.Shopper.Status()") == "ready")
+check("no errors buying single auctions", ev("#__stub.errors") == 0)
 
 # --- Queue rules and saving -------------------------------------------------------
 run, ev = shop_client()

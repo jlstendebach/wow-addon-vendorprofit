@@ -24,8 +24,14 @@
 -- needs finishing the order to still be profitable, unless you choose Buy
 -- anyway.
 --
--- Items that don't stack (gear and the like) are listed but not bought here:
--- buy those yourself.
+-- Items that don't stack (gear and the like) are sold as separate auctions,
+-- each with its own buyout, not pooled. Their scan reads every auction with
+-- a buyout (bid-only ones are skipped: the panel never bids), cheapest each
+-- first, and one click buys one auction outright at its buyout
+-- (C_AuctionHouse.PlaceBid, as Auctionator does). There's no quote to
+-- confirm: an auction's buyout is fixed and already on the button. The game
+-- says "won" when it's bought; if someone else bought it first it says the
+-- item wasn't found, and that auction is dropped so Buy goes on to the next.
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -70,7 +76,10 @@ local SORTS = { { sortOrder = 0, reverseSort = false } } -- by price, cheapest f
 local status = "closed"
 local buyAfterScan = false   -- Buy clicked before scanning: say to click it again once scanned
 local message, messageIsError
-local listings = {}     -- itemID -> { commodity = bool, rows = { { unitPrice, quantity }, ... } }
+-- itemID -> { commodity = bool, rows = { { unitPrice, quantity }, ... } },
+-- cheapest first; rows of items that don't stack are single auctions and
+-- also have auctionID and buyout (their total).
+local listings = {}
 local scanQueue = {}    -- itemIDs waiting to be scanned
 local scanTotal = 0     -- items in this scan, for "Scanning 2 of 5"
 local scanDone = 0
@@ -78,7 +87,7 @@ local scanning          -- { itemID, tries, moreRequests }; callbacks for an old
 local failed = {}       -- itemIDs whose scan failed this time, so they aren't retried in a loop
 local batch             -- the scan's first, batch lookup: { prices, checked } (see BestCrafts.LookUpItems)
 local lookup            -- that lookup while it runs
-local purchase          -- { itemID, quantity, budget, quote }
+local purchase          -- { itemID, quantity, budget, quote, auctionID (single auctions) }
 local unanswered        -- a confirmed purchase that timed out; recorded if it succeeds late
 local override = false  -- Buy anyway: buy even when the order isn't profitable
 local summary           -- see Shopper.Summary
@@ -119,19 +128,25 @@ end
 
 -- Listings -------------------------------------------------------------------
 
--- Walks the cheapest listings for up to quantity. Returns total cost and how
--- many are listed (at most quantity).
+-- Walks the cheapest listings for up to quantity. Returns the total cost,
+-- how many are listed (at most quantity), and how many that buys: a single
+-- auction is bought whole, so it can be more than quantity.
 function Shopper.Walk(listing, quantity)
     local total, got = 0, 0
     for _, row in ipairs(listing.rows) do
         if got >= quantity then
             break
         end
-        local take = math.min(row.quantity, quantity - got)
-        total = total + take * row.unitPrice
-        got = got + take
+        if row.buyout then
+            total = total + row.buyout
+            got = got + row.quantity
+        else
+            local take = math.min(row.quantity, quantity - got)
+            total = total + take * row.unitPrice
+            got = got + take
+        end
     end
-    return total, got
+    return total, math.min(got, quantity), got
 end
 
 local function ListedQuantity(listing)
@@ -140,6 +155,16 @@ local function ListedQuantity(listing)
         n = n + row.quantity
     end
     return n
+end
+
+-- Takes a single auction out of the listings (bought, or gone).
+local function RemoveAuction(listing, auctionID)
+    for index, row in ipairs(listing.rows) do
+        if row.auctionID == auctionID then
+            table.remove(listing.rows, index)
+            return
+        end
+    end
 end
 
 -- Removes what was just bought from the front of the listings.
@@ -159,16 +184,16 @@ function Shopper.Listing(itemID)
     return listings[itemID]
 end
 
--- Prices for planning: the vendor price as usual, and for scanned stackable
--- items the average price of buying `need` of them now (nil if none listed,
--- so the plan crafts or uses a vendor instead). Items only in the batch
--- lookup count at their lowest listed price (nil if none listed).
+-- Prices for planning: the vendor price as usual, and for scanned items the
+-- average price of buying `need` of them now (nil if none listed, so the
+-- plan crafts or uses a vendor instead). Items only in the batch lookup
+-- count at their lowest listed price (nil if none listed).
 local function LivePrices(need)
     return function(itemID)
         local vendor, auction = VendorProfit.GetBuyPrices(itemID)
         local listing = listings[itemID]
-        if listing and listing.commodity then
-            local total, got = Shopper.Walk(listing, need[itemID] or 1)
+        if listing then
+            local total, _, got = Shopper.Walk(listing, need[itemID] or 1)
             auction = got > 0 and total / got or nil
         elseif batch and batch.checked[itemID] then
             auction = batch.prices[itemID]
@@ -196,7 +221,7 @@ end
 --   unscanned      auction items not scanned yet
 --   short          auction items with fewer listed than needed
 -- Each auction buy line also gets: total (cost now), listed (how many can be
--- bought), manual (true for items that don't stack), unscanned.
+-- bought), unscanned.
 function Shopper.Recompute()
     local need = {}
     local plan
@@ -223,7 +248,7 @@ function Shopper.Recompute()
     local remaining, unscanned, short = 0, {}, {}
     for _, line in ipairs(plan.buyOrder) do
         local listing = listings[line.itemID]
-        if line.source == "auction" and listing and listing.commodity then
+        if line.source == "auction" and listing then
             line.total, line.listed = Shopper.Walk(listing, line.quantity)
             if line.listed < line.quantity then
                 short[#short + 1] = line
@@ -232,12 +257,8 @@ function Shopper.Recompute()
             line.total = (line.unitPrice or 0) * line.quantity
             line.listed = nil
             if line.source == "auction" then
-                if listing then
-                    line.manual = true
-                else
-                    line.unscanned = true
-                    unscanned[#unscanned + 1] = line.itemID
-                end
+                line.unscanned = true
+                unscanned[#unscanned + 1] = line.itemID
             end
         end
         remaining = remaining + line.total
@@ -280,13 +301,19 @@ function Shopper.Summary()
     return summary or Shopper.Recompute()
 end
 
--- The next purchase: the first stackable auction item still needed, as much
--- as is listed. Returns { itemID, quantity, budget } or nil.
+-- The next purchase: the first auction item still needed. A stackable item
+-- as much as is listed; one that doesn't stack, its cheapest auction.
+-- Returns { itemID, quantity, budget, auctionID (single auctions) } or nil.
 function Shopper.NextPurchase()
     local s = Shopper.Summary()
     for _, line in ipairs(s.plan.buyOrder) do
         local listing = listings[line.itemID]
-        if line.source == "auction" and listing and listing.commodity and line.quantity > 0 then
+        if line.source == "auction" and listing and not listing.commodity and line.quantity > 0 then
+            local row = listing.rows[1]
+            if row then
+                return { itemID = line.itemID, quantity = row.quantity, budget = row.buyout, auctionID = row.auctionID }
+            end
+        elseif line.source == "auction" and listing and listing.commodity and line.quantity > 0 then
             local quantity = math.min(line.quantity, ListedQuantity(listing))
             if quantity > 0 then
                 local budget = Shopper.Walk(listing, quantity)
@@ -655,7 +682,25 @@ local function OnMessageDropped()
     end
 end
 
--- Buy click: asks for a price quote for the next purchase.
+-- Buys a single auction outright at its buyout: straight from the click,
+-- which is the only way the game allows it. Nothing to confirm.
+local function BuyAuction(current)
+    status = "buying"
+    current.quote = current.budget
+    C_AuctionHouse.PlaceBid(current.auctionID, current.budget)
+    C_Timer.After(Shopper.PURCHASE_TIMEOUT, function()
+        if purchase == current and status == "buying" then
+            SetMessage(string.format(L.NO_PURCHASE_REPLY, ItemName(current.itemID)), true)
+            unanswered = current
+            purchase = nil
+            Rescan(current.itemID)
+        end
+    end)
+    Changed()
+end
+
+-- Buy click: asks for a price quote for the next purchase, or buys the next
+-- single auction.
 function Shopper.Buy()
     if status ~= "ready" then
         return
@@ -675,9 +720,13 @@ function Shopper.Buy()
         return
     end
     purchase = nextPurchase
-    status = "quoting"
     SetMessage(nil)
     Order.BeforePurchase(purchase.itemID)
+    if purchase.auctionID then
+        BuyAuction(purchase)
+        return
+    end
+    status = "quoting"
     RequestQuote(purchase)
     local current = purchase
     C_Timer.After(Shopper.QUOTE_TIMEOUT, function()
@@ -819,13 +868,116 @@ local function OnCommodityResults(itemID)
     FinishScanItem(itemID, listing)
 end
 
+-- Reads the single auctions of an item that doesn't stack: those with a
+-- buyout that aren't yours, cheapest each first.
+local function ReadItemResults(itemKey)
+    local rows = {}
+    for index = 1, C_AuctionHouse.GetNumItemSearchResults(itemKey) do
+        local info = C_AuctionHouse.GetItemSearchResultInfo(itemKey, index)
+        if info and info.auctionID and info.buyoutAmount and info.buyoutAmount > 0
+            and not info.containsOwnerItem and not info.containsAccountItem then
+            local quantity = math.max(info.quantity or 1, 1)
+            rows[#rows + 1] = { auctionID = info.auctionID, buyout = info.buyoutAmount, quantity = quantity,
+                unitPrice = info.buyoutAmount / quantity }
+        end
+    end
+    table.sort(rows, function(a, b)
+        if a.unitPrice ~= b.unitPrice then
+            return a.unitPrice < b.unitPrice
+        end
+        return a.buyout < b.buyout
+    end)
+    return rows
+end
+
 local function OnItemResults(itemKey)
     local current = scanning
     if current == nil or type(itemKey) ~= "table" or itemKey.itemID ~= current.itemID then
         return
     end
-    -- Doesn't stack: listed for you to buy yourself.
-    FinishScanItem(current.itemID, { commodity = false, rows = {} })
+    local full = C_AuctionHouse.HasFullItemSearchResults(itemKey)
+    -- As with stackable items, an answer can come with nothing loaded
+    -- although there are auctions; ask again.
+    if not C_AuctionHouse.HasSearchResults(itemKey)
+        or (not full and C_AuctionHouse.GetNumItemSearchResults(itemKey) == 0) then
+        if current.tries < Shopper.SEARCH_RETRIES then
+            SendSearch()
+        else
+            FinishScanItem(current.itemID, { commodity = false, rows = {} })
+        end
+        return
+    end
+    local listing = { commodity = false, rows = ReadItemResults(itemKey) }
+    local line = Shopper.Summary().plan.buy[current.itemID]
+    local needed = line and line.quantity or 1
+    if not full and ListedQuantity(listing) < needed and current.moreRequests < Shopper.MORE_RESULTS_REQUESTS then
+        current.moreRequests = current.moreRequests + 1
+        C_AuctionHouse.RequestMoreItemSearchResults(itemKey)
+        return
+    end
+    FinishScanItem(current.itemID, listing)
+end
+
+-- A single auction bought: the game says the auction was won.
+local function OnAuctionWon()
+    if (purchase == nil or status ~= "buying") and unanswered and unanswered.auctionID then
+        -- One that timed out went through after all.
+        local late = unanswered
+        unanswered = nil
+        Order.RecordPurchase(late.itemID, late.quantity, late.quote)
+        SetMessage(string.format(L.BOUGHT, late.quantity, ItemName(late.itemID), VendorProfit.FormatMoney(late.quote)))
+        Shopper.Recompute()
+        Changed()
+        return
+    end
+    if purchase == nil or status ~= "buying" or not purchase.auctionID then
+        return
+    end
+    unanswered = nil
+    local bought = purchase
+    Order.RecordPurchase(bought.itemID, bought.quantity, bought.quote)
+    local listing = listings[bought.itemID]
+    if listing then
+        RemoveAuction(listing, bought.auctionID)
+    end
+    SetMessage(string.format(L.BOUGHT, bought.quantity, ItemName(bought.itemID), VendorProfit.FormatMoney(bought.quote)))
+    EndPurchase("ready")
+end
+
+local WON = Enum.AuctionHouseNotification and Enum.AuctionHouseNotification.AuctionWon
+local function OnNotification(notification)
+    if WON ~= nil and notification == WON then
+        OnAuctionWon()
+    end
+end
+
+-- Buying a single auction failed. The game says so as an error message:
+-- "item not found" means someone else bought it first, so that auction is
+-- dropped and Buy goes on to the next cheapest; anything else scans the item
+-- again.
+local function OnErrorMessage(_, text)
+    if purchase == nil or status ~= "buying" or not purchase.auctionID or text == nil then
+        return
+    end
+    local itemID = purchase.itemID
+    if text == ERR_ITEM_NOT_FOUND then
+        local listing = listings[itemID]
+        if listing then
+            RemoveAuction(listing, purchase.auctionID)
+        end
+        SetMessage(string.format(L.AUCTION_GONE, ItemName(itemID)), true)
+        EndPurchase("ready")
+        return
+    end
+    for _, name in ipairs({ "ERR_AUCTION_DATABASE_ERROR", "ERR_AUCTION_HIGHER_BID", "ERR_AUCTION_BID_OWN",
+        "ERR_NOT_ENOUGH_MONEY", "ERR_ITEM_MAX_COUNT" }) do
+        if _G[name] ~= nil and text == _G[name] then
+            SetMessage(string.format(L.PURCHASE_FAILED, ItemName(itemID)), true)
+            purchase = nil
+            Rescan(itemID)
+            return
+        end
+    end
 end
 
 -- Auction house open and close ------------------------------------------------------
@@ -868,7 +1020,9 @@ local events = CreateFrame("Frame")
 for _, event in ipairs({
     "PLAYER_INTERACTION_MANAGER_FRAME_SHOW", "PLAYER_INTERACTION_MANAGER_FRAME_HIDE",
     "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED",
-    "COMMODITY_SEARCH_RESULTS_UPDATED", "COMMODITY_SEARCH_RESULTS_ADDED", "ITEM_SEARCH_RESULTS_UPDATED",
+    "COMMODITY_SEARCH_RESULTS_UPDATED", "COMMODITY_SEARCH_RESULTS_ADDED",
+    "ITEM_SEARCH_RESULTS_UPDATED", "ITEM_SEARCH_RESULTS_ADDED",
+    "AUCTION_HOUSE_SHOW_NOTIFICATION", "AUCTION_HOUSE_SHOW_FORMATTED_NOTIFICATION", "UI_ERROR_MESSAGE",
     "COMMODITY_PRICE_UPDATED", "COMMODITY_PRICE_UNAVAILABLE",
     "COMMODITY_PURCHASE_SUCCEEDED", "COMMODITY_PURCHASE_FAILED",
     "AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED",
@@ -887,6 +1041,12 @@ local handlers = {
         OnCommodityResults(itemID or (scanning and scanning.itemID))
     end,
     ITEM_SEARCH_RESULTS_UPDATED = OnItemResults,
+    ITEM_SEARCH_RESULTS_ADDED = function(itemKey)
+        OnItemResults(itemKey or (scanning and C_AuctionHouse.MakeItemKey(scanning.itemID)))
+    end,
+    AUCTION_HOUSE_SHOW_NOTIFICATION = OnNotification,
+    AUCTION_HOUSE_SHOW_FORMATTED_NOTIFICATION = OnNotification,
+    UI_ERROR_MESSAGE = OnErrorMessage,
     COMMODITY_PRICE_UPDATED = OnPriceUpdated,
     COMMODITY_PRICE_UNAVAILABLE = OnPriceUnavailable,
     COMMODITY_PURCHASE_SUCCEEDED = OnPurchaseSucceeded,

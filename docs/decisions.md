@@ -100,6 +100,20 @@ time" route mode).
   automatically, and re-searching the item after 4s. Both moved the request
   out of the click, which made things worse.
 
+- **Items that don't stack** (gear: Green Leather Armor as a reagent) used
+  to be listed as "buy yourself". Now they're bought too: the scan reads
+  each single auction (with a buyout, not yours; bid-only ones skipped, the
+  panel never bids), cheapest each first, and one click buys one auction
+  outright with `PlaceBid` at its buyout, as Auctionator does. No Buy and
+  Confirm: there's no quote, the buyout is fixed and on the button. Bought
+  on the "auction won" notification; failed on an error message. "Item not
+  found" (someone else bought it first) drops that auction and Buy goes on
+  to the next cheapest without a new scan; any other error scans the item
+  again; no reply in 15s says so, and a late win is still recorded.
+  Unconfirmed in game: the notification and error events for a buyout on
+  Forever (taken from TSM's handling), and whether a search finds suffixed
+  versions of an item ("of the Monkey").
+
 ### Scanning: sharing the auction house
 
 The auction house is shared with its own Browse tab and other addons
