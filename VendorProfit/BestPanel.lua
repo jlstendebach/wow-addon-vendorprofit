@@ -172,7 +172,7 @@ local function GetRow(index)
         row.left:SetWidth(NAME_WIDTH)
         row.left:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top - 4)
         -- Clicking the name shows the recipe in the professions window (while
-        -- it's open).
+        -- it's open); hovering it shows what you've made selling the item.
         row.hit = CreateFrame("Frame", nil, list)
         row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top)
         row.hit:SetSize(NAME_WIDTH, ROW_HEIGHT)
@@ -182,6 +182,12 @@ local function GetRow(index)
                 ShowRecipe(self.recipe)
             end
         end)
+        row.hit:SetScript("OnEnter", function(self)
+            if self.recipe then
+                BestPanel.ShowSalesTooltip(self, row.left, self.recipe.item)
+            end
+        end)
+        row.hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
         -- Investment: what one craft's items cost along the cheapest route.
         row.investment = Column(MONEY_WIDTH, INVESTMENT_RIGHT)
         row.right = Column(MONEY_WIDTH, PROFIT_RIGHT)
@@ -293,15 +299,23 @@ local function SortEntries(entries)
     return ranked
 end
 
-local function FormatROI(roi)
-    if roi == nil then
-        return Gray("-")
+local FormatROI = VendorProfit.FormatROI
+
+-- What you've made selling an item, over all time: its Best Sellers figures
+-- (Profit History), with the profit and ROIs. Placed like an item's
+-- tooltip: above the row, past the end of its name.
+function BestPanel.ShowSalesTooltip(owner, nameText, itemID)
+    VendorProfit.SetNameTooltipOwner(owner, nameText)
+    GameTooltip:SetText(ItemLabel(itemID))
+    local HistoryPanel = VendorProfit.HistoryPanel
+    local item = HistoryPanel and HistoryPanel.AllTime(itemID)
+    if item and item.n > 0 then
+        GameTooltip:AddLine(L.BEST_SALES_TITLE, NORMAL_FONT_COLOR.r, NORMAL_FONT_COLOR.g, NORMAL_FONT_COLOR.b)
+        HistoryPanel.AddSalesLines(item, true)
+    else
+        GameTooltip:AddLine(L.BEST_NO_SALES, 1, 1, 1, true)
     end
-    local text = string.format("%d%%", math.floor(roi * 100 + (roi >= 0 and 0.5 or -0.5)))
-    if roi < 0 then
-        return RED_FONT_COLOR:WrapTextInColorCode(text)
-    end
-    return text
+    GameTooltip:Show()
 end
 
 -- Filters ---------------------------------------------------------------------

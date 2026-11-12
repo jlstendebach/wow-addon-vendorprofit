@@ -49,6 +49,9 @@ time" route mode).
   No rank numbers (they took space and meant little once you sort and
   filter). Clicking a recipe's name shows it in the professions window (only
   while it's open); the magnifying-glass button was removed for that.
+  Hovering the name shows the item's Best Sellers figures over all time
+  (not Profit History's range, which would be a hidden setting here), with
+  profit and both ROIs, placed like an item's tooltip.
 - **Q (queued)** went through several tries before a column stuck: "x2" after
   the name (hard to see, and next to + it read as "add 2"), "(2 queued)"
   (too long), a bag icon, a gold row highlight, a centered "Queued"/"#"
@@ -186,9 +189,15 @@ opens.
   change (a version counter), item names are cached. Pagination was rejected:
   the data is local, and pages fight search and ranges.
 - **Profit History views**: Sales and Best Sellers (one row per item: units
-  sold, average profit each, total; sortable), a search box and a Range menu
-  (all time, last 7/30/90 days, last 50/100/250 sales). "Sold to" moved from
-  a column into the tooltip.
+  sold, average profit each, total, Avg ROI, ROI; sortable), a search box
+  and a Range menu (all time, last 7/30/90 days, last 50/100/250 sales).
+  "Sold to" moved from a column into the tooltip.
+- **Two ROIs**: ROI is all the profit over all the cost (the return on the
+  money). Avg ROI is each unit's own return on its cost, averaged per unit
+  like Avg profit, so a few cheap, very profitable sales show there more
+  than in ROI. Avg ROI needs per-sale detail, so the totals keep roiSum and
+  roiUnits; saves from before were filled in from the sales list (sales
+  already added up by day aren't in it).
 
 ## Gold
 

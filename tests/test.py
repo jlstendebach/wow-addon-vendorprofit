@@ -1454,9 +1454,17 @@ HF = "VendorProfit.HistoryPanel.Frame()"
 run(HF + ".views.items:Click()")
 sellers = list(ev("VendorProfit.HistoryPanel.Lines()").values())
 ring_profit = 100 + 30 + 200 - round(market)
-check("Best Sellers: one row per item: units sold, average profit each, total",
+# ROI: each sale's own return on its cost, averaged per unit (Avg ROI), and
+# all the profit over all the cost (ROI).
+ring_sales = [(s.n, s.cost, s.sold) for s in ev("VendorProfit.History.Sales()").values()]
+avg_roi = sum((sold - cost) / cost * n for n, cost, sold in ring_sales) / sum(n for n, _, _ in ring_sales)
+all_roi = sum(sold - cost for _, cost, sold in ring_sales) / sum(cost for _, cost, _ in ring_sales)
+pct = lambda r: "%d%%" % int(r * 100 + 0.5)
+check("Best Sellers: one row per item: units sold, average profit each, total, average ROI, ROI",
       ev("VendorProfit.HistoryPanel.View()") == "items" and len(sellers) == 1
-      and sellers[0] == "|Ticon2903:0|t Test Ring | 3 | %s | %s" % (ev('VendorProfit.FormatMoney(%s)' % (ring_profit / 3)), ev('VendorProfit.FormatMoney(%d)' % ring_profit))
+      and sellers[0] == "|Ticon2903:0|t Test Ring | 3 | %s | %s | %s | %s" % (ev('VendorProfit.FormatMoney(%s)' % (ring_profit / 3)),
+          ev('VendorProfit.FormatMoney(%d)' % ring_profit), pct(avg_roi), pct(all_roi))
+      and avg_roi != all_roi
       and ev(HF + ".views.items.__lit") and not ev(HF + ".views.sales.__lit"))
 check("...sorted by total profit by default, its heading marked", ev("VendorProfit.HistoryPanel.Sort().key") == "profit"
       and "Arrow-Down" in ev(HF + ".sellerHeadings.profit.text:GetText()") and not ev(HF + ".headings[1]:IsShown()"))
@@ -1466,6 +1474,18 @@ check("hover: how many in how many sales, the averages, vendor and auction count
       tip[1][0] == "3 sold in 3 sales" and ("Sold to vendors", "2") in tip and ("Sold at auction", "1") in tip
       and any(t[0] == "Average cost" for t in tip) and tip[-1][0].startswith("Last sold "))
 run("GameTooltip:Hide()")
+check("ROI headings, sortable", ev(HF + ".sellerHeadings.averageRoi.label") == "Avg ROI" and ev(HF + ".sellerHeadings.roi.label") == "ROI")
+run(HF + ".sellerHeadings.averageRoi:Click()")
+check("...by Avg ROI, highest first", ev("VendorProfit.HistoryPanel.Sort().key") == "averageRoi"
+      and not ev("VendorProfit.HistoryPanel.Sort().ascending") and "Arrow-Down" in ev(HF + ".sellerHeadings.averageRoi.text:GetText()"))
+run("VendorProfitCharDB.bestSellersSort = nil")
+# Saved before the average ROI was kept: worked out from the sales list.
+run('VendorProfitCharDB.history.roiTotals = nil; for _, i in pairs(VendorProfitCharDB.history.items) do i.roiSum, i.roiUnits = nil, nil end')
+check("average ROI missing from the save: worked out from the sales list",
+      abs(ev("VendorProfit.History.ItemTotals()[2903].roiSum") - avg_roi * 3) < 1e-9
+      and ev("VendorProfit.History.ItemTotals()[2903].roiUnits") == 3 and ev("VendorProfitCharDB.history.roiTotals"))
+run("VendorProfit.HistoryPanel.Refresh()")
+check("...and Best Sellers shows it", list(ev("VendorProfit.HistoryPanel.Lines()").values())[0].endswith("| %s | %s" % (pct(avg_roi), pct(all_roi))))
 # A second item, to sort and search.
 run('local list = VendorProfitCharDB.history.sales; '
     'list[#list + 1] = { item = 2840, n = 5, cost = 500, sold = 1000, bought = 500, how = "auction", time = time() }; '
@@ -2184,6 +2204,37 @@ run('__stub.tradeSkill.linked = true; VendorProfit.BestPanel.Refresh()')
 check("no profession of yours open: says to open one", best() == []
       and "Open one of your professions" in ev("" + B + ".status:GetText()"))
 run('__stub.tradeSkill.linked = false')
+# Hovering a recipe: what you've made selling its item, all time.
+run('''
+    local list = VendorProfitCharDB.history and VendorProfitCharDB.history.sales or {}
+    VendorProfitCharDB.history = VendorProfitCharDB.history or {}
+    VendorProfitCharDB.history.sales = list
+    list[#list + 1] = { item = 2866, n = 2, cost = 1000, sold = 3000, bought = 1000, how = "auction", time = time() - 60 }
+    list[#list + 1] = { item = 2866, n = 1, cost = 200, sold = 300, bought = 200, how = "vendor", time = time() }
+    VendorProfitCharDB.history.items = nil
+    VendorProfit.BestPanel.Refresh()
+''')
+def best_row(item):
+    for i in range(1, 10):
+        if ev("VendorProfit.BestPanel.Row(%d) and VendorProfit.BestPanel.Row(%d).hit.recipe and VendorProfit.BestPanel.Row(%d).hit.recipe.item" % (i, i, i)) == item:
+            return "VendorProfit.BestPanel.Row(%d)" % i
+R = best_row(2866)
+run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
+tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
+check("hovering a recipe: its sales, all time, with profit and ROIs",
+      ev("GameTooltip.shown") and "Rough Bronze Cuirass" in tip[0][0] and tip[1][0] == "Your sales, all time"
+      and tip[2][0] == "3 sold in 2 sales" and ("Avg profit", ev("VendorProfit.FormatMoney(700)")) in tip
+      and ("Profit", ev("VendorProfit.FormatMoney(2100)")) in tip
+      and ("Avg ROI", "150%") in tip and ("ROI", "175%") in tip  # (200% x 2 + 50%) / 3; 2100 / 1200
+      and ("Sold to vendors", "1") in tip and ("Sold at auction", "2") in tip and tip[-1][0].startswith("Last sold "))
+check("...placed like an item's tooltip, past the end of its name", ev("GameTooltip.anchor") == "ANCHOR_NONE"
+      and ev("GameTooltip.point[1]") == "BOTTOMLEFT")
+run(R + '.hit:GetScript("OnLeave")(' + R + '.hit)')
+check("...gone when the mouse leaves", not ev("GameTooltip.shown"))
+R = best_row(2865)
+run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
+check("a recipe whose item hasn't sold: says so", [l.left for l in ev("GameTooltip.lines").values()][1] == "No sales of it recorded yet.")
+run("GameTooltip:Hide()")
 check("no errors from Best Crafts", ev("#__stub.errors") == 0)
 
 # --- Gold ------------------------------------------------------------------------------

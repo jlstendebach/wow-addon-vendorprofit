@@ -152,6 +152,9 @@ VendorProfit.L = {
     HISTORY_TO_VENDORS = "Sold to vendors",
     HISTORY_AT_AUCTION = "Sold at auction",
     HISTORY_LAST_SOLD = "Last sold %s",
+    HISTORY_AVERAGE_ROI = "Avg ROI",
+    BEST_SALES_TITLE = "Your sales, all time",
+    BEST_NO_SALES = "No sales of it recorded yet.",
     TAB_GOLD = "Gold",
     GOLD_TOTAL = "Gold: %s across %d characters. Last 7 days: %s.",
     GOLD_TOTAL_ONE = "Gold: %s on one character. Last 7 days: %s.",
@@ -429,6 +432,19 @@ function VendorProfit.FormatCoins(copper)
         parts[#parts + 1] = string.format(#parts > 0 and "%02d" or "%d", cop) .. coins.copper
     end
     return table.concat(parts, " ")
+end
+
+-- A return on investment as a whole percentage: red with a minus for a
+-- loss, a gray dash when there's none (nothing was spent).
+function VendorProfit.FormatROI(roi)
+    if roi == nil then
+        return GRAY_FONT_COLOR:WrapTextInColorCode("-")
+    end
+    local text = string.format("%d%%", math.floor(roi * 100 + (roi >= 0 and 0.5 or -0.5)))
+    if roi < 0 then
+        return RED_FONT_COLOR:WrapTextInColorCode(text)
+    end
+    return text
 end
 
 -- How many crafts a + or - click on a queue adds or takes off: one, or
