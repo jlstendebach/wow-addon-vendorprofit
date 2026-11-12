@@ -4,8 +4,8 @@
 -- buttons on their sections' headings) and Best Crafts (BestPanel.lua).
 --
 -- It's a window of its own, not docked to the auction house or any other
--- window (it opens by itself at the auction house if something is queued).
--- It opens centered until you drag it; from then on it opens where you left
+-- window, and only opens or closes when you open or close it. It opens
+-- centered until you drag it; from then on it opens where you left
 -- it, saved per character, until /vprofit reset centers it again. /vprofit
 -- or /vendorprofit toggles it.
 
@@ -1091,45 +1091,12 @@ Panel.AddPage({
     refresh = function() return RefreshShopping() end,
 })
 
--- Opens with the auction house when something is queued. It only ever
--- closes when you close it.
-local lastStatus = Shopper.Status()
-Shopper.OnChange(function()
-    local status = Shopper.Status()
-    if lastStatus == "closed" and status ~= "closed" and not Order.IsEmpty() then
-        -- Already open (on Best Crafts, say): stays on its tab.
-        Panel.Show(not Panel.IsShown() and "shopping" or nil)
-    end
-    lastStatus = status
-    Panel.Refresh()
-end)
-
--- Opens at the bank when there's something to take out of it.
-local bankWasOpen = Banker.IsBankOpen()
-Banker.OnChange(function()
-    local open = Banker.IsBankOpen()
-    if open and not bankWasOpen and not Order.IsEmpty() and not Panel.IsShown() then
-        local _, _, fromBank = Panel.SplitUses(Shopper.Summary().plan.uses)
-        if #fromBank > 0 then
-            Panel.Show("shopping")
-        end
-    end
-    bankWasOpen = open
-    Panel.Refresh()
-end)
-
--- Opens at a vendor that sells something the order still needs.
-local merchantWasOpen = Merchant.IsOpen()
-Merchant.OnChange(function()
-    local open = Merchant.IsOpen()
-    if open and not merchantWasOpen and not Order.IsEmpty() and not Panel.IsShown() then
-        if #Merchant.Offers(Shopper.Summary().plan) > 0 then
-            Panel.Show("shopping")
-        end
-    end
-    merchantWasOpen = open
-    Panel.Refresh()
-end)
+-- The window only opens and closes when you open or close it: not at the
+-- auction house, bank or a vendor, and not on Queue. It redraws as they
+-- change while it's open.
+Shopper.OnChange(Panel.Refresh)
+Banker.OnChange(Panel.Refresh)
+Merchant.OnChange(Panel.Refresh)
 
 -- Walking up to a crafting station (or away from one) changes what can be
 -- crafted, but the game sends no event for it, so the panel would keep saying

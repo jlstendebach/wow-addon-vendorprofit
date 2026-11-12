@@ -18,8 +18,11 @@ time" route mode).
 - **One window, pages as side tabs** (Shopping List, Best Crafts, Profit
   History, Purchase History, Gold). Strata HIGH and toplevel, so it sits above
   the professions window and auction house. A minimum height keeps every side
-  tab on the window. It never closes by itself: only its close button, the
-  title-bar button or `/vprofit`.
+  tab on the window.
+- **Opens and closes only when you do**: `/vprofit` (and its tab commands),
+  the title-bar button, its close button. It used to open by itself at the
+  auction house, bank and a vendor with an order, and on Queue (switching to
+  the Shopping List); now Queue just says so in chat.
 - **Closes in combat**: the window template's close button closes through
   HideUIPanel, which the game blocks in combat (it silently did nothing), so
   it's rewired to hide the window directly. The window isn't protected (see

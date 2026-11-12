@@ -417,6 +417,8 @@ def shop_client(sell=600, before_load=""):
     # Have: 12 Bronze Bars in bags, 3 Copper Bars in bags and 2 in the bank.
     run('__stub.bags[2841] = 12; __stub.bags[2840] = 3; __stub.bank[2840] = 2')
     run('__stub.SetRecipe(%s)' % CUIRASS)
+    # The window only opens when you open it: open it, as a player would.
+    run('VendorProfit.Panel.Show("shopping")')
     return run, ev
 
 
@@ -485,9 +487,11 @@ check("queue button below the route's Vendor Profit line", ev(QUEUE + ":IsShown(
 check("queue button above the tooltip area so it can be clicked",
       ev(QUEUE + ":GetFrameLevel()") > ev(SECTION + ".hover:GetFrameLevel()"))
 run('__stub.createCount = 10')
+run('VendorProfit.Panel.Hide()')
 run(QUEUE + ':Click()')
 check("queued 10 from the Create box", ev("VendorProfit.Order.Entries()[1].crafts") == 10)
-check("panel opens", ev("VendorProfit.Panel.IsShown()"))
+check("Queue leaves the window shut: it only opens when you open it", not ev("VendorProfit.Panel.IsShown()"))
+run('VendorProfit.Panel.Show("shopping")')
 check("a window of its own: centered, not docked to the professions window", ev("VendorProfitPanel.__point[1]") == "CENTER" and ev("VendorProfitPanel.__point[2] == UIParent"))
 
 # --- The plan --------------------------------------------------------------------
@@ -521,7 +525,8 @@ check("buy button waits for the auction house",
 
 run('VendorProfit.Panel.Show("best")')
 run(QUEUE + ':Click()')
-check("queuing from the crafting screen switches the window to the Shopping List", ev("VendorProfit.Panel.ActiveTab()") == "shopping")
+check("queuing leaves the window on its tab", ev("VendorProfit.Panel.ActiveTab()") == "best")
+run('VendorProfit.Panel.Show("shopping")')
 check("queuing again adds to the same entry", ev("#VendorProfit.Order.Entries()") == 1 and ev("VendorProfit.Order.Entries()[1].crafts") == 20)
 run('VendorProfit.Order.Entries()[1].crafts = 10; VendorProfit.Order.Changed()')
 
@@ -530,8 +535,10 @@ run('''
     __stub.ah.listings[2770] = { { unitPrice = 50, quantity = 10 }, { unitPrice = 55, quantity = 20 }, { unitPrice = 80, quantity = 100 } }
     __stub.ah.listings[3576] = { { unitPrice = 75, quantity = 10 }, { unitPrice = 78, quantity = 30 } }
 ''')
-run('__stub.OpenAH()')
-check("opens at the auction house, not docked to it", ev("VendorProfit.Panel.IsShown()") and ev("VendorProfitPanel.__point[1]") == "CENTER" and ev("VendorProfitPanel.__point[2] == UIParent"))
+run('VendorProfit.Panel.Hide(); __stub.OpenAH()')
+check("the auction house doesn't open the window", not ev("VendorProfit.Panel.IsShown()"))
+run('VendorProfit.Panel.Show("shopping")')
+check("opened at the auction house: centered, not docked to it", ev("VendorProfit.Panel.IsShown()") and ev("VendorProfitPanel.__point[1]") == "CENTER" and ev("VendorProfitPanel.__point[2] == UIParent"))
 check("Buy on before a scan: it scans first", ev("VendorProfit.Shopper.Status()") == "idle" and ev(BUY + ".__text") == "Buy"
       and ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip") == "Scans prices first. Then click Buy for each purchase, and confirm it.")
 check("Scan is on the Profit heading", ev(SCAN + ".__text") == "Scan" and ev(SCAN + ":IsEnabled()"))
@@ -601,7 +608,10 @@ check("reopens where it was moved",
 run('__stub.CloseAH()')
 check("panel stays open when the auction house closes", ev("VendorProfit.Panel.IsShown()"))
 run('VendorProfit.Panel.Hide(); __stub.OpenAH()')
-check("moved panel opens with the AH where it was left", ev("VendorProfit.Panel.IsShown()") and ev("VendorProfitPanel.__point[2] == UIParent"))
+check("...and stays shut when it opens again", not ev("VendorProfit.Panel.IsShown()"))
+run('VendorProfit.Panel.Show()')
+check("moved panel opens where it was left", ev("VendorProfit.Panel.IsShown()") and ev("VendorProfitPanel.__point[2] == UIParent")
+      and ev("VendorProfitPanel.__point[4]") == 300)
 run('SlashCmdList.VENDORPROFIT("reset")')
 check("/vprofit reset centers it again", ev("VendorProfitCharDB.panel") is None and ev("VendorProfitPanel.__point[1]") == "CENTER" and ev("VendorProfitPanel.__point[2] == UIParent"))
 run('__stub.CloseAH()')
@@ -829,7 +839,9 @@ dump = run('''
 run5, ev5 = route_client("VendorProfitCharDB = " + dump)
 check("order saved across sessions", ev5("VendorProfit.Order.Entries()[1].crafts") == 3)
 run5('__stub.OpenAH()')
-check("panel opens with the AH when something is queued", ev5("VendorProfit.Panel.IsShown()"))
+check("the AH doesn't open the window, even with something queued", not ev5("VendorProfit.Panel.IsShown()"))
+run5('SlashCmdList.VENDORPROFIT("")')
+check("/vprofit opens the panel", ev5("VendorProfit.Panel.IsShown()"))
 run5('SlashCmdList.VENDORPROFIT("")')
 check("/vprofit toggles the panel", not ev5("VendorProfit.Panel.IsShown()"))
 run5('VendorProfit.Order.Remove(1)')
@@ -1619,8 +1631,9 @@ run('__stub.OpenMerchant({ { itemID = 3371, price = 20, stackCount = 5 } })')
 check("a vendor that doesn't sell it: no buying, window stays shut", not ev("VendorProfit.Panel.IsShown()"))
 run('__stub.CloseMerchant()')
 run('__stub.OpenMerchant({ { itemID = 3371, price = 20 }, { itemID = 2880, price = 90 } })')
-check("a vendor that sells it: the window opens, not docked to the vendor", ev("VendorProfit.Panel.IsShown()")
-      and ev("VendorProfitPanel.__point[2] == UIParent"))
+check("a vendor that sells it: the window still stays shut", not ev("VendorProfit.Panel.IsShown()"))
+run('VendorProfit.Panel.Show("shopping")')
+check("opened at the vendor: not docked to it", ev("VendorProfitPanel.__point[2] == UIParent"))
 check("Buy on, saying what it buys here", ev(BUY + ":IsEnabled()") and ev(BUY + ".__text") == "Buy"
       and ev(BUY + ".tooltip") == "Buy from this vendor: 3 Weak Flux, for |cffffffff2s 70c|r.")
 money = ev("__stub.money")
@@ -1698,7 +1711,8 @@ check("take button on the bank heading, off until the bank opens",
       and ev(TAKE + ".tooltip") == "Open your bank to take these out.")
 run('VendorProfit.Panel.Hide()')
 run('__stub.OpenBank()')
-check("opening the bank opens the panel when there's something to fetch", ev("VendorProfit.Panel.IsShown()"))
+check("the bank doesn't open the window, even with something to fetch", not ev("VendorProfit.Panel.IsShown()"))
+run('VendorProfit.Panel.Show("shopping")')
 check("not docked to the bank", ev("VendorProfitPanel.__point[1]") == "CENTER" and ev("VendorProfitPanel.__point[2] == UIParent"))
 moves = ev("(VendorProfit.Banker.PlanMoves({ { itemID = 2840, quantity = 7 }, { itemID = 3576, quantity = 7 } }))")
 mv = [(m.bag, m.slot, m.itemID, m.quantity) for m in moves.values()]
@@ -2090,9 +2104,9 @@ check("auction house opens with an order: stays on Best Crafts", ev("VendorProfi
 run('__stub.CloseAH()')
 check("auction house closes: Best Crafts stays open", ev("VendorProfit.BestPanel.IsShown()"))
 run('VendorProfit.Panel.Hide(); __stub.OpenAH()')
-check("window closed, auction house opens with an order: Shopping List", ev("VendorProfit.Panel.ActiveTab()") == "shopping" and ev("VendorProfit.Panel.IsShown()"))
+check("window closed, auction house opens with an order: stays shut", not ev("VendorProfit.Panel.IsShown()"))
 run('__stub.CloseAH()')
-check("...and stays open when it closes", ev("VendorProfit.Panel.IsShown()"))
+check("...and when it closes", not ev("VendorProfit.Panel.IsShown()"))
 run('VendorProfit.Order.Clear(); VendorProfit.Panel.Show("best")')
 
 # Closing the professions window leaves it open; /vprofit best toggles it.

@@ -107,7 +107,7 @@ VendorProfit.L = {
     -- Queue button
     QUEUE = "Queue",
     QUEUE_HELP = "Adds %d crafts of this recipe (the number in the Create box) to your shopping order.",
-    QUEUED = "|cffffd100Vendor Profit:|r queued %d x %s. Open the auction house to shop for it.",
+    QUEUED = "|cffffd100Vendor Profit:|r queued %d x %s. Shop for it on the Shopping List (/vprofit).",
 
     -- Shopping panel
     PANEL_TITLE = "Vendor Profit",
