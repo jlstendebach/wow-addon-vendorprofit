@@ -20,6 +20,10 @@ time" route mode).
   the professions window and auction house. A minimum height keeps every side
   tab on the window. It never closes by itself: only its close button, the
   title-bar button or `/vprofit`.
+- **Closes in combat**: the window template's close button closes through
+  HideUIPanel, which the game blocks in combat (it silently did nothing), so
+  it's rewired to hide the window directly. The window isn't protected (see
+  the secure Open button under Crafting), so that works in combat.
 - **Docks** beside the auction house, bank, vendor or professions window
   (in that order) until you move it; then it opens where you left it.
 - **Spacing**: the gap between a page's title, its totals line and its table
@@ -207,9 +211,10 @@ opens.
   months, last year, all time. Saved per character, like Profit History's.
   A range never starts before the first point. Zoom is for the moment:
   changing the range or reopening the tab resets it.
-- **The line** is a 3-pixel stroke drawn with our own texture that fades
-  out across its width (`Media/GraphLine.png`): a plain color fill looked
-  jagged next to TSM's. Green when the stretch shown ends at least as high
+- **The line** is a 2.5-pixel stroke drawn with our own texture that fades
+  out across its width (`Media/GraphLine.png`), not snapped to the pixel
+  grid: a plain color fill looked jagged next to TSM's, and with snapping on
+  a slanted line stair-steps. Green when the stretch shown ends at least as high
   as it starts, red when lower, gold while hovered (as TSM).
 - **Hover**, as TSM: a gold guide line, a round dot on the line and the gold
   then above the guide's top, exact to the copper. No tooltip (the first

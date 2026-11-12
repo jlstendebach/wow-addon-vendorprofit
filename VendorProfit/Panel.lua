@@ -890,6 +890,12 @@ local function Create()
         frame.Inset:Hide()
     end
     frame:SetTitle(L.PANEL_TITLE)
+    -- The template's close button closes through HideUIPanel, which the
+    -- game blocks in combat (it does nothing then). The window isn't
+    -- protected, so hiding it directly works in combat too.
+    if frame.CloseButton then
+        frame.CloseButton:SetScript("OnClick", function() Panel.Hide() end)
+    end
     frame:SetWidth(WIDTH)
     frame:SetHeight(200)
     frame:EnableMouse(true)

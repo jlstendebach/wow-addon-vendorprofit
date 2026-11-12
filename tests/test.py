@@ -2204,7 +2204,8 @@ check("all time: from the first point to now", ev(graph + ".start") == (MIN0 - 2
 check("drawn as one line through the samples", len(ev(GP + ".Segments()")) == ev("#" + graph + ".values") - 1
       and ev("#" + graph + ".values") > 100)
 check("green: ends higher than it starts", ev(GP + ".Segments()[1].__vertexColor[2]") == 1)
-check("a soft 3-pixel line, our own texture", ev(GP + ".Segments()[1].__thickness") == 3
+check("a soft, thin line, our own texture, not snapped to pixels", ev(GP + ".Segments()[1].__thickness") == 2.5
+      and ev(GP + ".Segments()[1].__snap") == False and ev(GP + ".Segments()[1].__snapBias") == 0
       and ev(GP + ".Segments()[1].__texture") == "Interface\\AddOns\\VendorProfit\\Media\\GraphLine.png"
       and (ADDON / "Media" / "GraphLine.png").exists() and (ADDON / "Media" / "GraphDot.png").exists())
 check("gold labels down the side, round amounts", list(ev(GP + ".YLabels()").values())[:2] == ["10g", "15g"])
@@ -2321,6 +2322,11 @@ check("no errors from the graph", ev("#__stub.errors") == 0)
 run, ev = client(CLOCK + '__stub.money = 200000; VendorProfitDB = { gold = { ["Josten-Blackwolf"] = { name = "Josten", realm = "Blackwolf", log = "%d:0" } } }' % (MIN0 - 100))
 run('VendorProfit.Panel.Show("gold")')
 check("the zero line reads 0g on a gold axis", list(ev(GP + ".YLabels()").values())[0] == "0g")
+
+# Closing the window in combat: the template's close button can't, ours can.
+run('__stub.inCombat = true; VendorProfitPanel.CloseButton:Click()')
+check("the close button closes the window in combat", not ev("VendorProfit.Panel.IsShown()"))
+run('__stub.inCombat = false')
 
 # One point just now still draws a line.
 run, ev = client(CLOCK)
