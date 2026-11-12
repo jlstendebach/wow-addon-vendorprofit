@@ -29,7 +29,9 @@ time" route mode).
   the secure Open button under Crafting), so that works in combat.
 - **Not docked**: it's a window of its own (it used to dock beside the
   auction house, bank, vendor or professions window). It opens centered
-  until you move it, then where you left it. It's only ever anchored to
+  near the top of the screen until you move it, then where you left it,
+  held by its top left corner either way (by its center, its edges jumped
+  as tabs of different sizes switched). It's only ever anchored to
   UIParent: anchored to a protected window it would be protected too, and
   hiding it in combat would be blocked.
 - **Spacing**: the gap between a page's title, its totals line and its table

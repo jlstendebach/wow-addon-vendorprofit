@@ -137,9 +137,8 @@ function OpenButton.Hide()
     end
 end
 
--- Keeps the cover over its button when the panel moves without redrawing:
--- its height changes while it's centered, say. Gone from view: the cover
--- goes too.
+-- Keeps the cover over its button when the panel moves without redrawing
+-- (dragged, or the display changed). Gone from view: the cover goes too.
 function OpenButton.Follow()
     if button == nil or not button:IsShown() or target == nil or InCombatLockdown() then
         return

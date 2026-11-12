@@ -5,7 +5,7 @@
 --
 -- It's a window of its own, not docked to the auction house or any other
 -- window, and only opens or closes when you open or close it. It opens
--- centered until you drag it; from then on it opens where you left
+-- centered near the top of the screen until you drag it; from then on it opens where you left
 -- it, saved per character, until /vprofit reset centers it again. /vprofit
 -- or /vendorprofit toggles it.
 
@@ -86,8 +86,8 @@ local function GetRow(index)
         row.button:SetMotionScriptsWhileDisabled(true)
         row.button:SetScript("OnEnter", function(self)
             -- The mouse only reaches the Craft button when the open-profession
-            -- cover isn't over it: the window moved under it (its height
-            -- changed while centered, or the display did), or it was
+            -- cover isn't over it: the window moved under it (dragged, or
+            -- the display changed), or it was
             -- hidden without the panel redrawing. Put it back under the mouse
             -- so the click opens the profession.
             if craftCover and craftCover.button == self and not Order.IsEmpty() then
@@ -941,16 +941,22 @@ function Panel.SavePosition()
     VendorProfitCharDB.panel = { left = frame:GetLeft(), top = frame:GetTop() }
 end
 
--- Where you left it, or centered. Only ever anchored to UIParent: anchored
--- to a protected window (the professions window, say) it would be protected
--- too, and the game would block hiding it in combat.
+-- How far below the top of the screen it opens until you move it.
+local DEFAULT_TOP = -120
+
+-- Where you left it, or centered across the screen near its top. Held by
+-- its top left corner either way: tabs differ in width and height, and
+-- anchored by its center the window's edges would jump on every tab
+-- switch. Only ever anchored to UIParent: anchored to a protected window
+-- (the professions window, say) it would be protected too, and the game
+-- would block hiding it in combat.
 local function Place()
     frame:ClearAllPoints()
     local saved = SavedPosition()
     if saved and saved.left and saved.top then
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", saved.left, saved.top)
     else
-        frame:SetPoint("CENTER", UIParent, "CENTER")
+        frame:SetPoint("TOPLEFT", UIParent, "TOP", -frame:GetWidth() / 2, DEFAULT_TOP)
     end
 end
 
@@ -1010,7 +1016,7 @@ function Panel.Hide()
     end
 end
 
--- Forgets where you moved it, so it's centered again.
+-- Forgets where you moved it, so it's centered near the top again.
 function Panel.ResetPosition()
     if VendorProfitCharDB then
         VendorProfitCharDB.panel = nil
