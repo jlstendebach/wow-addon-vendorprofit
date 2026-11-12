@@ -4,6 +4,7 @@
 ## Author: Josh
 ## Version: @project-version@
 ## Dependencies: Auctionator
+## SavedVariables: VendorProfitDB
 ## SavedVariablesPerCharacter: VendorProfitCharDB
 ## IconTexture: Interface\Icons\INV_Misc_Coin_02
 
@@ -25,8 +26,10 @@ Banker.lua
 Merchant.lua
 Auctions.lua
 History.lua
+Gold.lua
 Panel.lua
 BestCrafts.lua
 BestPanel.lua
 HistoryPanel.lua
 PurchasePanel.lua
+GoldPanel.lua

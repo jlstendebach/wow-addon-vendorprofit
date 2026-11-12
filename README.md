@@ -212,7 +212,7 @@ Items the plan gets from a vendor (Weak Flux, thread, vials) are bought at a ven
 
 **Mail.** Auction purchases may arrive in your mailbox rather than your bags. A purchase counts as **in the mail** until that many more of the item show up in your bags or bank, so it's counted either way and never bought twice. Opening the mailbox corrects that from what's actually in the inbox, so a purchase that arrived without the panel seeing it (say you used it up as it arrived) stops counting.
 
-**The window.** The Shopping List and Best Crafts are tabs down the right side of one Vendor Profit window. Drag it anywhere. From then on it opens where you left it (saved per character). It opens with the auction house when something is queued (on the Shopping List, unless it's already open on another tab), but only ever closes when you close it (its close button, the title-bar button, or `/vprofit`). `/vprofit reset` docks it beside the auction house or professions window again.
+**The window.** The Shopping List, Best Crafts, Profit History, Purchase History and Gold are tabs down the right side of one Vendor Profit window. Drag it anywhere. From then on it opens where you left it (saved per character). It opens with the auction house when something is queued (on the Shopping List, unless it's already open on another tab), but only ever closes when you close it (its close button, the title-bar button, or `/vprofit`). `/vprofit reset` docks it beside the auction house or professions window again.
 
 The order is saved per character. Each queued recipe has three small buttons: **-** and **+** craft one fewer or one more (five with **Shift-click**; at least one), and **x** takes it out of the order; removing the last one empties the order and its record. Hover a queued recipe to see its own cost along the cheapest route and its vendor and auction profit at today's prices; click it to show its recipe in the professions window (when that window is open). Its name is red when neither would make money.
 
@@ -256,6 +256,28 @@ The **Purchase History** tab (or `/vprofit purchases`) lists your last 5,000 pur
 
 Vendor purchases show up straight away, from any vendor. Auction house purchases show up when you take them out of the mailbox, read from their mail, however you bought them. These are the same purchases whose costs feed the Profit History.
 
+## Gold
+
+The **Gold** tab (or `/vprofit gold`) graphs your gold over time, added up over your characters, like TradeSkillMaster's Player Gold graph. Only your characters' own gold counts: no guild bank. The line is green when the stretch shown ends at least as high as it starts, red when it ends lower. The line at the top gives the gold of the characters shown now, and how much it changed over the last 7 days.
+
+```
+Gold
+Gold: 28g across 2 characters. Last 7 days: +11g.
+[Characters] [x]                                   [All time]
+  30g |                                        ____/
+  20g |                       ________________/
+  10g |______________________/
+       10/25          11/01          11/08
+Drag across the graph to zoom in. Right-click to zoom back out.
+```
+
+- **Hover** the graph for a guide line with the gold then at its top, and the time beside the page's title. The line turns gold while you hover.
+- **Drag** across the graph to zoom into that stretch; **right-click** zooms back out. Changing the range or reopening the tab also zooms out.
+- **Range**: the last 24 hours, 7 or 30 days, 3 or 6 months, the last year, or **All time** (the default). It's saved per character and never starts before the first point recorded.
+- **Characters**: a checkbox for each character, with its gold now (and its realm, if you have characters on more than one). Untick one to leave it out of the graph and the totals; the button then says how many are shown (*Characters (2 of 7)*), and the red **x** beside it shows everyone again. What's ticked is saved for the whole account, and a new character starts ticked.
+
+Each character's gold is saved when it changes, at most once a minute, from its first login with the addon on. Before that, a character counts at the gold it had then: an alt that sat untouched had that gold all along, so it doesn't show up as a sudden jump. Gold the game reports as 0 just after logging in or a loading screen is checked again each second for 30 seconds before it's believed, since the game sometimes reports 0 for a moment; while logging out or reloading it reports 0 too, so nothing is recorded then. Points older than 90 days are thinned to one an hour.
+
 ## How it works
 
 - Auctionator makes its crafting info frame (`AuctionatorCraftingInfoProfessionsFrame`) the first time the professions window opens. The addon hooks the function that makes it, attaches right after, and retries on the next frame in case it sees the event first.
@@ -292,6 +314,9 @@ Files:
 | `History.lua` | Profit history: what items cost you as they come in, and their sales |
 | `HistoryPanel.lua` | The Profit History tab |
 | `PurchasePanel.lua` | The Purchase History tab |
+| `Gold.lua` | Each character's gold over time, saved for the account |
+| `GoldPanel.lua` | The Gold tab: the graph, its Range and Characters menus |
+| `Media/` | The Gold graph's line and dot textures (our own) |
 
 Saved data, per character (`VendorProfitCharDB`):
 
@@ -303,6 +328,12 @@ Saved data, per character (`VendorProfitCharDB`):
 - `auctions = { counts, time }`: how many of each item you had up for auction at your last visit to the auction house, and when.
 - `history = { stock, sales, items, daily, purchases }`: what the items you have cost you, your last 10,000 sales, every sale added up per item, older sales added up per item per day, and your last 5,000 purchases.
 - `historyRange`: Profit History's range.
+- `goldRange`: the Gold tab's range.
+
+Saved data, for the whole account (`VendorProfitDB`):
+
+- `gold[name-realm] = { name, realm, log }`: each character's gold over time. `log` is one string, `minute:copper;...` oldest first (minutes since 1970), each point holding until the next.
+- `goldHidden[name-realm] = true`: characters left out of the Gold tab.
 
 Opening a profession uses a secure action button casting the profession's spell, as TradeSkillMaster does in Forever. It's a separate invisible button laid over the Craft button rather than part of the panel, because a secure button inside the panel would make the panel protected and the game would block showing, hiding or moving it in combat. It's only placed out of combat and hidden as combat starts.
 

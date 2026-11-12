@@ -1211,6 +1211,8 @@ SlashCmdList.VENDORPROFIT = function(arg)
         Panel.Toggle("history")
     elseif command == "purchases" then
         Panel.Toggle("purchases")
+    elseif command == "gold" then
+        Panel.Toggle("gold")
     elseif command == "prices" then
         VendorProfit.Merchant.ShowPriceLines()
     elseif command == "stations" then

@@ -65,7 +65,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "Auctions.lua", "History.lua", "Panel.lua", "BestCrafts.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "Auctions.lua", "History.lua", "Gold.lua", "Panel.lua", "BestCrafts.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua", "GoldPanel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("the .toc keeps the placeholder; releases and deploys stamp the real version", TOC_VERSION == "@project-version@")
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
@@ -2114,6 +2114,227 @@ check("no profession of yours open: says to open one", best() == []
       and "Open one of your professions" in ev("" + B + ".status:GetText()"))
 run('__stub.tradeSkill.linked = false')
 check("no errors from Best Crafts", ev("#__stub.errors") == 0)
+
+# --- Gold ------------------------------------------------------------------------------
+
+# A clock the tests move (time() is fixed otherwise), with local dates.
+CLOCK = '''
+__stub.clock = 1800000000
+time = function(t) if t then return os.time(t) end return __stub.clock end
+__stub.playerName, __stub.realm = "Josten", "Blackwolf"
+'''
+G = "VendorProfit.Gold"
+GP = "VendorProfit.GoldPanel"
+KEY = "Josten-Blackwolf"
+MIN0 = 1800000000 // 60
+
+
+run, ev = client(CLOCK)
+check("login: this character's gold is recorded", ev('%s.Characters()[1].key' % G) == KEY
+      and ev('%s.Characters()[1].copper' % G) == 1000000 and ev('%s.Characters()[1].name' % G) == "Josten")
+check("saved for the whole account", ev('VendorProfitDB.gold["%s"].realm' % KEY) == "Blackwolf")
+run('__stub.money = 1200000; __stub.Fire("PLAYER_MONEY")')
+check("changed again within the minute: the last value wins, one point",
+      ev('%s.ValueAt("%s", __stub.clock)' % (G, KEY)) == 1200000)
+run('__stub.clock = __stub.clock + 120; __stub.money = 1500000; __stub.Fire("PLAYER_MONEY")')
+run('__stub.Fire("PLAYER_LOGOUT")')
+check("logout writes the log as one string", ev('VendorProfitDB.gold["%s"].log' % KEY)
+      == "%d:1200000;%d:1500000" % (MIN0, MIN0 + 2))
+run('__stub.money = 1200000; __stub.Fire("PLAYER_MONEY"); __stub.Fire("PLAYER_LOGOUT")')
+check("changed back within the minute: as if it never changed",
+      ev('VendorProfitDB.gold["%s"].log' % KEY) == "%d:1200000" % MIN0)
+run('__stub.clock = __stub.clock + 120; __stub.Fire("PLAYER_MONEY"); __stub.Fire("PLAYER_LOGOUT")')
+check("no change, no point", ev('VendorProfitDB.gold["%s"].log' % KEY) == "%d:1200000" % MIN0)
+run('__stub.clock = __stub.clock + 120; __stub.Fire("PLAYER_LEAVING_WORLD"); __stub.money = 0; __stub.Fire("PLAYER_MONEY"); __stub.Fire("PLAYER_LOGOUT")')
+check("logout and /reload: the 0 the game reports then isn't recorded",
+      ev('VendorProfitDB.gold["%s"].log' % KEY) == "%d:1200000" % MIN0)
+run('__stub.Fire("PLAYER_ENTERING_WORLD"); __stub.Advance(2); __stub.money = 1300000; __stub.Advance(2)')
+check("back from a loading screen: gold read again, a 0 retried first",
+      ev('%s.ValueAt("%s", __stub.clock)' % (G, KEY)) == 1300000)
+run('__stub.money = 1200000; __stub.Fire("PLAYER_MONEY")')
+check("before the first point: counts at its first value",
+      ev('%s.ValueAt("%s", 0)' % (G, KEY)) == 1200000)
+
+# Reload: the saved string is read back, and thinned. Points from 100 days
+# ago every 10 minutes keep only each hour's last.
+old = 1800000000 // 60 - 100 * 24 * 60
+old = old - old % 60
+seeded = ";".join("%d:%d" % (old + 10 * i, 100 + i) for i in range(18)) + ";%d:5000;%d:6000" % (MIN0 - 30, MIN0 - 20)
+run('VendorProfitDB.gold["%s"].log = "%s"; %s.Reload(); __stub.money = 6000; __stub.Fire("PLAYER_LOGIN")' % (KEY, seeded, G))
+run('__stub.Fire("PLAYER_LOGOUT")')
+check("older than 90 days: thinned to each hour's last point; recent points kept",
+      ev('VendorProfitDB.gold["%s"].log' % KEY) == "%d:105;%d:111;%d:117;%d:5000;%d:6000"
+      % (old + 50, old + 110, old + 170, MIN0 - 30, MIN0 - 20))
+
+# Gold read as 0 just after login is asked again before it's believed.
+run2, ev2 = client(CLOCK + '__stub.money = 0')
+check("0 at login: not believed yet", ev2('%s.Characters()[1]' % G) is None)
+run2('__stub.money = 4200; __stub.Advance(3)')
+check("...recorded once the game reports it", ev2('%s.Characters()[1].copper' % G) == 4200)
+run3, ev3 = client(CLOCK + '__stub.money = 0')
+run3('__stub.Advance(31)')
+check("...really 0 after 30 seconds: recorded", ev3('%s.Characters()[1].copper' % G) == 0)
+run4, ev4 = client(CLOCK + '__stub.money = 0')
+run4('__stub.money = 0; __stub.Fire("PLAYER_MONEY")')
+check("a real change to 0 is recorded at once", ev4('%s.Characters()[1].copper' % G) == 0)
+
+# Two characters: Slysten's log (another realm-mate) from the save.
+DAY = 86400
+slysten = "%d:20000;%d:30000" % (MIN0 - 10 * 24 * 60, MIN0 - 3 * 24 * 60)
+josten = "%d:100000;%d:150000;%d:250000" % (MIN0 - 20 * 24 * 60, MIN0 - 9 * 24 * 60, MIN0 - 60)
+run, ev = client(CLOCK + '''
+__stub.money = 250000
+VendorProfitDB = { gold = {
+    ["Josten-Blackwolf"] = { name = "Josten", realm = "Blackwolf", log = "%s" },
+    ["Slysten-Blackwolf"] = { name = "Slysten", realm = "Blackwolf", log = "%s" },
+} }''' % (josten, slysten))
+check("characters listed by name", ev('%s.Characters()[1].name' % G) == "Josten" and ev('%s.Characters()[2].name' % G) == "Slysten")
+check("totals add the characters up", ev('%s.Total(%s.Shown(), __stub.clock)' % (G, G)) == 280000
+      and ev('%s.Total(%s.Shown(), __stub.clock - 8 * 86400)' % (G, G)) == 170000)
+
+run('SlashCmdList.VENDORPROFIT("gold")')
+GF = GP + ".Frame()"
+check("/vprofit gold opens the Gold tab", ev("VendorProfit.Panel.ActiveTab()") == "gold" and ev("VendorProfit.Panel.IsShown()"))
+check("its heading", ev(GF + ".heading:GetText()") == "Gold")
+check("total and the last 7 days' change, across the characters",
+      ev(GF + ".total:GetText()") == "Gold: |cffffffff28g|r across 2 characters. Last 7 days: +|cffffffff11g|r.")
+graph = GP + ".Graph()"
+check("all time: from the first point to now", ev(graph + ".start") == (MIN0 - 20 * 24 * 60) * 60
+      and ev(graph + ".finish") == 1800000000)
+check("drawn as one line through the samples", len(ev(GP + ".Segments()")) == ev("#" + graph + ".values") - 1
+      and ev("#" + graph + ".values") > 100)
+check("green: ends higher than it starts", ev(GP + ".Segments()[1].__vertexColor[2]") == 1)
+check("a soft 3-pixel line, our own texture", ev(GP + ".Segments()[1].__thickness") == 3
+      and ev(GP + ".Segments()[1].__texture") == "Interface\\AddOns\\VendorProfit\\Media\\GraphLine.png"
+      and (ADDON / "Media" / "GraphLine.png").exists() and (ADDON / "Media" / "GraphDot.png").exists())
+check("gold labels down the side, round amounts", list(ev(GP + ".YLabels()").values())[:2] == ["10g", "15g"])
+check("dates along the bottom", len(ev(GP + ".XLabels()")) >= 2
+      and all(re.match(r"^\d\d/\d\d$", t) for t in ev(GP + ".XLabels()").values()))
+check("the hint under the graph", "Drag across the graph" in ev(GF + ".help:GetText()"))
+
+# Range.
+run('VendorProfit.Panel.Refresh(); ' + GF + '.range:Click()')
+items = ev('__stub.Menu()')
+check("Range menu: seven ranges, All time ticked", len(items) == 7 and items[1].text == "All time" and items[1].checked())
+check("...with TSM's spans", [items[i].text for i in range(1, 8)] == ["All time", "Last 24 hours", "Last 7 days",
+      "Last 30 days", "Last 3 months", "Last 6 months", "Last year"])
+items[3].toggle()
+check("last 7 days: starts a week ago, saved per character", ev(graph + ".start") == 1800000000 - 7 * DAY
+      and ev("VendorProfitCharDB.goldRange") == "d7" and ev(GF + ".range:GetText()") == "Last 7 days")
+run(GP + '.SetRange("d1")')
+check("last 24 hours: times along the bottom", all(re.match(r"^\d\d:\d\d$", t) for t in ev(GP + ".XLabels()").values()))
+run(GP + '.SetRange("y1")')
+check("a range never starts before the first point", ev(graph + ".start") == (MIN0 - 20 * 24 * 60) * 60)
+run(GP + '.SetRange("all")')
+
+# Characters menu.
+run(GF + '.characters:Click()')
+items = ev('__stub.Menu()')
+check("Characters menu: a checkbox each, with their gold", len(items) == 2
+      and items[1].text == "Josten  |cffffffff25g|r" and items[2].text == "Slysten  |cffffffff3g|r"
+      and items[1].checked() and items[2].checked())
+check("the X is grayed out while everyone's shown", not ev(GF + ".charactersReset:IsEnabled()"))
+run(GF + '.characters:Click()')
+check("clicking the button again closes the menu", not ev("__stub.menu:IsShown()"))
+items[2].toggle()
+check("unticked: left out of the graph and totals", ev(GF + ".characters:GetText()") == "Characters (1 of 2)"
+      and ev(GF + ".total:GetText()") == "Gold: |cffffffff25g|r on one character. Last 7 days: +|cffffffff10g|r.")
+check("...saved for the account", ev('VendorProfitDB.goldHidden["Slysten-Blackwolf"]') == True)
+check("...and the X lights up", ev(GF + ".charactersReset:IsEnabled()"))
+items[1].toggle()
+check("nothing ticked: says so instead of a flat line", ev(GF + ".empty:IsShown()")
+      and "No characters selected" in ev(GF + ".empty:GetText()") and ev(GF + ".empty.__parent == " + GF + ".plot") and len(ev(GP + ".Segments()")) == 0
+      and ev(GF + ".total:GetText()") == "")
+run(GF + '.charactersReset:Click()')
+check("the X shows everyone again", ev(GF + ".characters:GetText()") == "Characters"
+      and ev('VendorProfitDB.goldHidden') is None and len(ev(GP + ".Segments()")) > 100)
+
+# Realms: the realm only shows when there's more than one.
+run('__stub.Advance(1); VendorProfitDB.gold["Kasten-Other"] = { name = "Kasten", realm = "Other", log = "%d:5" }; %s.ShowAll()' % (MIN0 - 5, G))
+run(GF + '.characters:Click()')
+items = ev('__stub.Menu()')
+check("characters on two realms: names with their realm", items[1].text.startswith("Josten-Blackwolf")
+      and items[2].text.startswith("Kasten-Other"))
+run(GF + '.characters:Click(); VendorProfitDB.gold["Kasten-Other"] = nil; %s.ShowAll()' % G)
+
+# Hover.
+PLOT = GF + ".plot"
+run(PLOT + '.__left = 100; __stub.cursorX = 100 + 432; ' + PLOT + ':GetScript("OnEnter")(' + PLOT + ')')
+check("hover: the gold then at the top of the guide line, no tooltip",
+      ev(GF + ".value:IsShown()") and ev(GF + ".value:GetText()") == "28g"
+      and ev(GF + ".value.__point[1]") == "BOTTOM" and not ev("GameTooltip.shown"))
+check("...its time beside the title", re.match(r"^\w\w\w \d\d, \d\d:\d\d$", ev(GF + ".when:GetText()")))
+check("...with the guide line and dot", ev(GF + ".guide:IsShown()") and ev(GF + ".dot:IsShown()"))
+check("...and the line gold", ev(GP + ".Segments()[1].__vertexColor[1]") == 1
+      and ev(GP + ".Segments()[1].__vertexColor[2]") == 0.82)
+check("...the amount kept over the graph at its right edge", ev(GF + ".value.__point[4]") < 432)
+run(PLOT + ':GetScript("OnLeave")(' + PLOT + ')')
+check("leaving the graph hides it all, and the line's green again", not ev(GF + ".guide:IsShown()")
+      and not ev(GF + ".value:IsShown()") and ev(GF + ".when:GetText()") == ""
+      and ev(GP + ".Segments()[1].__vertexColor[2]") == 1)
+
+# Hovered when the page hides (the game may not say the mouse left): shown
+# again, it's not hovered.
+run(PLOT + ':GetScript("OnEnter")(' + PLOT + ')')
+run(GF + ':GetScript("OnShow")(' + GF + ')')
+check("reopened while hovered: the hover is gone and the line's green",
+      not ev(GF + ".guide:IsShown()") and ev(PLOT + ':GetScript("OnUpdate")') is None
+      and ev(GP + ".Segments()[1].__vertexColor[2]") == 1)
+
+# The window refreshes on every bag and gold change: the graph is only
+# drawn again when something it shows changed.
+run('__seg = %s.Segments()[1].__start; __stub.Fire("BAG_UPDATE_DELAYED"); VendorProfit.Panel.Refresh()' % GP)
+check("a refresh that changes nothing doesn't redraw", ev('%s.Segments()[1].__start == __seg' % GP))
+run('__stub.clock = __stub.clock + 60; VendorProfit.Panel.Refresh()')
+check("...a minute later it does (the graph runs to now)", ev('%s.Segments()[1].__start ~= __seg' % GP))
+run('__stub.clock = __stub.clock - 60; VendorProfit.Panel.Refresh()')
+
+# Drag to zoom; right-click zooms out.
+run('__stub.cursorX = 100 + 216; ' + PLOT + ':GetScript("OnMouseDown")(' + PLOT + ', "LeftButton")')
+run('__stub.cursorX = 100 + 324; ' + PLOT + ':GetScript("OnMouseUp")(' + PLOT + ', "LeftButton")')
+start = (MIN0 - 20 * 24 * 60) * 60
+span = 1800000000 - start
+check("dragging across zooms into that stretch", ev(GP + ".Zoom()") is not None
+      and abs(ev(graph + ".start") - (start + span / 2)) < 1 and abs(ev(graph + ".finish") - (start + span * 3 / 4)) < 1)
+check("...and the hint says how to zoom out", "Right-click" in ev(GF + ".help:GetText()") and "Zoomed" in ev(GF + ".help:GetText()"))
+run(PLOT + ':GetScript("OnMouseUp")(' + PLOT + ', "RightButton")')
+check("right-click zooms back out", ev(GP + ".Zoom()") is None and ev(graph + ".start") == start)
+run('__stub.cursorX = 100 + 216; ' + PLOT + ':GetScript("OnMouseDown")(' + PLOT + ', "LeftButton")')
+run('__stub.cursorX = 100 + 218; ' + PLOT + ':GetScript("OnMouseUp")(' + PLOT + ', "LeftButton")')
+check("a click isn't a zoom", ev(GP + ".Zoom()") is None)
+run('__stub.cursorX = 100 + 428; ' + PLOT + ':GetScript("OnMouseDown")(' + PLOT + ', "LeftButton")')
+run('__stub.cursorX = 100 + 432; ' + PLOT + ':GetScript("OnMouseUp")(' + PLOT + ', "LeftButton")')
+run('__stub.cursorX = 100 + 100; ' + PLOT + ':GetScript("OnMouseDown")(' + PLOT + ', "LeftButton")')
+run('__stub.cursorX = 100 + 104; ' + PLOT + ':GetScript("OnMouseUp")(' + PLOT + ', "LeftButton")')
+check("zoomed in to minutes: at least 10 minutes shown, still labeled",
+      abs(ev(graph + ".finish - " + graph + ".start") - 600) < 1 and len(ev(GP + ".XLabels()")) >= 1)
+run(PLOT + ':GetScript("OnMouseUp")(' + PLOT + ', "RightButton")')
+
+# Gold going down draws red; a new change redraws.
+run('__stub.clock = __stub.clock + 120; __stub.money = 10000; __stub.Fire("PLAYER_MONEY")')
+check("red: ends lower than it starts", ev(GP + ".Segments()[1].__vertexColor[1]") == 1 and ev(GP + ".Segments()[1].__vertexColor[2]") < 1)
+check("...and the totals follow the change", ev(GF + ".total:GetText()").startswith("Gold: |cffffffff4g|r"))
+
+check("no errors from the graph", ev("#__stub.errors") == 0)
+
+# A gold axis starting at nothing reads 0g, not 0c.
+run, ev = client(CLOCK + '__stub.money = 200000; VendorProfitDB = { gold = { ["Josten-Blackwolf"] = { name = "Josten", realm = "Blackwolf", log = "%d:0" } } }' % (MIN0 - 100))
+run('VendorProfit.Panel.Show("gold")')
+check("the zero line reads 0g on a gold axis", list(ev(GP + ".YLabels()").values())[0] == "0g")
+
+# One point just now still draws a line.
+run, ev = client(CLOCK)
+run('VendorProfit.Panel.Show("gold")')
+check("a single point: a flat line over the last hour", len(ev(GP + ".Segments()")) > 100
+      and ev(GP + ".Graph().finish - " + GP + ".Graph().start") == 3600)
+check("no errors from Gold", ev("#__stub.errors") == 0)
+
+# Every string in L is used somewhere.
+sources = "".join((ADDON / name).read_text() for name in FILES)
+keys = re.findall(r"^    ([A-Z][A-Z0-9_]+) = ", (ADDON / "Core.lua").read_text(), re.M)
+unused = [k for k in keys if not re.search(r"L\.%s\b" % k, sources)]
+check("every string in L is used" + (" (unused: %s)" % ", ".join(unused) if unused else ""), not unused)
+
 
 print()
 failed = [label for label, ok in results if not ok]
