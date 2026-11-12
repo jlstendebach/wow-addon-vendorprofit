@@ -3,11 +3,11 @@
 -- what's already in your bags; buying, crafting and taking from the bank are
 -- buttons on their sections' headings) and Best Crafts (BestPanel.lua).
 --
--- It docks beside the auction house when that's open (and opens there by
--- itself if something is queued), otherwise beside the professions window.
--- Drag it to move it: from then on it opens where you left it, saved per
--- character, until /vprofit reset docks it again. /vprofit or /vendorprofit
--- toggles it.
+-- It's a window of its own, not docked to the auction house or any other
+-- window (it opens by itself at the auction house if something is queued).
+-- It opens centered until you drag it; from then on it opens where you left
+-- it, saved per character, until /vprofit reset centers it again. /vprofit
+-- or /vendorprofit toggles it.
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -86,8 +86,8 @@ local function GetRow(index)
         row.button:SetMotionScriptsWhileDisabled(true)
         row.button:SetScript("OnEnter", function(self)
             -- The mouse only reaches the Craft button when the open-profession
-            -- cover isn't over it: the window moved under it (the professions
-            -- window it's docked to changed, or the display did), or it was
+            -- cover isn't over it: the window moved under it (its height
+            -- changed while centered, or the display did), or it was
             -- hidden without the panel redrawing. Put it back under the mouse
             -- so the click opens the profession.
             if craftCover and craftCover.button == self and not Order.IsEmpty() then
@@ -941,19 +941,14 @@ function Panel.SavePosition()
     VendorProfitCharDB.panel = { left = frame:GetLeft(), top = frame:GetTop() }
 end
 
-local function Dock()
+-- Where you left it, or centered. Only ever anchored to UIParent: anchored
+-- to a protected window (the professions window, say) it would be protected
+-- too, and the game would block hiding it in combat.
+local function Place()
     frame:ClearAllPoints()
     local saved = SavedPosition()
     if saved and saved.left and saved.top then
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", saved.left, saved.top)
-    elseif AuctionHouseFrame and AuctionHouseFrame:IsShown() then
-        frame:SetPoint("TOPLEFT", AuctionHouseFrame, "TOPRIGHT", 4, 0)
-    elseif Banker.IsBankOpen() and BankFrame and BankFrame:IsShown() then
-        frame:SetPoint("TOPLEFT", BankFrame, "TOPRIGHT", 4, 0)
-    elseif Merchant.IsOpen() and MerchantFrame and MerchantFrame:IsShown() then
-        frame:SetPoint("TOPLEFT", MerchantFrame, "TOPRIGHT", 4, 0)
-    elseif ProfessionsFrame and ProfessionsFrame:IsShown() then
-        frame:SetPoint("TOPLEFT", ProfessionsFrame, "TOPRIGHT", 4, 0)
     else
         frame:SetPoint("CENTER", UIParent, "CENTER")
     end
@@ -1004,7 +999,7 @@ function Panel.Show(tab)
     if frame == nil then
         Create()
     end
-    Dock()
+    Place()
     frame:Show()
     Panel.Refresh()
 end
@@ -1015,13 +1010,13 @@ function Panel.Hide()
     end
 end
 
--- Forgets where you moved it, so it docks again.
+-- Forgets where you moved it, so it's centered again.
 function Panel.ResetPosition()
     if VendorProfitCharDB then
         VendorProfitCharDB.panel = nil
     end
     if frame then
-        Dock()
+        Place()
     end
 end
 

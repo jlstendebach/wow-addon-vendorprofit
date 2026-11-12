@@ -488,7 +488,7 @@ run('__stub.createCount = 10')
 run(QUEUE + ':Click()')
 check("queued 10 from the Create box", ev("VendorProfit.Order.Entries()[1].crafts") == 10)
 check("panel opens", ev("VendorProfit.Panel.IsShown()"))
-check("docked beside the professions window", ev("VendorProfitPanel.__point[2] == ProfessionsFrame"))
+check("a window of its own: centered, not docked to the professions window", ev("VendorProfitPanel.__point[1]") == "CENTER" and ev("VendorProfitPanel.__point[2] == UIParent"))
 
 # --- The plan --------------------------------------------------------------------
 plan = ev("VendorProfit.Shopper.Summary().plan")
@@ -531,7 +531,7 @@ run('''
     __stub.ah.listings[3576] = { { unitPrice = 75, quantity = 10 }, { unitPrice = 78, quantity = 30 } }
 ''')
 run('__stub.OpenAH()')
-check("panel docks beside the auction house", ev("VendorProfitPanel.__point[2] == AuctionHouseFrame"))
+check("opens at the auction house, not docked to it", ev("VendorProfit.Panel.IsShown()") and ev("VendorProfitPanel.__point[1]") == "CENTER" and ev("VendorProfitPanel.__point[2] == UIParent"))
 check("Buy on before a scan: it scans first", ev("VendorProfit.Shopper.Status()") == "idle" and ev(BUY + ".__text") == "Buy"
       and ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip") == "Scans prices first. Then click Buy for each purchase, and confirm it.")
 check("Scan is on the Profit heading", ev(SCAN + ".__text") == "Scan" and ev(SCAN + ":IsEnabled()"))
@@ -593,7 +593,7 @@ run('__stub.Drag(VendorProfitPanel, 300, 700)')
 check("moved position saved", ev("VendorProfitCharDB.panel.left") == 300 and ev("VendorProfitCharDB.panel.top") == 700)
 check("not left in the game's layout cache", ev("VendorProfitPanel.__userPlaced") is False)
 run('VendorProfit.Panel.Hide(); VendorProfit.Panel.Show()')
-check("reopens where it was moved, not docked",
+check("reopens where it was moved",
       ev("VendorProfitPanel.__point[1]") == "TOPLEFT" and ev("VendorProfitPanel.__point[2] == UIParent")
       and ev("VendorProfitPanel.__point[4]") == 300 and ev("VendorProfitPanel.__point[5]") == 700)
 
@@ -603,11 +603,11 @@ check("panel stays open when the auction house closes", ev("VendorProfit.Panel.I
 run('VendorProfit.Panel.Hide(); __stub.OpenAH()')
 check("moved panel opens with the AH where it was left", ev("VendorProfit.Panel.IsShown()") and ev("VendorProfitPanel.__point[2] == UIParent"))
 run('SlashCmdList.VENDORPROFIT("reset")')
-check("/vprofit reset docks it again", ev("VendorProfitCharDB.panel") is None and ev("VendorProfitPanel.__point[2] == AuctionHouseFrame"))
+check("/vprofit reset centers it again", ev("VendorProfitCharDB.panel") is None and ev("VendorProfitPanel.__point[1]") == "CENTER" and ev("VendorProfitPanel.__point[2] == UIParent"))
 run('__stub.CloseAH()')
 check("...and it still stays open when the auction house closes", ev("VendorProfit.Panel.IsShown()"))
 run('VendorProfit.Panel.Hide(); VendorProfit.Panel.Show()')
-check("reopened away from the AH: docked to the professions window", ev("VendorProfitPanel.__point[2] == ProfessionsFrame"))
+check("reopened: still centered", ev("VendorProfitPanel.__point[1]") == "CENTER" and ev("VendorProfitPanel.__point[2] == UIParent"))
 run("VendorProfit.Order.Clear()")
 check("clear empties the order and its record", ev("VendorProfit.Order.IsEmpty()") and ev("VendorProfitCharDB.order.spent") == 0)
 
@@ -984,7 +984,7 @@ run(CRAFT + '.__left = 500')
 run('__stub.Fire("DISPLAY_SIZE_CHANGED")')
 check("the display changing (alt-tab) places it again", ev(OPEN + ".__point[4]") == 500)
 run(CRAFT + '.__left = nil; VendorProfit.Panel.Refresh()')
-# The panel moves under it with no redraw (its dock moved): the cover follows.
+# The panel moves under it with no redraw: the cover follows.
 run(CRAFT + '.__left = 300; ' + CRAFT + '.__bottom = 200; VendorProfit.OpenButton.Follow()')
 check("the button moves: the cover follows it", ev(OPEN + ".__point[4]") == 300 and ev(OPEN + ".__point[5]") == 200)
 run(CRAFT + '.__left = nil; ' + CRAFT + '.__bottom = nil; VendorProfit.OpenButton.Follow()')
@@ -1619,8 +1619,8 @@ run('__stub.OpenMerchant({ { itemID = 3371, price = 20, stackCount = 5 } })')
 check("a vendor that doesn't sell it: no buying, window stays shut", not ev("VendorProfit.Panel.IsShown()"))
 run('__stub.CloseMerchant()')
 run('__stub.OpenMerchant({ { itemID = 3371, price = 20 }, { itemID = 2880, price = 90 } })')
-check("a vendor that sells it: the window opens beside it", ev("VendorProfit.Panel.IsShown()")
-      and ev("VendorProfitPanel.__point[2] == MerchantFrame"))
+check("a vendor that sells it: the window opens, not docked to the vendor", ev("VendorProfit.Panel.IsShown()")
+      and ev("VendorProfitPanel.__point[2] == UIParent"))
 check("Buy on, saying what it buys here", ev(BUY + ":IsEnabled()") and ev(BUY + ".__text") == "Buy"
       and ev(BUY + ".tooltip") == "Buy from this vendor: 3 Weak Flux, for |cffffffff2s 70c|r.")
 money = ev("__stub.money")
@@ -1699,7 +1699,7 @@ check("take button on the bank heading, off until the bank opens",
 run('VendorProfit.Panel.Hide()')
 run('__stub.OpenBank()')
 check("opening the bank opens the panel when there's something to fetch", ev("VendorProfit.Panel.IsShown()"))
-check("docked beside the bank", ev("VendorProfitPanel.__point[2] == BankFrame"))
+check("not docked to the bank", ev("VendorProfitPanel.__point[1]") == "CENTER" and ev("VendorProfitPanel.__point[2] == UIParent"))
 moves = ev("(VendorProfit.Banker.PlanMoves({ { itemID = 2840, quantity = 7 }, { itemID = 3576, quantity = 7 } }))")
 mv = [(m.bag, m.slot, m.itemID, m.quantity) for m in moves.values()]
 check("plans exact amounts, smallest stacks first", mv == [(7, 3, 2840, 4), (6, 1, 2840, 3), (8, 1, 3576, 7)])

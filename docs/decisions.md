@@ -24,8 +24,11 @@ time" route mode).
   HideUIPanel, which the game blocks in combat (it silently did nothing), so
   it's rewired to hide the window directly. The window isn't protected (see
   the secure Open button under Crafting), so that works in combat.
-- **Docks** beside the auction house, bank, vendor or professions window
-  (in that order) until you move it; then it opens where you left it.
+- **Not docked**: it's a window of its own (it used to dock beside the
+  auction house, bank, vendor or professions window). It opens centered
+  until you move it, then where you left it. It's only ever anchored to
+  UIParent: anchored to a protected window it would be protected too, and
+  hiding it in combat would be blocked.
 - **Spacing**: the gap between a page's title, its totals line and its table
   is the same everywhere (about 6px between text lines).
 - **Dates** are mm/dd, to save space.
@@ -120,7 +123,8 @@ opens.
   anchored to the panel (that would make the panel protected in combat). It
   hides in combat and after a click (until the profession opens or 3s pass).
 - **It used to get left behind** when the window moved without redrawing
-  (docked window moving, height change while centered, alt-tab display
+  (a docked window moving, back when it docked; height change while
+  centered; alt-tab display
   changes): clicks hit the plain button and nothing opened. It now follows
   the button (checked every 0.1s), is put back under the mouse on hover, and
   is re-placed on display or UI-scale changes.
