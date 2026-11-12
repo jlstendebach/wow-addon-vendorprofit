@@ -140,7 +140,7 @@ Prices from Auctionator's last scan.
 
 ## Shopping
 
-**1. Queue.** Set the number in the professions window's Create box (say 10) and click **Queue** under the Cheapest Route section's Vendor Profit line. Queuing a recipe already in the order adds to it. The Vendor Profit window opens on its Shopping List tab (switching to it if the window was on Best Crafts); `/vprofit` toggles it any time.
+**1. Queue.** Set the number in the professions window's Create box (say 10) and click **Queue** under the Cheapest Route section's Vendor Profit line. Queuing a recipe already in the order adds to it. A chat line confirms it; the order is on the Vendor Profit window's Shopping List tab, which `/vprofit` opens (the window never opens by itself).
 
 **2. The plan.** The panel works out, in whole numbers, what the order needs, using what you already have (bags and bank) first:
 
@@ -180,7 +180,7 @@ Profit                                       [ Scan ]
 
 **To do** is a checklist in the order you'd do it: **Buy** first (prices are what can change, so you find out at the auction house before fetching or crafting anything), **Collect from mailbox** (purchases not collected yet), **Take from bank**, then **Craft**. Each step shows only while it has something left in it and they're numbered in order, so the list gets shorter as you go. Every button sits on its section's heading, with a short label; hover one for the details. There's no button bar at the bottom. Your items are used from your bags first, then the mailbox, then the bank, so **Take from bank** lists exactly what to fetch. Bags include the reagent bank, since crafting uses it directly. **Already in your bags** is just for information; click its divider to fold it away (it then shows how many items it holds) or open it again. That's remembered per character. Several queued recipes share your items, so nothing is counted twice.
 
-**Take from bank.** At the bank, **Take** on the **Take from bank** step moves exactly those amounts into your bags: it splits them off the bank's stacks (smallest stacks first) into empty bag slots, one move at a time, waiting for each to finish. If something isn't in the bank after all, or your bags fill up, or the bank closes, it stops and says so. The window opens beside the bank by itself when the order has something to fetch.
+**Take from bank.** At the bank, **Take** on the **Take from bank** step moves exactly those amounts into your bags: it splits them off the bank's stacks (smallest stacks first) into empty bag slots, one move at a time, waiting for each to finish. If something isn't in the bank after all, or your bags fill up, or the bank closes, it stops and says so.
 
 **Profit** is three small groups: what everything still queued sells for (**Vendor price**, and **Auction price**: Auctionator's price after the 5% auction house cut, so it's what you'd actually get, or *no auction price*), what it costs (**Items you have**, what the items you have are worth, and **Items to buy**), and what finishing the order makes from where you stand (**Vendor profit** and **Auction profit**: each price minus both costs). Buying checks Vendor profit. Items you have count at the cheapest way to get them now, whether you had them already or bought them for this order. What you've paid is spent either way, so it doesn't change whether finishing is worth it. It's shown below the profits as **Spent on this order so far**, but not taken off. That way an order you've partly shopped for and crafted gives the same answer as clearing it and queuing what's left.
 
@@ -188,7 +188,7 @@ Profit                                       [ Scan ]
 
 The buttons for each part sit on their section's heading, with short labels; hover one for the details.
 
-**3. Scan.** At the auction house the panel docks beside it (and opens by itself when something is queued). **Scan** on the **Profit** heading first looks up every item in the order's crafting trees in one batch request (the same lookup as Best Crafts' Scan), so the order is planned with live prices straight away and items with nothing listed are skipped, not searched. Then it reads every listing of each item the order buys there, so buying 24 is priced by walking up the cheapest listings, not at the lowest single price, and your own listings are left out. Those listings are what purchases are priced and checked against. With them the order is planned again: if crafting something has become cheaper than buying it, or the other way round, the plan changes and the new items are scanned too.
+**3. Scan.** At the auction house, open the window (`/vprofit`). **Scan** on the **Profit** heading first looks up every item in the order's crafting trees in one batch request (the same lookup as Best Crafts' Scan), so the order is planned with live prices straight away and items with nothing listed are skipped, not searched. Then it reads every listing of each item the order buys there, so buying 24 is priced by walking up the cheapest listings, not at the lowest single price, and your own listings are left out. Those listings are what purchases are priced and checked against. With them the order is planned again: if crafting something has become cheaper than buying it, or the other way round, the plan changes and the new items are scanned too.
 
 The auction house is shared with its own Browse tab and other addons (Auctionator, TradeSkillMaster), which send requests too, especially as it opens. So the scan recovers rather than waits: when another addon's results replace the batch lookup's, it's sent again a second later; when the game reports a request dropped by its throttle, a search is sent again straight away. Price quotes are different: the game only gives one for a request made as part of a click, so a quote is never asked for by itself. And just after a purchase the game is briefly busy and drops requests, so **Buy** and **Confirm** are held for that moment (hover: *Waiting a moment for the auction house to be ready...*) and your click always counts. If a quote request is dropped anyway, it says so straight away; if one simply never comes, it says so after 10 seconds. Either way, **Buy** is ready to click again. The server answers at most 100 item searches a minute from all addons together, and drops the rest without a word, so searches wait for room (the Buy button's tooltip says so) instead of timing out. If the game ever blocks an action ("Interface action failed because of an AddOn"), Vendor Profit prints which one in chat.
 
@@ -204,7 +204,7 @@ The auction house is shared with its own Browse tab and other addons (Auctionato
 
 The list is maintained here, by hand: one item per line, `[itemID] = copper for one,`. To update it, talk to a vendor and type `/vprofit prices`: a box lists that vendor's prices in the same format, sorted, marking items that are new or whose price differs from the list. Copy the lines you want (Ctrl+C) into `VendorPrices.lua`.
 
-Items the plan gets from a vendor (Weak Flux, thread, vials) are bought at a vendor. Talk to one that sells any of them and the window opens beside it, with **Buy** on the **Buy** step (hover it: *Buy from this vendor: 3 Weak Flux, for 2s 70c*). One click buys all of it: exactly what's needed, or whole batches for items sold several at a time, and only for gold. It also buys anything planned from the auction house that this vendor sells for no more. If you run short of gold it buys what it can and says what's missing. After a purchase, the button shows **Buying...** until the items reach your bags (or 10 seconds pass), so a double click can't buy twice. Away from vendors, with only vendor items left, the button is off and says to find a vendor.
+Items the plan gets from a vendor (Weak Flux, thread, vials) are bought at a vendor. Talk to one that sells any of them and, with the window open, **Buy** is on the **Buy** step (hover it: *Buy from this vendor: 3 Weak Flux, for 2s 70c*). One click buys all of it: exactly what's needed, or whole batches for items sold several at a time, and only for gold. It also buys anything planned from the auction house that this vendor sells for no more. If you run short of gold it buys what it can and says what's missing. After a purchase, the button shows **Buying...** until the items reach your bags (or 10 seconds pass), so a double click can't buy twice. Away from vendors, with only vendor items left, the button is off and says to find a vendor.
 
 **5. Craft.** **Craft** on the **Craft** step crafts the step marked **»**, as many times as it needs (up to what you have materials for; hover it: *Craft Copper Bar, 7 times*). The game only crafts recipes of the profession window that's open, so when the next step is in another profession the button says **Open Mining**, and clicking it opens that profession (Mining opens with Smelting). Once clicked it shows **Opening...** until the profession has loaded, so a second click can't close the window it's opening; if nothing opens within a few seconds, it's clickable again. In combat it can't be clicked (hover: *Open Mining after combat*): the game doesn't let addons open professions then. It skips ahead to a later step the open window can make if you have its materials, is off with *Missing materials for ...* when you don't, and says **Crafting...** while you're casting.
 
@@ -212,7 +212,7 @@ Items the plan gets from a vendor (Weak Flux, thread, vials) are bought at a ven
 
 **Mail.** Auction purchases may arrive in your mailbox rather than your bags. A purchase counts as **in the mail** until that many more of the item show up in your bags or bank, so it's counted either way and never bought twice. Opening the mailbox corrects that from what's actually in the inbox, so a purchase that arrived without the panel seeing it (say you used it up as it arrived) stops counting.
 
-**The window.** The Shopping List and Best Crafts are tabs down the right side of one Vendor Profit window. Drag it anywhere. From then on it opens where you left it (saved per character). It opens with the auction house when something is queued (on the Shopping List, unless it's already open on another tab), but only ever closes when you close it (its close button, the title-bar button, or `/vprofit`). `/vprofit reset` docks it beside the auction house or professions window again.
+**The window.** The Shopping List, Best Crafts, Profit History, Purchase History and Gold are tabs down the right side of one Vendor Profit window. It opens centered near the top of the screen; drag it anywhere, and from then on it opens where you left it (saved per character). It only opens when you open it (`/vprofit`, a `/vprofit` tab command, or the title-bar button) and only closes when you close it (its close button, the title-bar button, or `/vprofit`), in combat too: never by itself at the auction house, bank or a vendor, or when you queue something. `/vprofit reset` puts it back there.
 
 The order is saved per character. Each queued recipe has three small buttons: **-** and **+** craft one fewer or one more (five with **Shift-click**; at least one), and **x** takes it out of the order; removing the last one empties the order and its record. Hover a queued recipe to see its own cost along the cheapest route and its vendor and auction profit at today's prices; click it to show its recipe in the professions window (when that window is open). Its name is red when neither would make money.
 
@@ -256,6 +256,28 @@ The **Purchase History** tab (or `/vprofit purchases`) lists your last 5,000 pur
 
 Vendor purchases show up straight away, from any vendor. Auction house purchases show up when you take them out of the mailbox, read from their mail, however you bought them. These are the same purchases whose costs feed the Profit History.
 
+## Gold
+
+The **Gold** tab (or `/vprofit gold`) graphs your gold over time, added up over your characters, like TradeSkillMaster's Player Gold graph. Only your characters' own gold counts: no guild bank. The line is green when the stretch shown ends at least as high as it starts, red when it ends lower. The line at the top gives the gold of the characters shown now, and how much it changed over the last 7 days.
+
+```
+Gold
+Gold: 28g across 2 characters. Last 7 days: +11g.
+[Characters] [x]                                   [All time]
+  30g |                                        ____/
+  20g |                       ________________/
+  10g |______________________/
+       10/25          11/01          11/08
+Drag across the graph to zoom in. Right-click to zoom back out.
+```
+
+- **Hover** the graph for a guide line with the gold then at its top, and the time beside the page's title. The line turns gold while you hover.
+- **Drag** across the graph to zoom into that stretch; **right-click** zooms back out. Changing the range or reopening the tab also zooms out.
+- **Range**: the last 24 hours, 7 or 30 days, 3 or 6 months, the last year, or **All time** (the default). It's saved per character and never starts before the first point recorded.
+- **Characters**: a checkbox for each character, with its gold now (and its realm, if you have characters on more than one). Untick one to leave it out of the graph and the totals; the button then says how many are shown (*Characters (2 of 7)*), and the red **x** beside it shows everyone again. What's ticked is saved for the whole account, and a new character starts ticked.
+
+Each character's gold is saved when it changes, at most once a minute, from its first login with the addon on. Before that, a character counts at the gold it had then: an alt that sat untouched had that gold all along, so it doesn't show up as a sudden jump. Gold the game reports as 0 just after logging in or a loading screen is checked again each second for 30 seconds before it's believed, since the game sometimes reports 0 for a moment; while logging out or reloading it reports 0 too, so nothing is recorded then. Points older than 90 days are thinned to one an hour.
+
 ## How it works
 
 - Auctionator makes its crafting info frame (`AuctionatorCraftingInfoProfessionsFrame`) the first time the professions window opens. The addon hooks the function that makes it, attaches right after, and retries on the next frame in case it sees the event first.
@@ -292,6 +314,9 @@ Files:
 | `History.lua` | Profit history: what items cost you as they come in, and their sales |
 | `HistoryPanel.lua` | The Profit History tab |
 | `PurchasePanel.lua` | The Purchase History tab |
+| `Gold.lua` | Each character's gold over time, saved for the account |
+| `GoldPanel.lua` | The Gold tab: the graph, its Range and Characters menus |
+| `Media/` | The Gold graph's line and dot textures (our own) |
 
 Saved data, per character (`VendorProfitCharDB`):
 
@@ -303,6 +328,12 @@ Saved data, per character (`VendorProfitCharDB`):
 - `auctions = { counts, time }`: how many of each item you had up for auction at your last visit to the auction house, and when.
 - `history = { stock, sales, items, daily, purchases }`: what the items you have cost you, your last 10,000 sales, every sale added up per item, older sales added up per item per day, and your last 5,000 purchases.
 - `historyRange`: Profit History's range.
+- `goldRange`: the Gold tab's range.
+
+Saved data, for the whole account (`VendorProfitDB`):
+
+- `gold[name-realm] = { name, realm, log }`: each character's gold over time. `log` is one string, `minute:copper;...` oldest first (minutes since 1970), each point holding until the next.
+- `goldHidden[name-realm] = true`: characters left out of the Gold tab.
 
 Opening a profession uses a secure action button casting the profession's spell, as TradeSkillMaster does in Forever. It's a separate invisible button laid over the Craft button rather than part of the panel, because a secure button inside the panel would make the panel protected and the game would block showing, hiding or moving it in combat. It's only placed out of combat and hidden as combat starts.
 

@@ -19,11 +19,20 @@ FrameMethods.__index = FrameMethods
 local FontMethods = {}
 FontMethods.__index = FontMethods
 
-function CreateFrame(_, name, parent)
+function CreateFrame(_, name, parent, template)
     local f = setmetatable({ __shown = true, __parent = parent, __events = {}, __scripts = {} }, FrameMethods)
     if name then _G[name] = f end
     eventFrames[#eventFrames + 1] = f
+    -- The window template's close button, which closes through HideUIPanel.
+    if template == "ButtonFrameTemplate" then
+        f.CloseButton = CreateFrame("Button", nil, f)
+        f.CloseButton:SetScript("OnClick", function(self) HideUIPanel(self:GetParent()) end)
+    end
     return f
+end
+-- Like the modern client: HideUIPanel does nothing in combat.
+function HideUIPanel(f)
+    if not stub.inCombat then f:Hide() end
 end
 function FrameMethods:GetParent() return self.__parent end
 function FrameMethods:Show() self.__shown = true end
@@ -173,6 +182,16 @@ function FrameMethods:CreateTexture()
     t.SetVertexColor = function(tex, ...) tex.__vertexColor = { ... } end
     return t
 end
+-- Lines (CreateLine): a texture with two end points.
+function FrameMethods:CreateLine()
+    local l = self:CreateTexture()
+    l.SetThickness = function(line, t) line.__thickness = t end
+    l.SetSnapToPixelGrid = function(line, snap) line.__snap = snap end
+    l.SetTexelSnappingBias = function(line, bias) line.__snapBias = bias end
+    l.SetStartPoint = function(line, ...) line.__start = { ... } end
+    l.SetEndPoint = function(line, ...) line.__end = { ... } end
+    return l
+end
 function FrameMethods:CreateFontString()
     return setmetatable({ __shown = true, __parent = self, __text = "" }, FontMethods)
 end
@@ -260,6 +279,9 @@ C_Timer = { After = function(seconds, fn) stub.timers[#stub.timers + 1] = { at =
 SlashCmdList = {}
 stub.money = 1000000
 function GetMoney() return stub.money end
+stub.playerName, stub.realm = "Tester", "Stubrealm"
+function UnitName(unit) if unit == "player" then return stub.playerName end end
+function GetRealmName() return stub.realm end
 function GetTime() return stub.now end
 function time() return 1700000000 end
 date = os.date

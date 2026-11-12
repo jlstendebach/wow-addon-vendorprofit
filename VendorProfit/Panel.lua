@@ -3,11 +3,11 @@
 -- what's already in your bags; buying, crafting and taking from the bank are
 -- buttons on their sections' headings) and Best Crafts (BestPanel.lua).
 --
--- It docks beside the auction house when that's open (and opens there by
--- itself if something is queued), otherwise beside the professions window.
--- Drag it to move it: from then on it opens where you left it, saved per
--- character, until /vprofit reset docks it again. /vprofit or /vendorprofit
--- toggles it.
+-- It's a window of its own, not docked to the auction house or any other
+-- window, and only opens or closes when you open or close it. It opens
+-- centered near the top of the screen until you drag it; from then on it opens where you left
+-- it, saved per character, until /vprofit reset centers it again. /vprofit
+-- or /vendorprofit toggles it.
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -86,8 +86,8 @@ local function GetRow(index)
         row.button:SetMotionScriptsWhileDisabled(true)
         row.button:SetScript("OnEnter", function(self)
             -- The mouse only reaches the Craft button when the open-profession
-            -- cover isn't over it: the window moved under it (the professions
-            -- window it's docked to changed, or the display did), or it was
+            -- cover isn't over it: the window moved under it (dragged, or
+            -- the display changed), or it was
             -- hidden without the panel redrawing. Put it back under the mouse
             -- so the click opens the profession.
             if craftCover and craftCover.button == self and not Order.IsEmpty() then
@@ -890,6 +890,12 @@ local function Create()
         frame.Inset:Hide()
     end
     frame:SetTitle(L.PANEL_TITLE)
+    -- The template's close button closes through HideUIPanel, which the
+    -- game blocks in combat (it does nothing then). The window isn't
+    -- protected, so hiding it directly works in combat too.
+    if frame.CloseButton then
+        frame.CloseButton:SetScript("OnClick", function() Panel.Hide() end)
+    end
     frame:SetWidth(WIDTH)
     frame:SetHeight(200)
     frame:EnableMouse(true)
@@ -935,21 +941,22 @@ function Panel.SavePosition()
     VendorProfitCharDB.panel = { left = frame:GetLeft(), top = frame:GetTop() }
 end
 
-local function Dock()
+-- How far below the top of the screen it opens until you move it.
+local DEFAULT_TOP = -120
+
+-- Where you left it, or centered across the screen near its top. Held by
+-- its top left corner either way: tabs differ in width and height, and
+-- anchored by its center the window's edges would jump on every tab
+-- switch. Only ever anchored to UIParent: anchored to a protected window
+-- (the professions window, say) it would be protected too, and the game
+-- would block hiding it in combat.
+local function Place()
     frame:ClearAllPoints()
     local saved = SavedPosition()
     if saved and saved.left and saved.top then
         frame:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", saved.left, saved.top)
-    elseif AuctionHouseFrame and AuctionHouseFrame:IsShown() then
-        frame:SetPoint("TOPLEFT", AuctionHouseFrame, "TOPRIGHT", 4, 0)
-    elseif Banker.IsBankOpen() and BankFrame and BankFrame:IsShown() then
-        frame:SetPoint("TOPLEFT", BankFrame, "TOPRIGHT", 4, 0)
-    elseif Merchant.IsOpen() and MerchantFrame and MerchantFrame:IsShown() then
-        frame:SetPoint("TOPLEFT", MerchantFrame, "TOPRIGHT", 4, 0)
-    elseif ProfessionsFrame and ProfessionsFrame:IsShown() then
-        frame:SetPoint("TOPLEFT", ProfessionsFrame, "TOPRIGHT", 4, 0)
     else
-        frame:SetPoint("CENTER", UIParent, "CENTER")
+        frame:SetPoint("TOPLEFT", UIParent, "TOP", -frame:GetWidth() / 2, DEFAULT_TOP)
     end
 end
 
@@ -998,7 +1005,7 @@ function Panel.Show(tab)
     if frame == nil then
         Create()
     end
-    Dock()
+    Place()
     frame:Show()
     Panel.Refresh()
 end
@@ -1009,13 +1016,13 @@ function Panel.Hide()
     end
 end
 
--- Forgets where you moved it, so it docks again.
+-- Forgets where you moved it, so it's centered near the top again.
 function Panel.ResetPosition()
     if VendorProfitCharDB then
         VendorProfitCharDB.panel = nil
     end
     if frame then
-        Dock()
+        Place()
     end
 end
 
@@ -1090,45 +1097,12 @@ Panel.AddPage({
     refresh = function() return RefreshShopping() end,
 })
 
--- Opens with the auction house when something is queued. It only ever
--- closes when you close it.
-local lastStatus = Shopper.Status()
-Shopper.OnChange(function()
-    local status = Shopper.Status()
-    if lastStatus == "closed" and status ~= "closed" and not Order.IsEmpty() then
-        -- Already open (on Best Crafts, say): stays on its tab.
-        Panel.Show(not Panel.IsShown() and "shopping" or nil)
-    end
-    lastStatus = status
-    Panel.Refresh()
-end)
-
--- Opens at the bank when there's something to take out of it.
-local bankWasOpen = Banker.IsBankOpen()
-Banker.OnChange(function()
-    local open = Banker.IsBankOpen()
-    if open and not bankWasOpen and not Order.IsEmpty() and not Panel.IsShown() then
-        local _, _, fromBank = Panel.SplitUses(Shopper.Summary().plan.uses)
-        if #fromBank > 0 then
-            Panel.Show("shopping")
-        end
-    end
-    bankWasOpen = open
-    Panel.Refresh()
-end)
-
--- Opens at a vendor that sells something the order still needs.
-local merchantWasOpen = Merchant.IsOpen()
-Merchant.OnChange(function()
-    local open = Merchant.IsOpen()
-    if open and not merchantWasOpen and not Order.IsEmpty() and not Panel.IsShown() then
-        if #Merchant.Offers(Shopper.Summary().plan) > 0 then
-            Panel.Show("shopping")
-        end
-    end
-    merchantWasOpen = open
-    Panel.Refresh()
-end)
+-- The window only opens and closes when you open or close it: not at the
+-- auction house, bank or a vendor, and not on Queue. It redraws as they
+-- change while it's open.
+Shopper.OnChange(Panel.Refresh)
+Banker.OnChange(Panel.Refresh)
+Merchant.OnChange(Panel.Refresh)
 
 -- Walking up to a crafting station (or away from one) changes what can be
 -- crafted, but the game sends no event for it, so the panel would keep saying
@@ -1211,6 +1185,8 @@ SlashCmdList.VENDORPROFIT = function(arg)
         Panel.Toggle("history")
     elseif command == "purchases" then
         Panel.Toggle("purchases")
+    elseif command == "gold" then
+        Panel.Toggle("gold")
     elseif command == "prices" then
         VendorProfit.Merchant.ShowPriceLines()
     elseif command == "stations" then

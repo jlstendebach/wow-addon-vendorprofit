@@ -137,10 +137,8 @@ function OpenButton.Hide()
     end
 end
 
--- Keeps the cover over its button when the panel moves without redrawing:
--- the window it's docked to moves (the game shifts the professions window as
--- others open beside it), or its height changes while it's centered. Gone
--- from view: the cover goes too.
+-- Keeps the cover over its button when the panel moves without redrawing
+-- (dragged, or the display changed). Gone from view: the cover goes too.
 function OpenButton.Follow()
     if button == nil or not button:IsShown() or target == nil or InCombatLockdown() then
         return

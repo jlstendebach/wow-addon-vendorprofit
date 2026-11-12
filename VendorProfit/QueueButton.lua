@@ -36,12 +36,9 @@ local function OnClick(button)
     local crafts = QueueButton.GetCraftCount()
     Order.Add(result, crafts, CurrentProfession())
     local name = C_Item.GetItemInfo(result.itemID) or ("item " .. result.itemID)
+    -- Said in chat; the window is left as it is (it only opens when you
+    -- open it).
     print(string.format(L.QUEUED, crafts, name))
-    -- On the Shopping List tab, even if the window was on Best Crafts
-    -- (queuing from there leaves it be).
-    if VendorProfit.Panel then
-        VendorProfit.Panel.Show("shopping")
-    end
 end
 
 local function OnEnter(button)

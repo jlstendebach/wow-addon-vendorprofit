@@ -16,12 +16,24 @@ time" route mode).
   (the game's filter dropdown, Scan off on its own) were replaced with the
   addon's own style.
 - **One window, pages as side tabs** (Shopping List, Best Crafts, Profit
-  History, Purchase History). Strata HIGH and toplevel, so it sits above the
-  professions window and auction house. A minimum height keeps every side tab
-  on the window. It never closes by itself: only its close button, the
-  title-bar button or `/vprofit`.
-- **Docks** beside the auction house, bank, vendor or professions window
-  (in that order) until you move it; then it opens where you left it.
+  History, Purchase History, Gold). Strata HIGH and toplevel, so it sits above
+  the professions window and auction house. A minimum height keeps every side
+  tab on the window.
+- **Opens and closes only when you do**: `/vprofit` (and its tab commands),
+  the title-bar button, its close button. It used to open by itself at the
+  auction house, bank and a vendor with an order, and on Queue (switching to
+  the Shopping List); now Queue just says so in chat.
+- **Closes in combat**: the window template's close button closes through
+  HideUIPanel, which the game blocks in combat (it silently did nothing), so
+  it's rewired to hide the window directly. The window isn't protected (see
+  the secure Open button under Crafting), so that works in combat.
+- **Not docked**: it's a window of its own (it used to dock beside the
+  auction house, bank, vendor or professions window). It opens centered
+  near the top of the screen until you move it, then where you left it,
+  held by its top left corner either way (by its center, its edges jumped
+  as tabs of different sizes switched). It's only ever anchored to
+  UIParent: anchored to a protected window it would be protected too, and
+  hiding it in combat would be blocked.
 - **Spacing**: the gap between a page's title, its totals line and its table
   is the same everywhere (about 6px between text lines).
 - **Dates** are mm/dd, to save space.
@@ -116,7 +128,8 @@ opens.
   anchored to the panel (that would make the panel protected in combat). It
   hides in combat and after a click (until the profession opens or 3s pass).
 - **It used to get left behind** when the window moved without redrawing
-  (docked window moving, height change while centered, alt-tab display
+  (a docked window moving, back when it docked; height change while
+  centered; alt-tab display
   changes): clicks hit the plain button and nothing opened. It now follows
   the button (checked every 0.1s), is put back under the mouse on hover, and
   is re-placed on display or UI-scale changes.
@@ -163,6 +176,74 @@ opens.
   (all time, last 7/30/90 days, last 50/100/250 sales). "Sold to" moved from
   a column into the tooltip.
 
+## Gold
+
+- **Why it's here**: a graph of your gold over time, like TradeSkillMaster's
+  Player Gold, so TSM doesn't have to stay installed just for that. The
+  behavior is borrowed (ranges, drag to zoom, hover, green when up and red
+  when down); the code and the look are our own.
+- **Only the player's gold**, on every character of the account, added up.
+  No guild bank, no warbank: not wanted.
+- **Saved for the whole account** (`VendorProfitDB`, the addon's only
+  account-wide save), so the graph can add characters together. A character
+  is recorded from its first login with the addon; before its first point
+  it counts at that first value (an untouched alt had that gold all along),
+  rather than 0, which would show as a sudden step up when it first logs in.
+- **Exact copper, at most one point a minute**: a point is saved when gold
+  changes (the last value in a minute wins). TSM rounds to whole gold on
+  Forever, which showed a 16s alt as 0. Points older than 90 days are thinned
+  to the last one in each hour, far finer than the graph can draw.
+- **Stored as a string** per character ("minute:copper;..."), read once when
+  needed, written back on logout: much smaller and faster to load than a Lua
+  table of thousands of points.
+- **Gold the game reports as 0**: right after logging in or a loading
+  screen, the game can report 0 for a few seconds, so a 0 then is retried
+  every second for 30 seconds before it's believed (TSM does the same).
+  While logging out or reloading it reports 0 too (seen on Forever: the
+  first version saved a 0 at every /reload), so nothing is recorded between
+  leaving the world and entering it again, and logout only saves. A real
+  change to 0 is recorded at once.
+- **Names on Forever**: `UnitName` is the bare name ("Josten") and the realm
+  is "CAMWOW US1 Realm 2 PvP". TSM and Syndicator save other forms
+  ("Josten Blackwolf", "PvP"); don't copy their keys.
+- **Tab icon**: the Gold Bar's, read with `C_Item.GetItemInfoInstant`, so the
+  client is sure to have it: `INV_Misc_Coin_01` drew nothing on Forever.
+- **Characters menu**: the Best Crafts Filter pattern: a red panel button
+  ("Characters", or "Characters (2 of 7)" while some are hidden), the game's
+  menu of checkboxes under it, and the red X beside it to show everyone
+  again. Each row is the name (with the realm if you have more than one) and
+  that character's gold. Ticks are saved for the account, so a hidden
+  character stays hidden on every character; new characters start ticked.
+  Nothing ticked: "No characters selected", not a flat line at zero.
+- **Range**: a menu like Profit History's (rather than TSM's row of
+  buttons, to match the window): last 24 hours, 7 and 30 days, 3 and 6
+  months, last year, all time. Saved per character, like Profit History's.
+  A range never starts before the first point. Zoom is for the moment:
+  changing the range or reopening the tab resets it.
+- **The line** is a 2.5-pixel stroke drawn with our own texture that fades
+  out across its width (`Media/GraphLine.png`), not snapped to the pixel
+  grid: a plain color fill looked jagged next to TSM's, and with snapping on
+  a slanted line stair-steps. Green when the stretch shown ends at least as high
+  as it starts, red when lower, gold while hovered (as TSM).
+- **Hover**, as TSM: a gold guide line, a round dot on the line and the gold
+  then above the guide's top, exact to the copper. No tooltip (the first
+  version had one, with each character: too busy). The time shows beside the
+  page's title.
+- **Cost**: the graph is ~145 samples (about one per 3 pixels), drawn again
+  only when the logs, ticks, range, zoom or minute changed: the window
+  refreshes its open page on every bag and gold change. Measured in the test
+  harness with 7 characters and years of heavy play (56,000 points on the
+  played one): about 200 ms at login to read and thin it (during the
+  loading screen), 70 ms to save at logout, 600 KB saved, 2 ms per redraw.
+  Typical logs are a fraction of that.
+- **Totals line**: the selected characters' gold now, and the change over
+  the last 7 days, like Profit History's line.
+- **TSM import, once, by hand**: Josh's TSM gold log (Josten from Nov 5,
+  2026, and Slysten) was copied into the account save file. No import
+  command: the addon never reads TSM. Only write a save file with WoW fully
+  closed: the first attempt was written while it ran, and the file was gone
+  by the next save.
+
 ## Vendors
 
 - Buys what the order needs from the vendor you're talking to; pending
@@ -188,6 +269,8 @@ opens.
 - **Save time route mode**: planned, not built (`docs/route-modes.md`).
 - **Blocked-action report**: narrow it once buying has been reliable for a
   while.
-- **Unconfirmed in game**: whether stations are reported for professions
-  that aren't open; the owned-auctions counts against the Auctions tab;
-  tooltip placement and the filter menu position feel.
+- **Unconfirmed in game**: the gold graph's drawing (lines, hover, drag to
+  zoom), gold read right after login, and that the game says the world is
+  being left before logout reports 0 gold; whether stations are reported for
+  professions that aren't open; the owned-auctions counts against the Auctions
+  tab; tooltip placement and the filter menu position feel.
