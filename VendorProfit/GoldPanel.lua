@@ -29,12 +29,11 @@ VendorProfit.GoldPanel = GoldPanel
 local WIDTH = 540
 local PADDING = 16
 -- Title at -32, the total at -50 and the buttons at -66 (20 tall), as on
--- Profit History; the graph 10 below those.
+-- Profit History; the graph 18 below those, with the hovered amount between.
 local TOTAL_TOP = -50
 local CONTROLS_TOP = -66
 local Y_LABEL_WIDTH = 64
 local PLOT_LEFT = PADDING + Y_LABEL_WIDTH
--- Room above the plot for the hovered amount.
 local PLOT_TOP = -104
 -- Room on the right for the last time label, which is centered on its tick.
 local PLOT_WIDTH = WIDTH - PLOT_LEFT - PADDING - 12
