@@ -404,6 +404,50 @@ function VendorProfit.Calculate(schematicForm)
     return result
 end
 
+-- Item info -------------------------------------------------------------------
+
+-- Items whose info the game hasn't sent yet (the first time a list shows
+-- them, say): each is asked for once, and the views waiting on them are
+-- redrawn once per batch, a moment after items start arriving, not once per
+-- item. Asking again on every redraw multiplied: each arrival redrew, every
+-- redraw asked again for every item still missing, and the redraws doubled
+-- with each item (10 items, 1,024 redraws), freezing the game.
+VendorProfit.ITEM_REDRAW_DELAY = 0.2
+local waitingItems = {}   -- itemID -> { [redraw] = true }
+local dueRedraws = {}     -- redraw -> true
+local redrawScheduled = false
+
+local function RunRedraws()
+    redrawScheduled = false
+    local redraws = dueRedraws
+    dueRedraws = {}
+    for redraw in pairs(redraws) do
+        xpcall(redraw, geterrorhandler())
+    end
+end
+
+-- Calls redraw (always the same function for a view, so it's only queued
+-- once) after the item's info arrives.
+function VendorProfit.RedrawWhenLoaded(itemID, redraw)
+    local redraws = waitingItems[itemID]
+    if redraws then
+        redraws[redraw] = true
+        return
+    end
+    waitingItems[itemID] = { [redraw] = true }
+    Item:CreateFromItemID(itemID):ContinueOnItemLoad(function()
+        local waiting = waitingItems[itemID] or {}
+        waitingItems[itemID] = nil
+        for fn in pairs(waiting) do
+            dueRedraws[fn] = true
+        end
+        if not redrawScheduled then
+            redrawScheduled = true
+            C_Timer.After(VendorProfit.ITEM_REDRAW_DELAY, RunRedraws)
+        end
+    end)
+end
+
 -- Coin icons, as the game draws them in money text.
 VendorProfit.COINS = {
     gold = "|TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t",

@@ -44,7 +44,7 @@ local y
 local function ItemName(itemID)
     local name = C_Item.GetItemInfo(itemID)
     if name == nil then
-        Item:CreateFromItemID(itemID):ContinueOnItemLoad(function() Panel.Refresh() end)
+        VendorProfit.RedrawWhenLoaded(itemID, Panel.Refresh)
         return "item " .. itemID
     end
     return name

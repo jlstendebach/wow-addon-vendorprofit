@@ -44,7 +44,7 @@ end
 local function ItemLabel(itemID, n)
     local name = C_Item.GetItemInfo(itemID)
     if name == nil then
-        Item:CreateFromItemID(itemID):ContinueOnItemLoad(function() PurchasePanel.Refresh() end)
+        VendorProfit.RedrawWhenLoaded(itemID, PurchasePanel.Refresh)
         name = "item " .. itemID
     end
     local icon = select(5, C_Item.GetItemInfoInstant(itemID))

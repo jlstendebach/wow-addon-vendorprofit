@@ -60,6 +60,12 @@ time" route mode).
   works the same way. Both sort every recipe, priced or not, ties keeping the
   profit order. The count columns get a 12px gap so a sort arrow doesn't touch
   the next column.
+- **Item info not loaded yet** (the first time a profession's list shows):
+  each item is asked for once, and the list redraws once per batch, 0.2s
+  after items start arriving (`VendorProfit.RedrawWhenLoaded`, used by every
+  list). It used to redraw per arrival and ask again on every redraw, so
+  redraws doubled with each missing item (10 items: 1,024 full re-ranks) and
+  a big profession froze the game.
 - **AH counts** come from your owned auctions, which the game only lists at
   the auction house: read when it opens and after you post or cancel, saved,
   and shown as of your last visit.

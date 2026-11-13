@@ -98,8 +98,13 @@ end
 
 -- Item names, once the game has them, and in lower case for the search:
 -- looked up once per item, not once per sale.
-local names, lowerNames, loadingNames = {}, {}, {}
+local names, lowerNames = {}, {}
 local namesVersion = 0
+-- Names arrived: what the list shows may change (search matches, sorting).
+local function NamesLoaded()
+    namesVersion = namesVersion + 1
+    HistoryPanel.Refresh()
+end
 local function ItemName(itemID)
     local name = names[itemID]
     if name then
@@ -107,14 +112,7 @@ local function ItemName(itemID)
     end
     name = C_Item.GetItemInfo(itemID)
     if name == nil then
-        if not loadingNames[itemID] then
-            loadingNames[itemID] = true
-            Item:CreateFromItemID(itemID):ContinueOnItemLoad(function()
-                loadingNames[itemID] = nil
-                namesVersion = namesVersion + 1
-                HistoryPanel.Refresh()
-            end)
-        end
+        VendorProfit.RedrawWhenLoaded(itemID, NamesLoaded)
         return "item " .. itemID
     end
     names[itemID] = name

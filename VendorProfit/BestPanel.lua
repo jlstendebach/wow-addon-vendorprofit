@@ -65,7 +65,7 @@ local filter = ""        -- the search box's text, lowercased
 local function ItemLabel(itemID, skillUp)
     local name = C_Item.GetItemInfo(itemID)
     if name == nil then
-        Item:CreateFromItemID(itemID):ContinueOnItemLoad(function() BestPanel.Refresh() end)
+        VendorProfit.RedrawWhenLoaded(itemID, BestPanel.Refresh)
         name = "item " .. itemID
     end
     local skill = skillUp and SKILL_UP[skillUp]
@@ -628,7 +628,7 @@ local function Refresh()
 
     local all = {}
     if profession then
-        all = SortEntries(BestCrafts.Rank(profession, tab, function() BestPanel.Refresh() end))
+        all = SortEntries(BestCrafts.Rank(profession, tab, BestPanel.Refresh))
     end
     local ranked, unknownSkillUp = {}, false
     for _, entry in ipairs(all) do

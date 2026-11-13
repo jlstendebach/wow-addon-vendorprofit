@@ -2237,6 +2237,35 @@ check("a recipe whose item hasn't sold: says so", [l.left for l in ev("GameToolt
 run("GameTooltip:Hide()")
 check("no errors from Best Crafts", ev("#__stub.errors") == 0)
 
+# --- Items the game hasn't sent yet: asked for once, redrawn once per batch ---------
+# Each arrival used to redraw Best Crafts, and each redraw asked again for every
+# item still missing, so the redraws doubled with each item: a profession with
+# many recipes froze the game the first time it was shown.
+run, ev = client()
+run('__stub.items["item:2840"] = { name = "Copper Bar", cached = true, sellPrice = 5 }; __stub.auctionPrices[2840] = 50')
+many = []
+for i in range(30):
+    run('__stub.items["item:%d"] = { name = "Thing %d", cached = false, sellPrice = 300 }; __stub.auctionPrices[%d] = 400' % (20000 + i, i, 20000 + i))
+    many.append('{ recipeID = %d, itemLink = "item:%d", quantityMin = 1, reagents = { { itemID = 2840, quantity = 2 } } }' % (30000 + i, 20000 + i))
+run('''
+    __ranks = 0
+    local rank = VendorProfit.BestCrafts.Rank
+    VendorProfit.BestCrafts.Rank = function(...) __ranks = __ranks + 1 return rank(...) end
+''')
+run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % ",".join(many))
+run('VendorProfit.Panel.Show("best")')
+run('VendorProfit.BestPanel.Refresh(); VendorProfit.BestPanel.Refresh()')
+waiting = lambda: ev("(function() local n = 0 for _, l in pairs(__stub.loadCallbacks) do n = n + #l end return n end)()")
+check("names not sent yet: shown as placeholders, each item asked for once however often it redraws",
+      "item 20000" in ev("VendorProfit.BestPanel.Row(1).left:GetText()") and waiting() == 30)
+ranks = ev("__ranks")
+run(";".join('__stub.LoadItem("item:%d")' % (20000 + i) for i in range(30)))
+check("a batch arriving doesn't redraw at once", ev("__ranks") == ranks)
+run('__stub.Advance(0.3)')
+check("...but once, a moment later, with the names", ev("__ranks") == ranks + 1
+      and "Thing" in ev("VendorProfit.BestPanel.Row(1).left:GetText()") and waiting() == 0)
+check("no errors loading item names", ev("#__stub.errors") == 0)
+
 # --- Gold ------------------------------------------------------------------------------
 
 # A clock the tests move (time() is fixed otherwise), with local dates.
