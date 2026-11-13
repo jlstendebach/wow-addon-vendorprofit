@@ -83,6 +83,12 @@ time" route mode).
 
 ## Shopping List
 
+- **Two Queue buttons**: under the Cheapest Route (along that route), and
+  under Auctionator's Vendor Profit line for the exact recipe: its reagents
+  only bought (or taken from what you have), never crafted, as Auctionator
+  prices it. An exact entry is its own entry (marked "(exact)"), so the same
+  recipe can be queued both ways. The exact button folds to nothing when
+  hidden (nothing a vendor buys), so the Cheapest Route doesn't move down.
 - **Queued rows**: - + and a red X; clicking the name shows the recipe; the
   name is red when neither vendor nor auction makes money; the tooltip shows
   the item's cost and both profits. A profit box was tried and removed.

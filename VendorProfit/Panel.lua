@@ -705,11 +705,11 @@ local function SetBagsCollapsed(collapsed)
     Panel.Refresh()
 end
 
--- What one queued entry makes, on its own, along its cheapest route at
--- today's prices: { cost, vendor, auction } for all its crafts (vendor or
--- auction nil when there's no price to sell at).
+-- What one queued entry makes, on its own, at today's prices, along its
+-- cheapest route (or as it is, for an exact one): { cost, vendor, auction }
+-- for all its crafts (vendor or auction nil when there's no price to sell at).
 local function EntryProfit(entry)
-    local route = VendorProfit.Route.ForRecipe(entry.itemID, entry.reagents)
+    local route = VendorProfit.Route.ForRecipe(entry.itemID, entry.reagents, nil, entry.exact)
     local cost = math.floor(route.cost * entry.crafts + 0.5)
     local made = entry.count * entry.crafts
     local sellPrice = entry.sellPrice or select(11, C_Item.GetItemInfo(entry.itemID))
@@ -731,7 +731,7 @@ local function QueuedTooltip(entry)
         local profit = EntryProfit(entry)
         tooltip:SetText(ItemLabel(entry.itemID, entry.crafts * entry.count))
         tooltip:AddLine(" ")
-        tooltip:AddDoubleLine(L.QUEUED_COST, Money(-profit.cost))
+        tooltip:AddDoubleLine(entry.exact and L.QUEUED_COST_EXACT or L.QUEUED_COST, Money(-profit.cost))
         tooltip:AddDoubleLine(L.VENDOR_PROFIT_ROW,
             profit.vendor and Money(profit.vendor) or Gray(L.QUEUED_NO_VENDOR))
         tooltip:AddDoubleLine(L.AUCTION_PROFIT_ROW,
@@ -746,6 +746,9 @@ local function AddQueued(index, entry)
     local label = ItemLabel(entry.itemID, entry.crafts * entry.count)
     if not MakesMoney(profit.vendor, profit.auction) then
         label = Red(label)
+    end
+    if entry.exact then
+        label = label .. " " .. Gray(L.QUEUED_EXACT_MARK)
     end
     AddRow("row", label, nil, nil, {
         tooltip = QueuedTooltip(entry),

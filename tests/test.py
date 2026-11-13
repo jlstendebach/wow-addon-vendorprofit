@@ -215,8 +215,10 @@ run, ev = route_client()
 # --- Before Mining has been opened ------------------------------------------
 run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
 run('__stub.SetRecipe(%s)' % CUIRASS)
-check("route line shown under the vendor line",
-      ev(ROUTE + ":IsShown()") and ev(SECTION + ".separator.__point[2] == AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"))
+EXACT = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitExactQueueButton"
+check("route line shown under the vendor line (and its Queue button)",
+      ev(ROUTE + ":IsShown()") and ev(SECTION + ".separator.__point[2] == " + EXACT)
+      and ev(EXACT + ".__point[2] == AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"))
 check("separator titled Cheapest Route, with a gap above",
       ev(SECTION + ".separator.Label:GetText()") == "Cheapest Route" and ev(SECTION + ".separator.__point[5]") < -2
       and ev(SECTION + ".separator:IsShown()"))
@@ -870,6 +872,42 @@ run('__stub.ah.noBidReply = false; VendorProfitCharDB.order.spent = 0; VendorPro
 run('__stub.Fire("UI_ERROR_MESSAGE", 0, ERR_ITEM_NOT_FOUND)')
 check("an error while not buying is left alone", ev("VendorProfit.Shopper.Status()") == "ready")
 check("no errors buying single auctions", ev("#__stub.errors") == 0)
+
+# --- Queue the exact recipe (under Auctionator's Vendor Profit line) ---------------
+run, ev = shop_client()
+check("exact Queue under the Vendor Profit line, a small gap below it", ev(EXACT + ":IsShown()")
+      and ev(EXACT + ".__point[2] == AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine")
+      and ev(EXACT + ".__point[5]") == -6 and ev(EXACT + ":GetHeight()") == 20 and ev(EXACT + ".__text") == "Queue")
+run(EXACT + ':GetScript("OnEnter")(' + EXACT + ')')
+check("its tooltip says it's the recipe as it is", "as it is" in ev("GameTooltip.lines[2].left")
+      and "never crafted" in ev("GameTooltip.lines[2].left"))
+run(QUEUE + ':GetScript("OnEnter")(' + QUEUE + ')')
+check("...and the Cheapest Route one says it crafts where cheaper", "Cheapest Route" in ev("GameTooltip.lines[2].left"))
+run("GameTooltip:Hide()")
+run('__stub.createCount = 4; __stub.bags[2841] = 0'); run(EXACT + ':Click()')
+entry = ev("VendorProfit.Order.Entries()[1]")
+check("queues the exact recipe", entry.exact == True and entry.crafts == 4 and entry.recipeID == 2670)
+plan = ev("VendorProfit.Order.Plan()")
+check("...buying its reagents as they are: Bronze Bars, not smelted", plan.buy[2841] is not None
+      and plan.buy[2841].quantity == 28 and plan.buy[2841].source == "auction"
+      and [s.itemID for s in plan.crafts.values()] == [2866])
+run(QUEUE + ':Click()')
+check("the cheapest-route Queue adds its own entry", ev("#VendorProfit.Order.Entries()") == 2
+      and ev("VendorProfit.Order.Entries()[2].exact") is None)
+run(EXACT + ':Click()')
+check("queuing the exact recipe again adds to its own entry", ev("#VendorProfit.Order.Entries()") == 2
+      and ev("VendorProfit.Order.Entries()[1].crafts") == 8)
+check("the exact one is marked in the Queued list", has_line(ev, "Rough Bronze Cuirass x8", "(exact)")
+      and has_line(ev, "Rough Bronze Cuirass x4") and not has_line(ev, "Rough Bronze Cuirass x4", "(exact)"))
+run('VendorProfit.Panel.FindRow("Rough Bronze Cuirass x8").hit:GetScript("OnEnter")(VendorProfit.Panel.FindRow("Rough Bronze Cuirass x8").hit)')
+check("...its tooltip prices the exact recipe", any(l.left == "Cost (exact recipe)" for l in ev("GameTooltip.lines").values()))
+run("GameTooltip:Hide(); VendorProfit.Order.Clear()")
+run('__stub.items["item:2866"].sellPrice = 0; AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
+check("nothing a vendor buys: hidden, folded so no gap is left", not ev(EXACT + ":IsShown()")
+      and ev(EXACT + ":GetHeight()") < 0.01 and ev(EXACT + ".__point[5]") == 0)
+run('__stub.items["item:2866"].sellPrice = 600; AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
+check("...and back", ev(EXACT + ":IsShown()") and ev(EXACT + ":GetHeight()") == 20)
+check("no errors queuing exact recipes", ev("#__stub.errors") == 0)
 
 # --- Queue rules and saving -------------------------------------------------------
 run, ev = shop_client()

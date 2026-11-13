@@ -106,7 +106,8 @@ VendorProfit.L = {
 
     -- Queue button
     QUEUE = "Queue",
-    QUEUE_HELP = "Adds %d crafts of this recipe (the number in the Create box) to your shopping order.",
+    QUEUE_HELP = "Adds %d crafts of this recipe (the number in the Create box) to your shopping order, along the Cheapest Route: reagents are crafted yourself where that's cheaper.",
+    QUEUE_EXACT_HELP = "Adds %d crafts of this recipe (the number in the Create box) to your shopping order as it is: its reagents are bought or taken from what you have, never crafted.",
     QUEUED = "|cffffd100Vendor Profit:|r queued %d x %s. Shop for it on the Shopping List (/vprofit).",
 
     -- Shopping panel
@@ -184,6 +185,8 @@ VendorProfit.L = {
     QUEUED_MORE = "Craft one more. Shift-click: five more.",
     QUEUED_FEWER = "Craft one fewer. Shift-click: five fewer.",
     QUEUED_COST = "Cost (cheapest route)",
+    QUEUED_COST_EXACT = "Cost (exact recipe)",
+    QUEUED_EXACT_MARK = "(exact)",
     QUEUED_NO_VENDOR = "can't be sold to vendors",
     NOT_SCANNED = "not scanned",
     ONLY_LISTED = "only %d listed",

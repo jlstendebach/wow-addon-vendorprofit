@@ -6,18 +6,19 @@ An addon for World of Warcraft: Forever that adds to Auctionator's crafting info
 To Craft: 12s 39c                  <- Auctionator
 Profit: -6s                        <- Auctionator: sell on the auction house
 Vendor Profit: -10s 92c            <- sell to a vendor instead
+[Queue]                            <- queue the recipe as it is
 ------------ Cheapest Route ------------
 To Craft: 4s 38c         [Search]  <- crafting reagents yourself where that's cheaper
 Profit: 7s 97c                     <- ...sold on the auction house
 Vendor Profit: -2s 91c             <- ...sold to a vendor
-[Queue]
+[Queue]                            <- queue it along the cheapest route
 ```
 
 - **Vendor Profit:** what you make by crafting the item and selling it to a vendor, at Auctionator's To Craft cost.
 - **Cheapest Route:** the same three numbers when every reagent is got the cheapest way, crafting reagents yourself where that's cheaper than buying them, all the way down. Hover the section to see the route.
 - **Search** (at the auction house) looks up live prices for every item in the crafting tree in one request.
 - **Vendor Profit** in the professions window's title bar opens the Vendor Profit window on its **Best Crafts** tab: every recipe of the profession, most profitable first.
-- **Queue** adds the recipe to a shopping order. The window's **Shopping List** tab then plans it with what you already have, scans the auction house, checks the order is still profitable at live prices, buys what's missing one confirmed purchase at a time, and crafts the steps in order.
+- **Queue** adds the recipe to a shopping order: under the Cheapest Route, along that route; under Auctionator's lines, the exact recipe, its reagents bought as they are and never crafted. The window's **Shopping List** tab then plans it with what you already have, scans the auction house, checks the order is still profitable at live prices, buys what's missing one confirmed purchase at a time, and crafts the steps in order.
 
 Requires [Auctionator](https://www.curseforge.com/wow/addons/auctionator).
 
@@ -141,7 +142,7 @@ Prices from Auctionator's last scan.
 
 ## Shopping
 
-**1. Queue.** Set the number in the professions window's Create box (say 10) and click **Queue** under the Cheapest Route section's Vendor Profit line. Queuing a recipe already in the order adds to it. A chat line confirms it; the order is on the Vendor Profit window's Shopping List tab, which `/vprofit` opens (the window never opens by itself).
+**1. Queue.** Set the number in the professions window's Create box (say 10) and click **Queue** under the Cheapest Route section's Vendor Profit line, to craft reagents yourself where that's cheaper. Or click the **Queue** under Auctionator's lines (below the first Vendor Profit line) for the exact recipe, as Auctionator prices it: its reagents are bought (or taken from what you have), never crafted. An exact one is marked *(exact)* in the Queued list, and its tooltip prices it that way. Queuing a recipe already in the order the same way adds to it; queued the other way, it's a separate entry. A chat line confirms it; the order is on the Vendor Profit window's Shopping List tab, which `/vprofit` opens (the window never opens by itself).
 
 **2. The plan.** The panel works out, in whole numbers, what the order needs, using what you already have (bags and bank) first:
 
