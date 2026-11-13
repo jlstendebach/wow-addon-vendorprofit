@@ -152,6 +152,9 @@ VendorProfit.L = {
     HISTORY_TO_VENDORS = "Sold to vendors",
     HISTORY_AT_AUCTION = "Sold at auction",
     HISTORY_LAST_SOLD = "Last sold %s",
+    HISTORY_AVERAGE_ROI = "Avg ROI",
+    BEST_SALES_TITLE = "Your sales, all time",
+    BEST_NO_SALES = "No sales of it recorded yet.",
     TAB_GOLD = "Gold",
     GOLD_TOTAL = "Gold: %s across %d characters. Last 7 days: %s.",
     GOLD_TOTAL_ONE = "Gold: %s on one character. Last 7 days: %s.",
@@ -182,7 +185,6 @@ VendorProfit.L = {
     QUEUED_FEWER = "Craft one fewer. Shift-click: five fewer.",
     QUEUED_COST = "Cost (cheapest route)",
     QUEUED_NO_VENDOR = "can't be sold to vendors",
-    BUY_YOURSELF = "buy yourself",
     NOT_SCANNED = "not scanned",
     ONLY_LISTED = "only %d listed",
     CRAFTS = "%d crafts",
@@ -274,6 +276,7 @@ VendorProfit.L = {
     PRICE_UNAVAILABLE = "%s isn't available at that price any more. Scanning it again.",
     BOUGHT = "Bought %d %s for %s.",
     PURCHASE_FAILED = "Buying %s failed. Scanning it again.",
+    AUCTION_GONE = "%s was bought by someone else first. Buy goes on to the next cheapest.",
 }
 
 -- Prices ---------------------------------------------------------------------
@@ -401,6 +404,50 @@ function VendorProfit.Calculate(schematicForm)
     return result
 end
 
+-- Item info -------------------------------------------------------------------
+
+-- Items whose info the game hasn't sent yet (the first time a list shows
+-- them, say): each is asked for once, and the views waiting on them are
+-- redrawn once per batch, a moment after items start arriving, not once per
+-- item. Asking again on every redraw multiplied: each arrival redrew, every
+-- redraw asked again for every item still missing, and the redraws doubled
+-- with each item (10 items, 1,024 redraws), freezing the game.
+VendorProfit.ITEM_REDRAW_DELAY = 0.2
+local waitingItems = {}   -- itemID -> { [redraw] = true }
+local dueRedraws = {}     -- redraw -> true
+local redrawScheduled = false
+
+local function RunRedraws()
+    redrawScheduled = false
+    local redraws = dueRedraws
+    dueRedraws = {}
+    for redraw in pairs(redraws) do
+        xpcall(redraw, geterrorhandler())
+    end
+end
+
+-- Calls redraw (always the same function for a view, so it's only queued
+-- once) after the item's info arrives.
+function VendorProfit.RedrawWhenLoaded(itemID, redraw)
+    local redraws = waitingItems[itemID]
+    if redraws then
+        redraws[redraw] = true
+        return
+    end
+    waitingItems[itemID] = { [redraw] = true }
+    Item:CreateFromItemID(itemID):ContinueOnItemLoad(function()
+        local waiting = waitingItems[itemID] or {}
+        waitingItems[itemID] = nil
+        for fn in pairs(waiting) do
+            dueRedraws[fn] = true
+        end
+        if not redrawScheduled then
+            redrawScheduled = true
+            C_Timer.After(VendorProfit.ITEM_REDRAW_DELAY, RunRedraws)
+        end
+    end)
+end
+
 -- Coin icons, as the game draws them in money text.
 VendorProfit.COINS = {
     gold = "|TInterface\\MoneyFrame\\UI-GoldIcon:0:0:2:0|t",
@@ -429,6 +476,19 @@ function VendorProfit.FormatCoins(copper)
         parts[#parts + 1] = string.format(#parts > 0 and "%02d" or "%d", cop) .. coins.copper
     end
     return table.concat(parts, " ")
+end
+
+-- A return on investment as a whole percentage: red with a minus for a
+-- loss, a gray dash when there's none (nothing was spent).
+function VendorProfit.FormatROI(roi)
+    if roi == nil then
+        return GRAY_FONT_COLOR:WrapTextInColorCode("-")
+    end
+    local text = string.format("%d%%", math.floor(roi * 100 + (roi >= 0 and 0.5 or -0.5)))
+    if roi < 0 then
+        return RED_FONT_COLOR:WrapTextInColorCode(text)
+    end
+    return text
 end
 
 -- How many crafts a + or - click on a queue adds or takes off: one, or

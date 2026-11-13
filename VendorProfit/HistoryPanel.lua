@@ -51,10 +51,14 @@ local SOLD_RIGHT = PROFIT_RIGHT - MONEY_WIDTH - GAP
 local COST_RIGHT = SOLD_RIGHT - MONEY_WIDTH - GAP
 local ITEM_LEFT = DATE_WIDTH + GAP
 local ITEM_WIDTH = LIST_WIDTH + COST_RIGHT - MONEY_WIDTH - GAP - ITEM_LEFT
--- Best Sellers columns: Item from the left; Profit (total), Avg profit, Sold
--- from the right. Sold is narrow, with room left of it for its sort arrow.
+-- Best Sellers columns: Item from the left; ROI (overall), Avg ROI, Profit
+-- (total), Avg profit, Sold from the right. Sold is narrow, with room left
+-- of it for its sort arrow.
 local COUNT_WIDTH, COUNT_GAP = 36, 12
-local TOTAL_RIGHT = 0
+local ROI_WIDTH = 52
+local ROI_RIGHT = 0
+local AVERAGE_ROI_RIGHT = ROI_RIGHT - ROI_WIDTH - GAP
+local TOTAL_RIGHT = AVERAGE_ROI_RIGHT - ROI_WIDTH - GAP
 local AVERAGE_RIGHT = TOTAL_RIGHT - MONEY_WIDTH - GAP
 local COUNT_RIGHT = AVERAGE_RIGHT - MONEY_WIDTH - COUNT_GAP
 local SELLER_WIDTH = LIST_WIDTH + COUNT_RIGHT - COUNT_WIDTH - COUNT_GAP
@@ -94,8 +98,13 @@ end
 
 -- Item names, once the game has them, and in lower case for the search:
 -- looked up once per item, not once per sale.
-local names, lowerNames, loadingNames = {}, {}, {}
+local names, lowerNames = {}, {}
 local namesVersion = 0
+-- Names arrived: what the list shows may change (search matches, sorting).
+local function NamesLoaded()
+    namesVersion = namesVersion + 1
+    HistoryPanel.Refresh()
+end
 local function ItemName(itemID)
     local name = names[itemID]
     if name then
@@ -103,14 +112,7 @@ local function ItemName(itemID)
     end
     name = C_Item.GetItemInfo(itemID)
     if name == nil then
-        if not loadingNames[itemID] then
-            loadingNames[itemID] = true
-            Item:CreateFromItemID(itemID):ContinueOnItemLoad(function()
-                loadingNames[itemID] = nil
-                namesVersion = namesVersion + 1
-                HistoryPanel.Refresh()
-            end)
-        end
+        VendorProfit.RedrawWhenLoaded(itemID, NamesLoaded)
         return "item " .. itemID
     end
     names[itemID] = name
@@ -254,7 +256,10 @@ end
 -- Best Sellers ----------------------------------------------------------------
 
 -- Sales grouped by item: { item, n (units sold), sales, cost, sold, profit,
--- average (profit per unit), vendor, auction (units each way), last (time) }.
+-- average (profit per unit), roi (profit / cost: the overall return),
+-- averageRoi (each unit's own return on its cost, averaged), vendor, auction
+-- (units each way), last (time) }. roi and averageRoi are nil when nothing
+-- was spent.
 -- All time: every sale ever, from the totals. Other ranges: the list's,
 -- plus for days, older sales added up by day (whose time is their day).
 function HistoryPanel.BestSellers()
@@ -269,13 +274,16 @@ function HistoryPanel.BestSellers()
             list[#list + 1] = item
         end
     end
-    local function Add(itemID, n, sales, cost, sold, vendor, auction, when)
+    local function Add(itemID, n, sales, cost, sold, vendor, auction, when, roiSum, roiUnits)
         local item = byItem[itemID]
         if item == nil then
-            item = { item = itemID, n = 0, sales = 0, cost = 0, sold = 0, vendor = 0, auction = 0, last = when }
+            item = { item = itemID, n = 0, sales = 0, cost = 0, sold = 0, vendor = 0, auction = 0, last = when,
+                roiSum = 0, roiUnits = 0 }
             byItem[itemID] = item
             list[#list + 1] = item
         end
+        item.roiSum = item.roiSum + (roiSum or 0)
+        item.roiUnits = item.roiUnits + (roiUnits or 0)
         item.n = item.n + n
         item.sales = item.sales + sales
         item.cost = item.cost + cost
@@ -287,19 +295,43 @@ function HistoryPanel.BestSellers()
     if range.key ~= "all" then
         EachSaleInRange(function(sale)
             local vendor = sale.how == "vendor" and sale.n or 0
-            Add(sale.item, sale.n, 1, sale.cost, sale.sold, vendor, sale.n - vendor, sale.time)
+            local roiSum, roiUnits = History.SaleROI(sale)
+            Add(sale.item, sale.n, 1, sale.cost, sale.sold, vendor, sale.n - vendor, sale.time, roiSum, roiUnits)
         end)
         if range.days then
             History.EachDaily(time() - range.days * DAY, function(itemID, t, dayStart)
-                Add(itemID, t.n, t.sales, t.cost, t.sold, t.vendor, t.auction, dayStart)
+                Add(itemID, t.n, t.sales, t.cost, t.sold, t.vendor, t.auction, dayStart, t.roiSum, t.roiUnits)
             end)
         end
     end
     for _, item in ipairs(list) do
-        item.profit = item.sold - item.cost
-        item.average = item.n > 0 and item.profit / item.n or 0
+        HistoryPanel.Finish(item)
     end
     return list
+end
+
+-- Works out an item's profit, averages and ROIs from its sums.
+function HistoryPanel.Finish(item)
+    item.profit = item.sold - item.cost
+    item.average = item.n > 0 and item.profit / item.n or 0
+    item.roi = item.cost > 0 and item.profit / item.cost or nil
+    local units = item.roiUnits or 0
+    item.averageRoi = units > 0 and (item.roiSum or 0) / units or nil
+    return item
+end
+
+-- An item's sales over all time, as Best Sellers shows them (whatever its
+-- range), or nil if it hasn't sold.
+function HistoryPanel.AllTime(itemID)
+    local totals = History.ItemTotals()[itemID]
+    if totals == nil then
+        return nil
+    end
+    local item = { item = itemID }
+    for key, value in pairs(totals) do
+        item[key] = value
+    end
+    return HistoryPanel.Finish(item)
 end
 
 local function Sort()
@@ -334,6 +366,10 @@ local function SortValue(item, key)
         return item.n
     elseif key == "average" then
         return item.average
+    elseif key == "averageRoi" then
+        return item.averageRoi or -math.huge
+    elseif key == "roi" then
+        return item.roi or -math.huge
     end
     return item.profit
 end
@@ -372,19 +408,33 @@ local function ShowSaleTooltip(row)
     GameTooltip:Show()
 end
 
-local function ShowSellerTooltip(row)
-    local item = row.seller
-    if item == nil then
-        return
-    end
-    VendorProfit.SetRowTooltipOwner(row.hit, { row.item, row.n, row.average, row.profit })
-    GameTooltip:SetText(ItemLabel(item.item))
+-- An item's sales lines for a tooltip (from BestSellers or AllTime): how
+-- many, then with withProfit its profit and ROIs (Best Sellers has those in
+-- its columns), what one cost and sold for on average, which way they sold,
+-- and when it last sold.
+function HistoryPanel.AddSalesLines(item, withProfit)
     GameTooltip:AddLine(string.format(L.HISTORY_SOLD_COUNT, item.n, item.sales), 1, 1, 1)
+    if withProfit then
+        GameTooltip:AddDoubleLine(L.HISTORY_AVERAGE, Money(item.average))
+        GameTooltip:AddDoubleLine(L.BEST_PROFIT, Money(item.profit))
+        GameTooltip:AddDoubleLine(L.HISTORY_AVERAGE_ROI, VendorProfit.FormatROI(item.averageRoi), nil, nil, nil, 1, 1, 1)
+        GameTooltip:AddDoubleLine(L.BEST_ROI, VendorProfit.FormatROI(item.roi), nil, nil, nil, 1, 1, 1)
+    end
     GameTooltip:AddDoubleLine(L.HISTORY_AVERAGE_COST, Money(item.cost / item.n))
     GameTooltip:AddDoubleLine(L.HISTORY_AVERAGE_SOLD, Money(item.sold / item.n))
     GameTooltip:AddDoubleLine(L.HISTORY_TO_VENDORS, tostring(item.vendor), nil, nil, nil, 1, 1, 1)
     GameTooltip:AddDoubleLine(L.HISTORY_AT_AUCTION, tostring(item.auction), nil, nil, nil, 1, 1, 1)
     GameTooltip:AddLine(string.format(L.HISTORY_LAST_SOLD, date(L.HISTORY_TIME_FORMAT, item.last)), 1, 1, 1)
+end
+
+local function ShowSellerTooltip(row)
+    local item = row.seller
+    if item == nil then
+        return
+    end
+    VendorProfit.SetRowTooltipOwner(row.hit, { row.item, row.n, row.average, row.profit, row.averageRoi, row.roi })
+    GameTooltip:SetText(ItemLabel(item.item))
+    HistoryPanel.AddSalesLines(item, false)
     GameTooltip:Show()
 end
 
@@ -453,8 +503,12 @@ local function GetSellerRow(index)
         row.average:SetPoint("TOPRIGHT", list, "TOPRIGHT", AVERAGE_RIGHT, top)
         row.profit = Column(list, MONEY_WIDTH, "RIGHT")
         row.profit:SetPoint("TOPRIGHT", list, "TOPRIGHT", TOTAL_RIGHT, top)
+        row.averageRoi = Column(list, ROI_WIDTH, "RIGHT")
+        row.averageRoi:SetPoint("TOPRIGHT", list, "TOPRIGHT", AVERAGE_ROI_RIGHT, top)
+        row.roi = Column(list, ROI_WIDTH, "RIGHT")
+        row.roi:SetPoint("TOPRIGHT", list, "TOPRIGHT", ROI_RIGHT, top)
         HitArea(row, list, top, ShowSellerTooltip)
-        row.regions = { row.item, row.n, row.average, row.profit, row.hit }
+        row.regions = { row.item, row.n, row.average, row.profit, row.averageRoi, row.roi, row.hit }
         sellerRows[index] = row
     end
     return row
@@ -583,6 +637,8 @@ local function Create(page)
     SortHeading("n", L.HISTORY_SOLD_UNITS, COUNT_WIDTH + COUNT_GAP, COUNT_RIGHT)
     SortHeading("average", L.HISTORY_AVERAGE, MONEY_WIDTH, AVERAGE_RIGHT)
     SortHeading("profit", L.BEST_PROFIT, MONEY_WIDTH, TOTAL_RIGHT)
+    SortHeading("averageRoi", L.HISTORY_AVERAGE_ROI, ROI_WIDTH, AVERAGE_ROI_RIGHT)
+    SortHeading("roi", L.BEST_ROI, ROI_WIDTH, ROI_RIGHT)
 
     frame.scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
     frame.scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, LIST_TOP)
@@ -660,6 +716,8 @@ local function RefreshSellers()
             row.n:SetText(tostring(item.n))
             row.average:SetText(Money(item.average))
             row.profit:SetText(Money(item.profit))
+            row.averageRoi:SetText(VendorProfit.FormatROI(item.averageRoi))
+            row.roi:SetText(VendorProfit.FormatROI(item.roi))
             ShowRegions(row, true)
         end
     end
@@ -741,7 +799,7 @@ function HistoryPanel.Refresh()
 end
 
 -- The shown rows as text, for tests: Sales as "date | item | cost | sold |
--- profit", Best Sellers as "item | sold | average | profit".
+-- profit", Best Sellers as "item | sold | average | profit | average ROI | ROI".
 function HistoryPanel.Lines()
     local lines = {}
     for _, row in ipairs(rows) do
@@ -753,7 +811,7 @@ function HistoryPanel.Lines()
     for _, row in ipairs(sellerRows) do
         if row.seller then
             lines[#lines + 1] = table.concat({ row.item:GetText(), row.n:GetText(),
-                row.average:GetText(), row.profit:GetText() }, " | ")
+                row.average:GetText(), row.profit:GetText(), row.averageRoi:GetText(), row.roi:GetText() }, " | ")
         end
     end
     return lines

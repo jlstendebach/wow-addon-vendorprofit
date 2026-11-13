@@ -44,7 +44,7 @@ local y
 local function ItemName(itemID)
     local name = C_Item.GetItemInfo(itemID)
     if name == nil then
-        Item:CreateFromItemID(itemID):ContinueOnItemLoad(function() Panel.Refresh() end)
+        VendorProfit.RedrawWhenLoaded(itemID, Panel.Refresh)
         return "item " .. itemID
     end
     return name
@@ -327,8 +327,6 @@ local function BuyLineRight(line)
         return L.FROM_VENDOR .. "  " .. Money(line.total)
     elseif line.source == nil then
         return Red(L.SOURCE_NONE)
-    elseif line.manual then
-        return Gray(L.BUY_YOURSELF) .. "  " .. Money(line.total)
     elseif line.unscanned and Shopper.IsOpen() then
         return Gray(L.NOT_SCANNED) .. "  " .. Money(line.total)
     elseif line.listed and line.listed < line.quantity then

@@ -108,8 +108,9 @@ end
 -- recipes with no profit to rank, each with unpriced = why: { itemID = a
 -- reagent with no price anywhere } (its profit can't be trusted), or
 -- { output = true } (no vendor price, or no auction price, for what it
--- makes). Also returns whether some item info is still loading (onLoad is
--- called when it arrives).
+-- makes). Also returns whether some item info is still loading (onLoad, the
+-- same function each time, is called when it arrives; see
+-- VendorProfit.RedrawWhenLoaded).
 function BestCrafts.Rank(profession, by, onLoad)
     local ranked, unranked, loading = {}, {}, false
     for _, recipe in ipairs(Recipes.ForProfession(profession)) do
@@ -123,7 +124,7 @@ function BestCrafts.Rank(profession, by, onLoad)
             if sellPrice == nil then
                 loading = true
                 if onLoad then
-                    Item:CreateFromItemID(recipe.item):ContinueOnItemLoad(onLoad)
+                    VendorProfit.RedrawWhenLoaded(recipe.item, onLoad)
                 end
                 entry.unpriced = { output = true }
             elseif sellPrice > 0 then

@@ -812,7 +812,64 @@ check("asks for more listings when the first page isn't enough", ev("__stub.ah.m
       and ev("VendorProfit.Shopper.Summary().plan.buy[2770].listed") == 10)
 check("only 10 listed: says so", has_line(ev, "Copper Ore x24", "only 10 listed"))
 check("buys what's there", ev(BUY + ".tooltip").startswith("Buy 10 Copper Ore"))
-check("item that doesn't stack: buy it yourself", has_line(ev, "Tin Bar x29", "buy yourself"))
+check("item that doesn't stack, nothing up with a buyout: not left to buy yourself", not has_line(ev, "buy yourself")
+      and not ev(BUY + ".tooltip").startswith("Buy 29 Tin Bar"))
+
+# --- Items that don't stack: single auctions, one click each -----------------------
+run, ev = shop_client()
+run('__stub.createCount = 4; __stub.bags[2840] = 20; __stub.auctionPrices[3576] = 80'); run(QUEUE + ':Click()')
+run('''
+    __stub.ah.nonCommodity[3576] = true
+    __stub.ah.auctions[3576] = {
+        { auctionID = 105, buyout = 95 }, { auctionID = 101, buyout = 70 }, { auctionID = 103, buyout = 80 },
+        { auctionID = 200, bid = 10 },                -- bid only: never bought
+        { auctionID = 300, buyout = 5, own = true },  -- yours: can't be bought
+        { auctionID = 102, buyout = 75 }, { auctionID = 104, buyout = 90 }, { auctionID = 106, buyout = 99 },
+        { auctionID = 107, buyout = 99 }, { auctionID = 108, buyout = 99 },
+    }
+''')
+run('__stub.OpenAH()'); click(run, "scan"); run('__stub.Advance(3)')
+tin = ev("VendorProfit.Shopper.Summary().plan.buy[3576]")
+n = tin.quantity
+cheapest = [70, 75, 80, 90, 95, 99, 99, 99][:n]
+check("scanned as single auctions: priced at the cheapest buyouts (%d needed)" % n, n >= 2
+      and tin.total == sum(cheapest) and tin.listed == n
+      and has_line(ev, "Tin Bar x%d" % n, "auction") and not has_line(ev, "buy yourself"))
+check("bid-only and your own auctions left out", [r.auctionID for r in ev("VendorProfit.Shopper.Listing(3576).rows").values()]
+      == [101, 102, 103, 104, 105, 106, 107, 108])
+check("Buy offers the cheapest auction", ev(BUY + ".__text") == "Buy"
+      and ev(BUY + ".tooltip") == "Buy 1 Tin Bar for |cffffffff70c|r")
+money = ev("__stub.money")
+click(run, "buy")
+check("one click buys it outright at its buyout: no quote, no Confirm", list(ev("__stub.ah.bids[1]").values()) == [101, 70]
+      and ev("#__stub.ah.starts") == 0 and ev("VendorProfit.Shopper.Status()") == "buying")
+run('__stub.Advance(0.5)')
+check("won: recorded, and Buy moves to the next", ev("VendorProfit.Shopper.Status()") == "ready"
+      and ev("VendorProfitCharDB.order.spent") == 70 and ev("__stub.money") == money - 70 and ev("__stub.bags[3576]") == 1
+      and ev("(VendorProfit.Shopper.Message())") == "Bought 1 Tin Bar for |cffffffff70c|r."
+      and ev(BUY + ".tooltip") == "Buy 1 Tin Bar for |cffffffff75c|r")
+check("one fewer to buy", ev("VendorProfit.Shopper.Summary().plan.buy[3576].quantity") == n - 1)
+searches = ev("#__stub.ah.searches")
+run('__stub.ah.goneNext = true'); click(run, "buy"); run('__stub.Advance(0.5)')
+check("bought by someone else first: says so, and Buy goes on to the next cheapest without a new scan",
+      "bought by someone else first" in ev("(VendorProfit.Shopper.Message())")
+      and ev("VendorProfit.Shopper.Status()") == "ready" and ev("#__stub.ah.searches") == searches
+      and ev(BUY + ".tooltip") == "Buy 1 Tin Bar for |cffffffff80c|r" and ev("VendorProfitCharDB.order.spent") == 70)
+run('__stub.ah.bidError = ERR_NOT_ENOUGH_MONEY'); click(run, "buy"); run('__stub.Advance(2)')
+check("any other error: nothing recorded, and it scans the item again",
+      ev("VendorProfitCharDB.order.spent") == 70 and ev("#__stub.ah.searches") == searches + 1
+      and ev("VendorProfit.Shopper.Status()") == "ready")
+run('__stub.ah.noBidReply = true'); click(run, "buy"); run('__stub.Advance(16)')
+check("no reply: not recorded, and says so", ev("VendorProfitCharDB.order.spent") == 70
+      and "No reply buying Tin Bar" in ev("(VendorProfit.Shopper.Message())"))
+run('__stub.Advance(3); __stub.Fire("AUCTION_HOUSE_SHOW_NOTIFICATION", Enum.AuctionHouseNotification.AuctionWon)')
+check("...a late win is still recorded", ev("VendorProfitCharDB.order.spent") == 70 + 80)
+run('__stub.Fire("AUCTION_HOUSE_SHOW_NOTIFICATION", Enum.AuctionHouseNotification.AuctionWon)')
+check("...once", ev("VendorProfitCharDB.order.spent") == 70 + 80)
+run('__stub.ah.noBidReply = false; VendorProfitCharDB.order.spent = 0; VendorProfit.Order.Changed()')
+run('__stub.Fire("UI_ERROR_MESSAGE", 0, ERR_ITEM_NOT_FOUND)')
+check("an error while not buying is left alone", ev("VendorProfit.Shopper.Status()") == "ready")
+check("no errors buying single auctions", ev("#__stub.errors") == 0)
 
 # --- Queue rules and saving -------------------------------------------------------
 run, ev = shop_client()
@@ -1397,9 +1454,17 @@ HF = "VendorProfit.HistoryPanel.Frame()"
 run(HF + ".views.items:Click()")
 sellers = list(ev("VendorProfit.HistoryPanel.Lines()").values())
 ring_profit = 100 + 30 + 200 - round(market)
-check("Best Sellers: one row per item: units sold, average profit each, total",
+# ROI: each sale's own return on its cost, averaged per unit (Avg ROI), and
+# all the profit over all the cost (ROI).
+ring_sales = [(s.n, s.cost, s.sold) for s in ev("VendorProfit.History.Sales()").values()]
+avg_roi = sum((sold - cost) / cost * n for n, cost, sold in ring_sales) / sum(n for n, _, _ in ring_sales)
+all_roi = sum(sold - cost for _, cost, sold in ring_sales) / sum(cost for _, cost, _ in ring_sales)
+pct = lambda r: "%d%%" % int(r * 100 + 0.5)
+check("Best Sellers: one row per item: units sold, average profit each, total, average ROI, ROI",
       ev("VendorProfit.HistoryPanel.View()") == "items" and len(sellers) == 1
-      and sellers[0] == "|Ticon2903:0|t Test Ring | 3 | %s | %s" % (ev('VendorProfit.FormatMoney(%s)' % (ring_profit / 3)), ev('VendorProfit.FormatMoney(%d)' % ring_profit))
+      and sellers[0] == "|Ticon2903:0|t Test Ring | 3 | %s | %s | %s | %s" % (ev('VendorProfit.FormatMoney(%s)' % (ring_profit / 3)),
+          ev('VendorProfit.FormatMoney(%d)' % ring_profit), pct(avg_roi), pct(all_roi))
+      and avg_roi != all_roi
       and ev(HF + ".views.items.__lit") and not ev(HF + ".views.sales.__lit"))
 check("...sorted by total profit by default, its heading marked", ev("VendorProfit.HistoryPanel.Sort().key") == "profit"
       and "Arrow-Down" in ev(HF + ".sellerHeadings.profit.text:GetText()") and not ev(HF + ".headings[1]:IsShown()"))
@@ -1409,6 +1474,18 @@ check("hover: how many in how many sales, the averages, vendor and auction count
       tip[1][0] == "3 sold in 3 sales" and ("Sold to vendors", "2") in tip and ("Sold at auction", "1") in tip
       and any(t[0] == "Average cost" for t in tip) and tip[-1][0].startswith("Last sold "))
 run("GameTooltip:Hide()")
+check("ROI headings, sortable", ev(HF + ".sellerHeadings.averageRoi.label") == "Avg ROI" and ev(HF + ".sellerHeadings.roi.label") == "ROI")
+run(HF + ".sellerHeadings.averageRoi:Click()")
+check("...by Avg ROI, highest first", ev("VendorProfit.HistoryPanel.Sort().key") == "averageRoi"
+      and not ev("VendorProfit.HistoryPanel.Sort().ascending") and "Arrow-Down" in ev(HF + ".sellerHeadings.averageRoi.text:GetText()"))
+run("VendorProfitCharDB.bestSellersSort = nil")
+# Saved before the average ROI was kept: worked out from the sales list.
+run('VendorProfitCharDB.history.roiTotals = nil; for _, i in pairs(VendorProfitCharDB.history.items) do i.roiSum, i.roiUnits = nil, nil end')
+check("average ROI missing from the save: worked out from the sales list",
+      abs(ev("VendorProfit.History.ItemTotals()[2903].roiSum") - avg_roi * 3) < 1e-9
+      and ev("VendorProfit.History.ItemTotals()[2903].roiUnits") == 3 and ev("VendorProfitCharDB.history.roiTotals"))
+run("VendorProfit.HistoryPanel.Refresh()")
+check("...and Best Sellers shows it", list(ev("VendorProfit.HistoryPanel.Lines()").values())[0].endswith("| %s | %s" % (pct(avg_roi), pct(all_roi))))
 # A second item, to sort and search.
 run('local list = VendorProfitCharDB.history.sales; '
     'list[#list + 1] = { item = 2840, n = 5, cost = 500, sold = 1000, bought = 500, how = "auction", time = time() }; '
@@ -2127,7 +2204,67 @@ run('__stub.tradeSkill.linked = true; VendorProfit.BestPanel.Refresh()')
 check("no profession of yours open: says to open one", best() == []
       and "Open one of your professions" in ev("" + B + ".status:GetText()"))
 run('__stub.tradeSkill.linked = false')
+# Hovering a recipe: what you've made selling its item, all time.
+run('''
+    local list = VendorProfitCharDB.history and VendorProfitCharDB.history.sales or {}
+    VendorProfitCharDB.history = VendorProfitCharDB.history or {}
+    VendorProfitCharDB.history.sales = list
+    list[#list + 1] = { item = 2866, n = 2, cost = 1000, sold = 3000, bought = 1000, how = "auction", time = time() - 60 }
+    list[#list + 1] = { item = 2866, n = 1, cost = 200, sold = 300, bought = 200, how = "vendor", time = time() }
+    VendorProfitCharDB.history.items = nil
+    VendorProfit.BestPanel.Refresh()
+''')
+def best_row(item):
+    for i in range(1, 10):
+        if ev("VendorProfit.BestPanel.Row(%d) and VendorProfit.BestPanel.Row(%d).hit.recipe and VendorProfit.BestPanel.Row(%d).hit.recipe.item" % (i, i, i)) == item:
+            return "VendorProfit.BestPanel.Row(%d)" % i
+R = best_row(2866)
+run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
+tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
+check("hovering a recipe: its sales, all time, with profit and ROIs",
+      ev("GameTooltip.shown") and "Rough Bronze Cuirass" in tip[0][0] and tip[1][0] == "Your sales, all time"
+      and tip[2][0] == "3 sold in 2 sales" and ("Avg profit", ev("VendorProfit.FormatMoney(700)")) in tip
+      and ("Profit", ev("VendorProfit.FormatMoney(2100)")) in tip
+      and ("Avg ROI", "150%") in tip and ("ROI", "175%") in tip  # (200% x 2 + 50%) / 3; 2100 / 1200
+      and ("Sold to vendors", "1") in tip and ("Sold at auction", "2") in tip and tip[-1][0].startswith("Last sold "))
+check("...placed like an item's tooltip, past the end of its name", ev("GameTooltip.anchor") == "ANCHOR_NONE"
+      and ev("GameTooltip.point[1]") == "BOTTOMLEFT")
+run(R + '.hit:GetScript("OnLeave")(' + R + '.hit)')
+check("...gone when the mouse leaves", not ev("GameTooltip.shown"))
+R = best_row(2865)
+run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
+check("a recipe whose item hasn't sold: says so", [l.left for l in ev("GameTooltip.lines").values()][1] == "No sales of it recorded yet.")
+run("GameTooltip:Hide()")
 check("no errors from Best Crafts", ev("#__stub.errors") == 0)
+
+# --- Items the game hasn't sent yet: asked for once, redrawn once per batch ---------
+# Each arrival used to redraw Best Crafts, and each redraw asked again for every
+# item still missing, so the redraws doubled with each item: a profession with
+# many recipes froze the game the first time it was shown.
+run, ev = client()
+run('__stub.items["item:2840"] = { name = "Copper Bar", cached = true, sellPrice = 5 }; __stub.auctionPrices[2840] = 50')
+many = []
+for i in range(30):
+    run('__stub.items["item:%d"] = { name = "Thing %d", cached = false, sellPrice = 300 }; __stub.auctionPrices[%d] = 400' % (20000 + i, i, 20000 + i))
+    many.append('{ recipeID = %d, itemLink = "item:%d", quantityMin = 1, reagents = { { itemID = 2840, quantity = 2 } } }' % (30000 + i, 20000 + i))
+run('''
+    __ranks = 0
+    local rank = VendorProfit.BestCrafts.Rank
+    VendorProfit.BestCrafts.Rank = function(...) __ranks = __ranks + 1 return rank(...) end
+''')
+run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % ",".join(many))
+run('VendorProfit.Panel.Show("best")')
+run('VendorProfit.BestPanel.Refresh(); VendorProfit.BestPanel.Refresh()')
+waiting = lambda: ev("(function() local n = 0 for _, l in pairs(__stub.loadCallbacks) do n = n + #l end return n end)()")
+check("names not sent yet: shown as placeholders, each item asked for once however often it redraws",
+      "item 20000" in ev("VendorProfit.BestPanel.Row(1).left:GetText()") and waiting() == 30)
+ranks = ev("__ranks")
+run(";".join('__stub.LoadItem("item:%d")' % (20000 + i) for i in range(30)))
+check("a batch arriving doesn't redraw at once", ev("__ranks") == ranks)
+run('__stub.Advance(0.3)')
+check("...but once, a moment later, with the names", ev("__ranks") == ranks + 1
+      and "Thing" in ev("VendorProfit.BestPanel.Row(1).left:GetText()") and waiting() == 0)
+check("no errors loading item names", ev("#__stub.errors") == 0)
 
 # --- Gold ------------------------------------------------------------------------------
 

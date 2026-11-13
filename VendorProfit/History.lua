@@ -26,10 +26,13 @@
 --     cost and bought per item
 --   sales = { { time, item, n, how ("vendor"/"auction"), sold, cost, bought },
 --     ... } oldest first, at most MAX_SALES
---   items[itemID] = { n, sales, cost, sold, bought, vendor, auction, last }:
---     every sale ever, added up per item, so totals don't shrink as old sales
---     drop off the list (n, vendor and auction count units; last is a time)
---   daily[day][itemID] = { n, sales, cost, sold, bought, vendor, auction }:
+--   items[itemID] = { n, sales, cost, sold, bought, vendor, auction, last,
+--     roiSum, roiUnits }: every sale ever, added up per item, so totals don't
+--     shrink as old sales drop off the list (n, vendor and auction count
+--     units; last is a time; roiSum adds up each unit's return on its cost,
+--     and roiUnits counts those units, for the average ROI)
+--   daily[day][itemID] = { n, sales, cost, sold, bought, vendor, auction,
+--     roiSum, roiUnits }:
 --     sales that dropped off the list, added up per item per day (day =
 --     days since 1970, UTC), kept for good: date ranges and Best Sellers
 --     reach back through them; only the per-sale detail is gone
@@ -73,13 +76,30 @@ local function Changed()
     end
 end
 
+-- A sale's part of the average ROI: its return on cost for each unit, and
+-- how many units (none when it cost nothing, which has no ROI).
+function History.SaleROI(sale)
+    if sale.cost > 0 then
+        return (sale.sold - sale.cost) / sale.cost * sale.n, sale.n
+    end
+    return 0, 0
+end
+
+local function AddROI(item, sale, sign)
+    local sum, units = History.SaleROI(sale)
+    item.roiSum = (item.roiSum or 0) + sign * sum
+    item.roiUnits = (item.roiUnits or 0) + sign * units
+end
+
 -- Adds a sale to (sign 1) or takes it from (sign -1) the per-item totals.
 local function AddToTotals(items, sale, sign)
     local item = items[sale.item]
     if item == nil then
-        item = { n = 0, sales = 0, cost = 0, sold = 0, bought = 0, vendor = 0, auction = 0, last = 0 }
+        item = { n = 0, sales = 0, cost = 0, sold = 0, bought = 0, vendor = 0, auction = 0, last = 0,
+            roiSum = 0, roiUnits = 0 }
         items[sale.item] = item
     end
+    AddROI(item, sale, sign)
     item.n = item.n + sign * sale.n
     item.sales = item.sales + sign
     item.cost = item.cost + sign * sale.cost
@@ -104,9 +124,10 @@ local function RollUp(daily, sale)
     daily[day] = daily[day] or {}
     local item = daily[day][sale.item]
     if item == nil then
-        item = { n = 0, sales = 0, cost = 0, sold = 0, bought = 0, vendor = 0, auction = 0 }
+        item = { n = 0, sales = 0, cost = 0, sold = 0, bought = 0, vendor = 0, auction = 0, roiSum = 0, roiUnits = 0 }
         daily[day][sale.item] = item
     end
+    AddROI(item, sale, 1)
     item.n = item.n + sale.n
     item.sales = item.sales + 1
     item.cost = item.cost + sale.cost
@@ -130,7 +151,21 @@ local function DB()
         for _, sale in ipairs(db.history.sales) do
             AddToTotals(db.history.items, sale, 1)
         end
+    elseif not db.history.roiTotals then
+        -- From before the average ROI was kept: work it out from the sales
+        -- list. Sales already added up by day (older than the last
+        -- MAX_SALES) have no per-sale detail left, so they're not in it.
+        for _, item in pairs(db.history.items) do
+            item.roiSum, item.roiUnits = 0, 0
+        end
+        for _, sale in ipairs(db.history.sales) do
+            local item = db.history.items[sale.item]
+            if item then
+                AddROI(item, sale, 1)
+            end
+        end
     end
+    db.history.roiTotals = true
     return db.history
 end
 
@@ -361,7 +396,7 @@ function History.Sales()
 end
 
 -- Every sale ever, added up per item: { [itemID] = { n, sales, cost, sold,
--- bought, vendor, auction, last } }.
+-- bought, vendor, auction, last, roiSum, roiUnits } }.
 function History.ItemTotals()
     return DB().items
 end

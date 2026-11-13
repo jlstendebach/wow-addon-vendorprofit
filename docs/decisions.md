@@ -49,6 +49,9 @@ time" route mode).
   No rank numbers (they took space and meant little once you sort and
   filter). Clicking a recipe's name shows it in the professions window (only
   while it's open); the magnifying-glass button was removed for that.
+  Hovering the name shows the item's Best Sellers figures over all time
+  (not Profit History's range, which would be a hidden setting here), with
+  profit and both ROIs, placed like an item's tooltip.
 - **Q (queued)** went through several tries before a column stuck: "x2" after
   the name (hard to see, and next to + it read as "add 2"), "(2 queued)"
   (too long), a bag icon, a gold row highlight, a centered "Queued"/"#"
@@ -57,6 +60,12 @@ time" route mode).
   works the same way. Both sort every recipe, priced or not, ties keeping the
   profit order. The count columns get a 12px gap so a sort arrow doesn't touch
   the next column.
+- **Item info not loaded yet** (the first time a profession's list shows):
+  each item is asked for once, and the list redraws once per batch, 0.2s
+  after items start arriving (`VendorProfit.RedrawWhenLoaded`, used by every
+  list). It used to redraw per arrival and ask again on every redraw, so
+  redraws doubled with each missing item (10 items: 1,024 full re-ranks) and
+  a big profession froze the game.
 - **AH counts** come from your owned auctions, which the game only lists at
   the auction house: read when it opens and after you post or cancel, saved,
   and shown as of your last visit.
@@ -99,6 +108,20 @@ time" route mode).
 - Tried and reverted: waiting for the throttle and re-asking for a quote
   automatically, and re-searching the item after 4s. Both moved the request
   out of the click, which made things worse.
+
+- **Items that don't stack** (gear: Green Leather Armor as a reagent) used
+  to be listed as "buy yourself". Now they're bought too: the scan reads
+  each single auction (with a buyout, not yours; bid-only ones skipped, the
+  panel never bids), cheapest each first, and one click buys one auction
+  outright with `PlaceBid` at its buyout, as Auctionator does. No Buy and
+  Confirm: there's no quote, the buyout is fixed and on the button. Bought
+  on the "auction won" notification; failed on an error message. "Item not
+  found" (someone else bought it first) drops that auction and Buy goes on
+  to the next cheapest without a new scan; any other error scans the item
+  again; no reply in 15s says so, and a late win is still recorded.
+  Unconfirmed in game: the notification and error events for a buyout on
+  Forever (taken from TSM's handling), and whether a search finds suffixed
+  versions of an item ("of the Monkey").
 
 ### Scanning: sharing the auction house
 
@@ -172,9 +195,15 @@ opens.
   change (a version counter), item names are cached. Pagination was rejected:
   the data is local, and pages fight search and ranges.
 - **Profit History views**: Sales and Best Sellers (one row per item: units
-  sold, average profit each, total; sortable), a search box and a Range menu
-  (all time, last 7/30/90 days, last 50/100/250 sales). "Sold to" moved from
-  a column into the tooltip.
+  sold, average profit each, total, Avg ROI, ROI; sortable), a search box
+  and a Range menu (all time, last 7/30/90 days, last 50/100/250 sales).
+  "Sold to" moved from a column into the tooltip.
+- **Two ROIs**: ROI is all the profit over all the cost (the return on the
+  money). Avg ROI is each unit's own return on its cost, averaged per unit
+  like Avg profit, so a few cheap, very profitable sales show there more
+  than in ROI. Avg ROI needs per-sale detail, so the totals keep roiSum and
+  roiUnits; saves from before were filled in from the sales list (sales
+  already added up by day aren't in it).
 
 ## Gold
 

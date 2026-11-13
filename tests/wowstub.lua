@@ -303,7 +303,8 @@ stub.casting = nil
 function UnitCastingInfo(unit) if unit == "player" then return stub.casting end end
 function ButtonFrameTemplate_HidePortrait() end
 function ButtonFrameTemplate_HideButtonBar() end
-Enum = { CraftingReagentType = { Basic = 0, Optional = 1 }, TradeskillRelativeDifficulty = { Optimal = 0, Medium = 1, Easy = 2, Trivial = 3 }, PlayerInteractionType = { Auctioneer = 21, Merchant = 5 } }
+ERR_ITEM_NOT_FOUND, ERR_NOT_ENOUGH_MONEY = "Item not found.", "You don't have enough money."
+Enum = { AuctionHouseNotification = { AuctionWon = 4 }, CraftingReagentType = { Basic = 0, Optional = 1 }, TradeskillRelativeDifficulty = { Optimal = 0, Medium = 1, Easy = 2, Trivial = 3 }, PlayerInteractionType = { Auctioneer = 21, Merchant = 5 } }
 
 local function Color(code, r, g, b)
     return { r = r, g = g, b = b, WrapTextInColorCode = function(_, t) return "|cff" .. code .. t .. "|r" end }
@@ -553,9 +554,14 @@ ProfessionsFrame.CraftingPage.CreateMultipleInputBox = { GetValue = function() r
 
 -- Auction house --------------------------------------------------------------
 -- ah.listings[itemID] = { { unitPrice, quantity, own }, ... } for stackable items;
--- ah.nonCommodity[itemID] = true for items that don't stack.
+-- ah.nonCommodity[itemID] = true for items that don't stack, sold as single
+-- auctions: ah.auctions[itemID] = { { auctionID, buyout (nil: bid only),
+-- quantity, own }, ... }.
 stub.ah = {
-    listings = {}, nonCommodity = {}, ready = true, pageSize = 100, loaded = {},
+    listings = {}, nonCommodity = {}, auctions = {}, bids = {}, ready = true, pageSize = 100, loaded = {},
+    goneNext = false,     -- next PlaceBid: someone else bought it first
+    bidError = nil,       -- next PlaceBid fails with this error message
+    noBidReply = false,
     searches = {}, starts = {}, confirms = {}, cancels = 0,
     dropSearches = 0,     -- ignore this many searches (no reply)
     emptyReplies = 0,     -- answer this many searches with "no results loaded"
@@ -571,6 +577,7 @@ AuctionHouseFrame:Hide()
 
 local function Later(fn) C_Timer.After(0.1, fn) end
 local function Rows(id) return ah.listings[id] or {} end
+local function Auctions(id) return ah.auctions[id] or {} end
 local function WalkListings(id, quantity)
     local total, got = 0, 0
     for _, row in ipairs(Rows(id)) do
@@ -589,7 +596,7 @@ C_AuctionHouse = {
         local id = itemKey.itemID
         ah.searches[#ah.searches + 1] = id
         if ah.dropSearches > 0 then ah.dropSearches = ah.dropSearches - 1 return end
-        ah.loaded[id] = math.min(ah.pageSize, #Rows(id))
+        ah.loaded[id] = math.min(ah.pageSize, ah.nonCommodity[id] and #Auctions(id) or #Rows(id))
         local empty = false
         if ah.emptyReplies > 0 then ah.emptyReplies = ah.emptyReplies - 1; empty = true end
         Later(function()
@@ -613,6 +620,49 @@ C_AuctionHouse = {
         ah.moreRequests = (ah.moreRequests or 0) + 1
         ah.loaded[id] = math.min((ah.loaded[id] or 0) + ah.pageSize, #Rows(id))
         Later(function() stub.Fire("COMMODITY_SEARCH_RESULTS_ADDED", id) end)
+    end,
+    HasFullItemSearchResults = function(key) return not ah.forceEmpty and (ah.loaded[key.itemID] or 0) >= #Auctions(key.itemID) end,
+    GetNumItemSearchResults = function(key) if ah.forceEmpty then return 0 end return ah.loaded[key.itemID] or 0 end,
+    GetItemSearchResultInfo = function(key, i)
+        local a = Auctions(key.itemID)[i]
+        return a and { itemKey = key, auctionID = a.auctionID, buyoutAmount = a.buyout, bidAmount = a.bid,
+            quantity = a.quantity or 1, containsOwnerItem = a.own or false, containsAccountItem = false }
+    end,
+    RequestMoreItemSearchResults = function(key)
+        ah.moreRequests = (ah.moreRequests or 0) + 1
+        ah.loaded[key.itemID] = math.min((ah.loaded[key.itemID] or 0) + ah.pageSize, #Auctions(key.itemID))
+        Later(function() stub.Fire("ITEM_SEARCH_RESULTS_ADDED", key) end)
+    end,
+    -- Buying a single auction at its buyout: "won", or an error message.
+    PlaceBid = function(auctionID, amount)
+        ah.bids[#ah.bids + 1] = { auctionID, amount }
+        if ah.noBidReply then return end
+        Later(function()
+            local foundIn, foundAt
+            for id, list in pairs(ah.auctions) do
+                for i, a in ipairs(list) do
+                    if a.auctionID == auctionID then foundIn, foundAt = id, i end
+                end
+            end
+            if ah.goneNext or foundIn == nil then
+                ah.goneNext = false
+                if foundIn then table.remove(ah.auctions[foundIn], foundAt) end
+                stub.Fire("UI_ERROR_MESSAGE", 0, ERR_ITEM_NOT_FOUND)
+                return
+            end
+            if ah.bidError then
+                local text = ah.bidError
+                ah.bidError = nil
+                stub.Fire("UI_ERROR_MESSAGE", 0, text)
+                return
+            end
+            local a = table.remove(ah.auctions[foundIn], foundAt)
+            stub.money = stub.money - amount
+            local where = ah.toMail and stub.mail or stub.bags
+            where[foundIn] = (where[foundIn] or 0) + (a.quantity or 1)
+            stub.Fire("AUCTION_HOUSE_SHOW_NOTIFICATION", Enum.AuctionHouseNotification.AuctionWon)
+            if not ah.toMail then stub.Fire("BAG_UPDATE_DELAYED") end
+        end)
     end,
     StartCommoditiesPurchase = function(id, quantity)
         ah.starts[#ah.starts + 1] = { id, quantity }
@@ -789,7 +839,7 @@ function AutoLootMailItem(index)
 end
 
 -- Batch lookups (browse results): one result per listed item, lowest price and
--- how many are listed, from ah.listings.
+-- how many are listed, from ah.listings and ah.auctions.
 stub.ah.itemKeySearches = {}
 -- Your own auctions: ah.owned = { { itemID, quantity, sold }, ... }.
 stub.ah.owned = {}
@@ -821,6 +871,13 @@ C_AuctionHouse.SearchForItemKeys = function(keys)
                 if n > 0 then
                     min = math.min(min or row.unitPrice, row.unitPrice)
                     total = (total or 0) + n
+                end
+            end
+            -- Single auctions: the lowest buyout.
+            for _, a in ipairs(stub.ah.auctions[id] or {}) do
+                if a.buyout and not a.own then
+                    min = math.min(min or a.buyout, a.buyout)
+                    total = (total or 0) + (a.quantity or 1)
                 end
             end
             if min then results[#results + 1] = { itemKey = { itemID = id }, minPrice = min, totalQuantity = total } end
