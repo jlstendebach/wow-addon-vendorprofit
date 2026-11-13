@@ -22,7 +22,8 @@ changing a feature, so a rejected idea isn't tried again by accident.
 - **Text** shown in game goes in the `L` table in `Core.lua`; every string
   there must be used, and nothing unused left behind.
 - **Money** is shown with `VendorProfit.FormatMoney` (silver and copper
-  always two digits after a larger coin: 5s 07c).
+  always two digits after a larger coin: 5s 07c; a zero silver still shows
+  between gold and copper: 1g 00s 38c).
 - **No secure frames in the panel.** Opening a profession goes through the
   separate overlay in `OpenButton.lua` so the panel stays unprotected and
   works in combat.

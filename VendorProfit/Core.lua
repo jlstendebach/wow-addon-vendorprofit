@@ -460,8 +460,8 @@ VendorProfit.COINS = {
 
 -- Money as coins, like the game's own money text, except that silver and
 -- copper are always two digits after a larger coin: 5s 07c, not 5s 7c, so it
--- can't be misread as 5s 70c. Coins that are zero are left out, and gold gets
--- thousands separators.
+-- can't be misread as 5s 70c. Coins that are zero are left out, except silver
+-- between gold and copper (1g 00s 38c). Gold gets thousands separators.
 function VendorProfit.FormatCoins(copper)
     copper = math.floor(math.abs(copper) + 0.5)
     local gold = math.floor(copper / 10000)
@@ -472,7 +472,9 @@ function VendorProfit.FormatCoins(copper)
     if gold > 0 then
         parts[#parts + 1] = (BreakUpLargeNumbers and BreakUpLargeNumbers(gold) or tostring(gold)) .. coins.gold
     end
-    if silver > 0 then
+    -- Between gold and copper, silver shows even when it's zero: 1g 00s 38c,
+    -- not 1g 38c, which reads as 1g 38s at a glance.
+    if silver > 0 or (gold > 0 and cop > 0) then
         parts[#parts + 1] = string.format(gold > 0 and "%02d" or "%d", silver) .. coins.silver
     end
     if cop > 0 or #parts == 0 then

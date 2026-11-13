@@ -112,7 +112,7 @@ What it can't know:
 - **What you already have.** Reagents in your bags are priced at their market value, since you could sell them instead.
 - **Recipes in professions you haven't opened** on this character, or on your other characters.
 
-**Money** is shown with silver and copper always two digits after a larger coin, like a clock: **5s 07c**, so it can't be misread as 5s 70c. That's everywhere this addon shows money; Auctionator's own lines are left as they are.
+**Money** is shown with silver and copper always two digits after a larger coin, like a clock: **5s 07c**, so it can't be misread as 5s 70c. A zero silver still shows between gold and copper: **1g 00s 38c**, not 1g 38c, which reads as 1g 38s at a glance. That's everywhere this addon shows money; Auctionator's own lines are left as they are.
 
 ## Best Crafts
 

@@ -1905,10 +1905,11 @@ check("no Clear button on Queued", ev('VendorProfit.Panel.RowButton("Queued")') 
 check("no buttons left at the bottom", ev('VendorProfit.Panel.FindButton("Scan again")') is None)
 
 
-# --- Money: two-digit silver and copper after a larger coin --------------------------
+# --- Money: two-digit silver and copper after a larger coin; silver kept between gold and copper
 run, ev = client()
 for copper, text in [(507, "5s 07c"), (570, "5s 70c"), (7, "7c"), (500, "5s"), (10507, "1g 05s 07c"),
-                     (10007, "1g 07c"), (10000, "1g"), (0, "0c"), (-507, "5s 07c")]:
+                     (10007, "1g 00s 07c"), (10038, "1g 00s 38c"), (10000, "1g"), (10500, "1g 05s"),
+                     (0, "0c"), (-507, "5s 07c")]:
     check("coins: %d -> %s" % (copper, text), ev("VendorProfit.FormatCoins(%d)" % copper) == text)
 check("loss in red with a minus", ev("VendorProfit.FormatMoney(-507)") == "|cffff2020-5s 07c|r")
 

@@ -37,6 +37,9 @@ time" route mode).
 - **Spacing**: the gap between a page's title, its totals line and its table
   is the same everywhere (about 6px between text lines).
 - **Dates** are mm/dd, to save space.
+- **Money**: two-digit silver and copper after a larger coin (5s 07c), and
+  a zero silver kept between gold and copper (1g 00s 38c): "1g 38c" was
+  read as 1g 38s, making a correct 57% ROI look wrong.
 - **Row tooltips** (tried at the cursor, at the column's left, at the
   row's end): Shopping List rows put the tooltip above the row at the end of
   the item's name, like a Classic item. History rows put it above the row at
