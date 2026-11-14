@@ -887,10 +887,11 @@ local function Create()
     if UISpecialFrames then
         table.insert(UISpecialFrames, "VendorProfitPanel")
     end
-    -- Above the professions window, auction house, bank and vendor it sits
-    -- beside, and brought to the front when clicked. (The secure Open button
-    -- over Craft is a strata higher still.)
-    frame:SetFrameStrata("HIGH")
+    -- In the same strata as the game's windows (and most addons'), and
+    -- brought to the front when clicked: clicking another window brings that
+    -- one in front of it instead, as windows normally do. (A higher strata
+    -- kept it above everything, bags included, however you clicked.)
+    frame:SetFrameStrata("MEDIUM")
     frame:SetToplevel(true)
     ButtonFrameTemplate_HidePortrait(frame)
     ButtonFrameTemplate_HideButtonBar(frame)
@@ -1019,6 +1020,8 @@ function Panel.Show(tab)
     end
     Place()
     frame:Show()
+    -- Opened: in front of the other windows, as if clicked.
+    frame:Raise()
     Panel.Refresh()
 end
 

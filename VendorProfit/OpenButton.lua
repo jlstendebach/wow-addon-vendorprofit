@@ -44,7 +44,6 @@ end
 
 local function Create()
     button = CreateFrame("Button", "VendorProfitOpenProfessionButton", UIParent, "SecureActionButtonTemplate")
-    button:SetFrameStrata("DIALOG")
     button:RegisterForClicks(GetCVarBool("ActionButtonUseKeyDown") and "LeftButtonDown" or "LeftButtonUp")
     button:SetHighlightTexture("Interface\\Buttons\\UI-Panel-Button-Highlight", "ADD")
     button:SetScript("OnEnter", function(self)
@@ -97,6 +96,12 @@ local function Place(over)
     if left == nil or bottom == nil then
         return false
     end
+    -- Just above the button, in the panel's strata, not on top of
+    -- everything: another window brought in front of the panel covers it
+    -- too, so a click there can't open a profession through that window.
+    -- Kept in step as windows are clicked to the front (Follow).
+    button:SetFrameStrata(over:GetFrameStrata())
+    button:SetFrameLevel(over:GetFrameLevel() + 2)
     local scale = over:GetEffectiveScale() / UIParent:GetEffectiveScale()
     local width, height = over:GetWidth() * scale, over:GetHeight() * scale
     left, bottom = left * scale, bottom * scale

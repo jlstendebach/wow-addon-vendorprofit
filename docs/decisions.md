@@ -16,9 +16,14 @@ time" route mode).
   (the game's filter dropdown, Scan off on its own) were replaced with the
   addon's own style.
 - **One window, pages as side tabs** (Shopping List, Best Crafts, Profit
-  History, Purchase History, Gold). Strata HIGH and toplevel, so it sits above
-  the professions window and auction house. A minimum height keeps every side
-  tab on the window.
+  History, Purchase History, Gold). A minimum height keeps every side tab on
+  the window.
+- **Front and back like any window**: MEDIUM strata (the game's windows' and
+  most addons') and toplevel, raised when it opens. Clicking it brings it to
+  the front; clicking another window (bags, the auction house) brings that
+  one in front of it. It used to be HIGH strata, above everything however
+  you clicked. The secure Open button over Craft follows: same strata, just
+  above the Craft button, so a window in front of the panel covers it too.
 - **Opens and closes only when you do**: `/vprofit` (and its tab commands),
   the title-bar button, its close button, Escape (it's in UISpecialFrames,
   so Escape closes it along with the game's other windows, as they close;
@@ -180,8 +185,10 @@ opens.
 
 - **Opening another profession** needs a secure button. It's a separate
   invisible overlay laid over the Craft button at screen coordinates, never
-  anchored to the panel (that would make the panel protected in combat). It
-  hides in combat and after a click (until the profession opens or 3s pass).
+  anchored to the panel (that would make the panel protected in combat), in
+  the panel's strata just above the Craft button (kept in step as windows
+  are clicked to the front). It hides in combat and after a click (until the
+  profession opens or 3s pass).
 - **It used to get left behind** when the window moved without redrawing
   (a docked window moving, back when it docked; height change while
   centered; alt-tab display

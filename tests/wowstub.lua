@@ -150,6 +150,13 @@ function FrameMethods:GetBottom() return self.__bottom or 20 end
 function FrameMethods:GetWidth() return self.__w or 100 end
 function FrameMethods:GetEffectiveScale() return 1 end
 function FrameMethods:SetFrameStrata(s) self.__strata = s end
+function FrameMethods:GetFrameStrata()
+    if self.__strata then return self.__strata end
+    return self.__parent and self.__parent.GetFrameStrata and self.__parent:GetFrameStrata() or "MEDIUM"
+end
+-- Brought to the front of its strata: above every other frame's level.
+stub.topLevel = 100
+function FrameMethods:Raise() stub.topLevel = stub.topLevel + 10; self.__level = stub.topLevel; self.__raised = (self.__raised or 0) + 1 end
 function FrameMethods:SetToplevel(t) self.__toplevel = t end
 function FrameMethods:IsMouseOver() return true end
 function FrameMethods:SetScrollChild(child) self.__scrollChild = child end

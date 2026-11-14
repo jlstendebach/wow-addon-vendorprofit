@@ -1044,7 +1044,10 @@ check("a secure button covers the craft button and casts Smelting (how Mining op
       ev(OPEN + ":IsShown()") and ev(OPEN + ':GetAttribute("type")') == "spell" and ev(OPEN + ':GetAttribute("spell")') == "Smelting")
 check("cover placed on the screen, not anchored to the panel",
       ev(OPEN + ".__point[2] == UIParent") and ev(OPEN + ".__point[4]") == ev(CRAFT + ":GetLeft()"))
-check("cover is on top", ev(OPEN + ".__strata") == "DIALOG")
+check("cover sits just above the Craft button, in the panel's strata (not on top of other windows)",
+      ev(OPEN + ".__strata") == "MEDIUM" and ev(OPEN + ":GetFrameLevel()") == ev(CRAFT + ":GetFrameLevel()") + 2)
+run(CRAFT + '.__level = 250; VendorProfit.OpenButton.Follow()')
+check("...and stays above it as the window comes to the front", ev(OPEN + ":GetFrameLevel()") == 252)
 run('__stub.inCombat = true; __stub.Fire("PLAYER_REGEN_DISABLED")')
 check("combat starting hides the cover", not ev(OPEN + ":IsShown()"))
 run('VendorProfit.Panel.Refresh()')
@@ -1953,8 +1956,8 @@ check("side tabs on the window's right edge, Best Crafts checked",
 check("only the Best Crafts page shows", ev(B + ":IsShown()") and not ev("VendorProfitPanel.tabs ~= nil and VendorProfit.Panel.FindButton('Remove')"))
 run('VendorProfit.Order.Clear()')
 run("VendorProfitPanel.tabs.shopping:Click()")
-check("window above the professions window and the like, raised when clicked",
-      ev("VendorProfitPanel.__strata") == "HIGH" and ev("VendorProfitPanel.__toplevel"))
+check("window in the game's windows' strata, brought to the front when clicked and when opened",
+      ev("VendorProfitPanel.__strata") == "MEDIUM" and ev("VendorProfitPanel.__toplevel") and ev("VendorProfitPanel.__raised") >= 1)
 check("short page: the window is still tall enough for both side tabs",
       ev("VendorProfitPanel:GetHeight()") >= ev("VendorProfitPanel.tabs.best.__point[5] * -1") + 32)
 check("Shopping List back to its own width", ev("VendorProfitPanel:GetWidth()") == 380)
