@@ -332,7 +332,9 @@ function print(...)
     rawPrint(...)
 end
 function GetCVarBool() return false end
-C_Spell = { GetSpellName = function(id) return ({ [2575] = "Mining", [2656] = "Smelting" })[id] end }
+C_Spell = { GetSpellName = function(id)
+    return ({ [2575] = "Mining", [2656] = "Smelting", [7620] = "Fishing", [7731] = "Fishing", [1278067] = "Bait and Tackle" })[id]
+end }
 stub.casting = nil
 function UnitCastingInfo(unit) if unit == "player" then return stub.casting end end
 function ButtonFrameTemplate_HidePortrait() end

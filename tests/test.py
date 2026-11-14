@@ -2455,15 +2455,17 @@ check("no errors listing saved professions", ev("#__stub.errors") == 0)
 
 # --- Best Crafts' Professions button: opens each profession in turn ---------------
 run, ev = route_client()
-run('__stub.playerProfessions = { { name = "Blacksmithing", skillLine = 164 }, { name = "Mining", skillLine = 186 }, '
-    '[4] = { name = "Fishing", skillLine = 356 }, [5] = { name = "Cooking", skillLine = 185 } }')
+run('__stub.playerProfessions = { { name = "Blacksmithing", skillLine = 164 }, { name = "Herbalism", skillLine = 182 }, '
+    '[5] = { name = "Cooking", skillLine = 185 } }')
 run('VendorProfit.Panel.Show("best")')
 PB = "VendorProfit.BestPanel.Frame().professions"
 OPEN = "VendorProfitOpenProfessionButton"
 COVERED = OPEN + " ~= nil and " + OPEN + ":IsShown()"
 PHOVER = '__stub.mouseFocus = %s; __stub.mouseFocus.__scripts.OnEnter(__stub.mouseFocus)' % PB
-check("your professions with a window, in the game's order: no Fishing (or Herbalism, Skinning)",
-      [p.name for p in ev("VendorProfit.Recipes.PlayerProfessions()").values()] == ["Blacksmithing", "Mining", "Cooking"])
+check("your professions with a window, in the game's order: no Herbalism (or Skinning)",
+      [p.name for p in ev("VendorProfit.Recipes.PlayerProfessions()").values()] == ["Blacksmithing", "Cooking"])
+run('__stub.playerProfessions = { { name = "Blacksmithing", skillLine = 164 }, { name = "Mining", skillLine = 186 }, '
+    '[5] = { name = "Cooking", skillLine = 185 } }; VendorProfit.Panel.Refresh()')
 check("a Professions button left of Scan, in the page's style",
       ev(PB + ".__text") == "Professions" and ev(PB + ":IsEnabled()")
       and ev(PB + ".__point[1]") == "RIGHT" and ev(PB + ".__point[2] == VendorProfit.BestPanel.Frame().scan")
@@ -2519,6 +2521,9 @@ run('VendorProfit.Panel.Show("shopping")')
 check("off Best Crafts: the cover over its button goes once out of view",
       run('VendorProfit.OpenButton.Follow()') is None and not ev(COVERED))
 run('__stub.playerProfessions = { [4] = { name = "Fishing", skillLine = 356 } }; VendorProfit.Panel.Show("best")')
+check("Fishing has a window on Forever (Camping): opened with Bait and Tackle, not Fishing, which casts a line",
+      "Opens Fishing (1 of 1)" in ev(PB + ".tooltip") and ev('VendorProfit.OpenButton.SpellFor("Fishing")') == "Bait and Tackle")
+run('__stub.playerProfessions = { [1] = { name = "Herbalism", skillLine = 182 } }; VendorProfit.Panel.Show("best")')
 check("no profession with a window: off, saying so", not ev(PB + ":IsEnabled()")
       and ev(PB + ".tooltip") == "None of your professions has a window to open.")
 check("no errors from the Professions button", ev("#__stub.errors") == 0)

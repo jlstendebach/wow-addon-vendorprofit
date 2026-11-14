@@ -91,7 +91,10 @@ time" route mode).
   (3s, then the same one can be tried again). The open profession is
   skipped (its spell would close it). Professions come from GetProfessions,
   without the skill lines that have no window (Herbalism, Skinning,
-  Fishing, Archaeology). A 1s rest after closing, so the click after Close
+  Archaeology). Fishing is included: Forever gives it a crafting window
+  (Camping), opened by casting Bait and Tackle (1278067), its first
+  spellbook entry; "Fishing" (7731) casts a line. Seen in game with a /run
+  of Fishing's spellbook entries. A 1s rest after closing, so the click after Close
   doesn't open the first profession again.
 - **Every profession, window closed**: Best Crafts lists the saved recipes of
   every profession you've opened (each is saved when its window opens), ranked

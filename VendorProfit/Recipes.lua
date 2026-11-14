@@ -330,8 +330,8 @@ function Recipes.LastScan()
 end
 
 -- Skill lines with no profession window to open: Herbalism, Skinning,
--- Fishing, Archaeology.
-local NO_WINDOW = { [182] = true, [393] = true, [356] = true, [794] = true }
+-- Archaeology. (Forever's Fishing has one, for Camping.)
+local NO_WINDOW = { [182] = true, [393] = true, [794] = true }
 
 -- This character's professions that open a window (so their recipes can be
 -- saved), in the game's order: the two main ones, then the secondary ones.

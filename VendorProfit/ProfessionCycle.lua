@@ -12,6 +12,8 @@
 --     tried again.
 --   * The profession already open when it starts is saved already, so it's
 --     skipped (casting its spell again would close it).
+--   * Fishing is included: Forever gives it a window (Camping), opened with
+--     Bait and Tackle (OpenButton.SpellFor).
 --   * After the closing click the button rests for a second, so a click too
 --     many doesn't start it all over again.
 --   * Closing the window yourself part way through starts it over.

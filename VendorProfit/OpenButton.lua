@@ -27,6 +27,11 @@ local OpenButton = {}
 VendorProfit.OpenButton = OpenButton
 
 local MINING_SPELL, SMELTING_SPELL = 2575, 2656
+-- Forever's Fishing has a crafting window (Camping), opened by Bait and
+-- Tackle; its "Fishing" spell casts a line. (Seen in game: Fishing's
+-- spellbook entries are Bait and Tackle, 1278067, and Fishing, 7731; the
+-- profession itself is spell 7620.)
+local FISHING_SPELL, BAIT_AND_TACKLE_SPELL = 7620, 1278067
 
 local button
 local target             -- the button it's laid over
@@ -43,10 +48,16 @@ local function SpellName(spellID)
 end
 
 -- The spell that opens a profession's window: its own name, except Mining,
--- whose window opens with Smelting.
+-- whose window opens with Smelting, and Fishing, with Bait and Tackle.
+local OPENED_BY = { [MINING_SPELL] = SMELTING_SPELL, [FISHING_SPELL] = BAIT_AND_TACKLE_SPELL }
 function OpenButton.SpellFor(profession)
-    if profession ~= nil and profession == SpellName(MINING_SPELL) then
-        return SpellName(SMELTING_SPELL) or profession
+    if profession == nil then
+        return nil
+    end
+    for professionSpell, opener in pairs(OPENED_BY) do
+        if profession == SpellName(professionSpell) then
+            return SpellName(opener) or profession
+        end
     end
     return profession
 end
