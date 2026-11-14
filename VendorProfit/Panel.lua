@@ -878,6 +878,8 @@ local function CreateSideTab(index, def)
     return tab
 end
 
+local Place   -- puts the window where it belongs (below)
+
 local function Create()
     frame = CreateFrame("Frame", "VendorProfitPanel", UIParent, "ButtonFrameTemplate")
     -- Above the professions window, auction house, bank and vendor it sits
@@ -914,6 +916,10 @@ local function Create()
         -- Saved by the addon, not the game's own layout cache.
         self:SetUserPlaced(false)
         Panel.SavePosition()
+        -- The game leaves a moved window anchored by a point of its choosing
+        -- (often its center), so the window would grow and shrink at both
+        -- edges as pages change height. Held by its top left corner again.
+        Place()
         Panel.Refresh()
     end)
     frame:Hide()
@@ -951,7 +957,7 @@ local DEFAULT_TOP = -120
 -- switch. Only ever anchored to UIParent: anchored to a protected window
 -- (the professions window, say) it would be protected too, and the game
 -- would block hiding it in combat.
-local function Place()
+function Place()
     frame:ClearAllPoints()
     local saved = SavedPosition()
     if saved and saved.left and saved.top then

@@ -130,9 +130,11 @@ function FrameMethods:RegisterForDrag(...) self.__drag = { ... } end
 function FrameMethods:SetUserPlaced(u) self.__userPlaced = u end
 -- Dragging: StartMoving, then the stub moves the frame to stub.dragTo = { left, top }.
 function FrameMethods:StartMoving() self.__moving = true end
+-- Like the game, a moved frame is left anchored by its center.
 function FrameMethods:StopMovingOrSizing()
     self.__moving = false
     if stub.dragTo then self.__left, self.__top = stub.dragTo[1], stub.dragTo[2] end
+    self.__point = { "CENTER", UIParent, "BOTTOMLEFT", self.__left or 0, self.__top or 0 }
 end
 function FrameMethods:GetLeft() return self.__left or 10 end
 function FrameMethods:GetTop() return self.__top end

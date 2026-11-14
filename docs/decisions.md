@@ -31,7 +31,9 @@ time" route mode).
   auction house, bank, vendor or professions window). It opens centered
   near the top of the screen until you move it, then where you left it,
   held by its top left corner either way (by its center, its edges jumped
-  as tabs of different sizes switched). It's only ever anchored to
+  as tabs of different sizes switched), including right after a drag (the
+  game leaves a moved window anchored by its center until it's re-anchored,
+  so pages changing height grew it at both edges). It's only ever anchored to
   UIParent: anchored to a protected window it would be protected too, and
   hiding it in combat would be blocked.
 - **Spacing**: the gap between a page's title, its totals line and its table

@@ -601,6 +601,10 @@ check("panel can be dragged", ev("VendorProfitPanel.__movable") and ev("VendorPr
 run('__stub.Drag(VendorProfitPanel, 300, 700)')
 check("moved position saved", ev("VendorProfitCharDB.panel.left") == 300 and ev("VendorProfitCharDB.panel.top") == 700)
 check("not left in the game's layout cache", ev("VendorProfitPanel.__userPlaced") is False)
+check("held by its top left corner right after the drag, so pages change height downward",
+      ev("VendorProfitPanel.__point[1]") == "TOPLEFT" and ev("VendorProfitPanel.__point[2] == UIParent")
+      and ev("VendorProfitPanel.__point[3]") == "BOTTOMLEFT" and ev("VendorProfitPanel.__point[4]") == 300
+      and ev("VendorProfitPanel.__point[5]") == 700)
 run('VendorProfit.Panel.Hide(); VendorProfit.Panel.Show()')
 check("reopens where it was moved",
       ev("VendorProfitPanel.__point[1]") == "TOPLEFT" and ev("VendorProfitPanel.__point[2] == UIParent")
