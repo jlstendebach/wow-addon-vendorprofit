@@ -31,19 +31,21 @@ local Panel = VendorProfit.Panel
 local Columns = VendorProfit.Columns
 
 -- Wider than the Shopping List, for the money columns and the search and
--- filter controls; wider still if the columns need it (set in Create).
+-- filter controls; wider still if the columns need it (LayOutColumns).
 local WIDTH = 520
 local PADDING = 16
 local ROW_HEIGHT = 22
 local LIST_TOP = -94
 local VISIBLE_ROWS = 14
 local SCROLLBAR_WIDTH = 24
-local LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
+local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
+local LIST_WIDTH = BASE_LIST_WIDTH
 local ICON_BUTTON_WIDTH = 22
--- The columns, by key (Columns.lua), laid out when the tab is built: the
--- recipe name, Investment, Profit, ROI, AH (your auctions of it), Q (crafts
--- queued), then - and + (unqueue and queue a craft).
-local col
+-- The columns, by key (Columns.lua), laid out for what's listed on each
+-- refresh: the recipe name, Investment, Profit, ROI, AH (your auctions of
+-- it), Q (crafts queued), then - and + (unqueue and queue a craft). The
+-- layout key changes only when the layout does.
+local col, layoutKey
 -- This tab's entry in the window (Panel.AddPage), for the width.
 local pageDef
 
@@ -159,24 +161,18 @@ local function GetRow(index)
         local list = frame.list
         row = {}
         local top = -(index - 1) * ROW_HEIGHT
-        local function Column(key)
+        local function Column()
             local text = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             text:SetJustifyH("RIGHT")
             text:SetWordWrap(false)
-            text:SetWidth(col[key].width)
-            text:SetPoint("TOPRIGHT", list, "TOPRIGHT", col[key].right, top - 4)
             return text
         end
         row.left = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         row.left:SetJustifyH("LEFT")
         row.left:SetWordWrap(false)
-        row.left:SetWidth(col.name.width)
-        row.left:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top - 4)
         -- Clicking the name shows the recipe in the professions window (while
         -- it's open); hovering it shows what you've made selling the item.
         row.hit = CreateFrame("Frame", nil, list)
-        row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top)
-        row.hit:SetSize(col.name.width, ROW_HEIGHT)
         row.hit:EnableMouse(true)
         row.hit:SetScript("OnMouseUp", function(self, mouseButton)
             if mouseButton == "LeftButton" and self.recipe and ProfessionsWindowOpen() then
@@ -190,16 +186,16 @@ local function GetRow(index)
         end)
         row.hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
         -- Investment: what one craft's items cost along the cheapest route.
-        row.investment = Column("investment")
-        row.right = Column("profit")
+        row.investment = Column()
+        row.right = Column()
         -- Return on investment: profit as a share of the investment.
-        row.roi = Column("roi")
+        row.roi = Column()
         -- How many of what it makes you have up for auction (Auctions.lua).
-        row.auctions = Column("auctions")
+        row.auctions = Column()
         -- How many crafts the shopping order holds.
-        row.queued = Column("queued")
+        row.queued = Column()
         -- Why a recipe isn't ranked, across the columns it has no number for.
-        row.reason = Column("roi")
+        row.reason = Column()
 
         -- Queue: a plus, at the row's end; unqueue: a minus, before it.
         row.queue = SmallButton(list, "+", ICON_BUTTON_WIDTH)
@@ -209,6 +205,29 @@ local function GetRow(index)
         row.unqueue:SetPoint("RIGHT", row.queue, "LEFT", -4, 0)
         Tooltip(row.unqueue, L.BEST_UNQUEUE_HELP)
         rows[index] = row
+    end
+    -- Placed again only when the columns change.
+    if row.layoutKey ~= layoutKey then
+        row.layoutKey = layoutKey
+        local list, top = frame.list, -(index - 1) * ROW_HEIGHT
+        local function At(region, key)
+            region:SetWidth(col[key].width)
+            region:ClearAllPoints()
+            region:SetPoint("TOPRIGHT", list, "TOPRIGHT", col[key].right, top - 4)
+        end
+        row.left:SetWidth(col.name.width)
+        row.left:ClearAllPoints()
+        row.left:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left, top - 4)
+        row.hit:ClearAllPoints()
+        row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left, top)
+        row.hit:SetSize(col.name.width, ROW_HEIGHT)
+        At(row.investment, "investment")
+        At(row.right, "profit")
+        At(row.roi, "roi")
+        At(row.auctions, "auctions")
+        At(row.queued, "queued")
+        -- Its width depends on the columns it spans (set in Refresh).
+        At(row.reason, "roi")
     end
     return row
 end
@@ -573,32 +592,13 @@ local function Create(page)
 
     -- Column headings over the list; click one to sort by it.
     frame.headings = {}
-    -- Every column but the name is a number, right-aligned.
-    local samples = Columns.Samples()
-    col, LIST_WIDTH = Columns.Layout(LIST_WIDTH, {
-        { key = "name", heading = L.BEST_RECIPE, sorts = true, fill = true },
-        { key = "investment", heading = L.BEST_INVESTMENT, sorts = true, samples = samples.money },
-        { key = "profit", heading = L.BEST_PROFIT, sorts = true, samples = samples.money },
-        { key = "roi", heading = L.BEST_ROI, sorts = true, samples = samples.roi },
-        { key = "auctions", heading = L.BEST_AUCTIONS_HEADING, sorts = true, samples = { "999" } },
-        { key = "queued", heading = L.BEST_QUEUED_HEADING, sorts = true, samples = { "99" } },
-        { key = "buttons", width = 2 * ICON_BUTTON_WIDTH + 4 },
-    })
-    WIDTH = LIST_WIDTH + 2 * PADDING + SCROLLBAR_WIDTH
-    pageDef.width = WIDTH
-
+    -- Placed with the columns (LayOutColumns). Every column but the name is
+    -- a number, right-aligned.
     local function Heading(key, text, help)
-        local right = key ~= "name"
         local heading = CreateFrame("Button", nil, frame)
-        heading:SetSize(col[key].width, 14)
-        if right then
-            heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + LIST_WIDTH + col[key].right, LIST_TOP + 16)
-        else
-            heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + col[key].left, LIST_TOP + 16)
-        end
         heading.text = heading:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         heading.text:SetAllPoints(heading)
-        heading.text:SetJustifyH(right and "RIGHT" or "LEFT")
+        heading.text:SetJustifyH(key == "name" and "LEFT" or "RIGHT")
         heading.label = text
         heading:SetScript("OnClick", function() SetSort(key) end)
         Tooltip(heading, help or L.BEST_SORT_HELP)
@@ -624,6 +624,48 @@ local function Create(page)
     frame.status = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.status:SetJustifyH("LEFT")
     frame.status:SetWidth(WIDTH - 2 * PADDING)
+end
+
+-- Lays the columns out to fit the entries listed (Columns.lua), and places
+-- the headings and sets the tab's width when that changes the layout. The
+-- rows follow as they're filled (GetRow).
+local function LayOutColumns(ranked)
+    local extents = {}
+    for _, entry in ipairs(ranked) do
+        if entry.profit or entry.unpriced.output then
+            Columns.Track(extents, "investment", entry.cost)
+        end
+        Columns.Track(extents, "profit", entry.profit)
+        Columns.Track(extents, "roi", entry.profit and entry.roi)
+        Columns.Track(extents, "auctions", Auctions.Count(entry.recipe.item))
+        Columns.Track(extents, "queued", Queued(entry.recipe.recipeID))
+    end
+    local key
+    col, LIST_WIDTH, key = Columns.Layout(BASE_LIST_WIDTH, {
+        { key = "name", heading = L.BEST_RECIPE, sorts = true, fill = true },
+        { key = "investment", heading = L.BEST_INVESTMENT, sorts = true, samples = Columns.Money(extents, "investment") },
+        { key = "profit", heading = L.BEST_PROFIT, sorts = true, samples = Columns.Money(extents, "profit") },
+        { key = "roi", heading = L.BEST_ROI, sorts = true, samples = Columns.Percent(extents, "roi") },
+        { key = "auctions", heading = L.BEST_AUCTIONS_HEADING, sorts = true, samples = Columns.Count(extents, "auctions") },
+        { key = "queued", heading = L.BEST_QUEUED_HEADING, sorts = true, samples = Columns.Count(extents, "queued") },
+        { key = "buttons", width = 2 * ICON_BUTTON_WIDTH + 4 },
+    })
+    if key == layoutKey then
+        return
+    end
+    layoutKey = key
+    WIDTH = LIST_WIDTH + 2 * PADDING + SCROLLBAR_WIDTH
+    pageDef.width = WIDTH
+    frame.list:SetWidth(LIST_WIDTH)
+    for name, heading in pairs(frame.headings) do
+        heading:SetSize(col[name].width, 14)
+        heading:ClearAllPoints()
+        if name == "name" then
+            heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + col[name].left, LIST_TOP + 16)
+        else
+            heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + LIST_WIDTH + col[name].right, LIST_TOP + 16)
+        end
+    end
 end
 
 local function Refresh()
@@ -698,6 +740,7 @@ local function Refresh()
             ranked[#ranked + 1] = entry
         end
     end
+    LayOutColumns(ranked)
     for index, entry in ipairs(ranked) do
         local row = GetRow(index)
         local reason

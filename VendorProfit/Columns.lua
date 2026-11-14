@@ -3,15 +3,20 @@
 -- ever touch:
 --
 --   * A column is as wide as the widest of its heading (with the sort arrow,
---     if it sorts) and samples of the widest values it's meant to hold.
---     Both are measured in the game's own fonts when the tab is built, so
---     the rule holds whatever the font, locale or coin icons draw like.
+--     if it sorts) and the widest value in the whole list, not just the rows
+--     on screen. Both are measured in the game's own fonts, so the rule holds
+--     whatever the font, locale or coin icons draw like.
 --   * Columns are GAP apart.
 --   * One column (the item or recipe name) takes what's left of the row;
 --     the window widens if that would leave it narrower than FILL_MIN.
 --
--- A value wider than its samples is cut short with "..." by the game rather
--- than run into its neighbor, since every column has a fixed width.
+-- The tabs lay their columns out again on each refresh, which is cheap: the
+-- list's lowest and highest numbers per column are found with arithmetic
+-- (Track), and only a sample for each end is measured. A sample has the
+-- same coins and digits as the real value, every digit a 9 (12g 05s 07c is
+-- sized as 99g 99s 99c), so widths change only when a value gains a digit
+-- or a coin, not at every new number. Every column has a fixed width, so
+-- anything wider is cut short with "..." rather than run into the next.
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -50,25 +55,77 @@ function Columns.SortedText(label, ascending)
     return label .. " " .. (ascending and L.BEST_SORT_UP or L.BEST_SORT_DOWN)
 end
 
--- Samples of the widest values a column is meant to hold. Money per item
--- runs to 999g, totals to 9,999g, both with a minus for a loss.
-function Columns.Samples()
-    local big = BreakUpLargeNumbers or tostring
-    return {
-        money = { VendorProfit.FormatMoney(-9999999) },
-        total = { VendorProfit.FormatMoney(-99999999) },
-        roi = { VendorProfit.FormatROI(99.99), VendorProfit.FormatROI(-1) },
-        count = { big(99999) },
-        -- Days and months are two digits at most; 28/12 covers both orders.
-        date = { date(L.HISTORY_DATE_FORMAT, time({ year = 2026, month = 12, day = 28, hour = 12 })) },
-    }
+-- Notes value (nil is skipped) as one of column key's, in extents (a table
+-- the caller starts empty for each refresh): its lowest and highest.
+function Columns.Track(extents, key, value)
+    if value == nil then
+        return
+    end
+    local extent = extents[key]
+    if extent == nil then
+        extent = { low = 0, high = 0 }
+        extents[key] = extent
+    end
+    extent.low = math.min(extent.low, value)
+    extent.high = math.max(extent.high, value)
+end
+
+-- The number with as many digits as whole number n, all nines (0 for 0).
+local function Nines(n)
+    return n == 0 and 0 or math.floor(10 ^ #tostring(n) - 1 + 0.5)
+end
+
+-- Copper with the same coins and digits as copper, every digit a 9.
+local function MoneyNines(copper)
+    copper = math.floor(math.abs(copper) + 0.5)
+    for _, unit in ipairs({ 10000, 100 }) do
+        if copper >= unit then
+            return Nines(math.floor(copper / unit)) * unit + unit - 1
+        end
+    end
+    return Nines(copper)
+end
+
+-- Samples for a column's extent (from Track): its widest positive and
+-- negative values, as money, a percentage (ROI) or a count.
+local function Ends(extents, key, format)
+    local extent, samples = extents[key], {}
+    if extent and extent.high > 0 then
+        samples[1] = format(extent.high)
+    end
+    if extent and extent.low < 0 then
+        samples[#samples + 1] = format(extent.low)
+    end
+    return samples
+end
+function Columns.Money(extents, key)
+    return Ends(extents, key, function(copper)
+        return VendorProfit.FormatMoney((copper < 0 and -1 or 1) * MoneyNines(copper))
+    end)
+end
+function Columns.Percent(extents, key)
+    return Ends(extents, key, function(roi)
+        return VendorProfit.FormatROI((roi < 0 and -1 or 1) * Nines(math.floor(math.abs(roi) * 100 + 0.5)) / 100)
+    end)
+end
+function Columns.Count(extents, key)
+    return Ends(extents, key, function(n)
+        return (BreakUpLargeNumbers or tostring)(Nines(math.floor(n)))
+    end)
+end
+
+-- A sample date: days and months are two digits at most, and 28/12 covers
+-- both orders.
+function Columns.Date()
+    return { date(L.HISTORY_DATE_FORMAT, time({ year = 2026, month = 12, day = 28, hour = 12 })) }
 end
 
 -- Lays out a row of columns. columns, left to right: { key, heading (text),
 -- sorts (it has a sort arrow), samples (texts), width (at least this, for
 -- buttons), fill (takes the rest) }. Returns, by key, { width, left (from
--- the list's left edge), right (from its right edge, zero or less) }, and
--- the list width: listWidth, or wider if the columns need it.
+-- the list's left edge), right (from its right edge, zero or less) }, the
+-- list width (listWidth, or wider if the columns need it), and a key that
+-- changes only when the layout does, so rows are placed again only then.
 function Columns.Layout(listWidth, columns)
     local widths, needed, fill = {}, 0, nil
     for i, column in ipairs(columns) do
@@ -91,13 +148,14 @@ function Columns.Layout(listWidth, columns)
     if fill then
         widths[fill] = widths[fill] + listWidth - needed
     end
-    local layout, left = {}, 0
+    local layout, left, key = {}, 0, { listWidth }
     for _, column in ipairs(columns) do
         local width = widths[column.key]
         layout[column.key] = { width = width, left = left, right = left + width - listWidth }
         left = left + width + Columns.GAP
+        key[#key + 1] = width
     end
-    return layout, listWidth
+    return layout, listWidth, table.concat(key, ",")
 end
 
 -- The width from the left edge of column from to the right edge of column

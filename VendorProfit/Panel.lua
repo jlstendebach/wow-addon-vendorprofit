@@ -994,8 +994,11 @@ local function Refresh()
     end
     for _, def in ipairs(pageDefs) do
         if def.name == activeTab then
+            -- Refreshed first: a tab can change its width as it lays out
+            -- its columns (Columns.lua).
+            local height = def.refresh(pages[def.name])
             frame:SetWidth(def.width or WIDTH)
-            frame:SetHeight(math.max(def.refresh(pages[def.name]), MinHeight()))
+            frame:SetHeight(math.max(height, MinHeight()))
         end
     end
     -- The cover was placed while laying out; the new height can move a

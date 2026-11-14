@@ -55,13 +55,19 @@ time" route mode).
   counted cut "11g 48s 95c" short, and headings got a sort arrow that ran
   into the next one (patched with wider gaps per column). Now one rule:
   a column is as wide as its heading with a sort arrow (whether or not it's
-  sorted) and samples of its widest values (money to -999g 99s 99c, totals
-  to -9,999g 99s 99c, ROI 9999%, counts 99,999), measured in the game's own
-  fonts when the tab is built; 12px between columns; the name takes the
-  rest, at least 160, the window widening if needed. Anything wider than
-  its samples is cut with "..." inside its column. Profit History's two
-  views share one width so switching them doesn't resize the window; tabs
-  can differ in width.
+  sorted) and the widest value in the whole list, measured in the game's
+  own fonts; 12px between columns; the name takes the rest, at least 160,
+  the window widening if needed. Sized first for fixed worst cases (money
+  to -999g 99s 99c, totals to -9,999g): never touched, but left wide empty
+  columns for everyday values, so now it's laid out again on each refresh
+  for what's listed. Not from the rows on screen (the history lists only
+  build those, so columns would jump as you scroll, and measuring 10,000
+  sales each refresh is slow): each column's lowest and highest numbers
+  are found with arithmetic, and one sample per end is measured, with the
+  same coins and digits but all nines (12g 05s 07c sizes as 99g 99s 99c),
+  so widths change only when a value gains a digit or a coin. The window's
+  right edge can move as the list changes (it's held by its top left); if
+  that grates, the fix is growing only until the window closes.
 - **Dates** are mm/dd, to save space.
 - **Money**: two-digit silver and copper after a larger coin (5s 07c), and
   a zero silver kept between gold and copper (1g 00s 38c): "1g 38c" was

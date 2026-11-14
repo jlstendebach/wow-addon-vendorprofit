@@ -1524,7 +1524,29 @@ check("...and stops following once the tooltip's gone", ev('VendorProfit.History
 check("Sales columns never touch: values and headings a gap apart, inside the list",
       columns_apart("VendorProfit.HistoryPanel.Frame()", ["VendorProfit.HistoryPanel.Row(1)." + k for k in ["date", "item", "cost", "sold", "profit"]])
       and columns_apart("VendorProfit.HistoryPanel.Frame()", ["VendorProfit.HistoryPanel.Frame().headings[%d]" % i for i in range(1, 6)]))
-check("...a big sale's money fits", ev("__stub.TextWidth(VendorProfit.FormatMoney(-99999999)) <= VendorProfit.HistoryPanel.Row(1).profit:GetWidth()"))
+# Columns fit what's listed: a big sale widens them, and they narrow again
+# when it's gone.
+R1 = "VendorProfit.HistoryPanel.Row(1)"
+narrow = ev(R1 + ".profit:GetWidth()"), ev("VendorProfitPanel:GetWidth()")
+run('table.insert(VendorProfitCharDB.history.sales, { item = 2903, n = 1, cost = 100, sold = 123456789, time = time(), how = "auction" }); '
+    'VendorProfit.Panel.Refresh()')
+check("a big sale widens its columns to fit, taking room from the item names",
+      ev(R1 + ".profit:GetWidth()") > narrow[0] and ev("VendorProfitPanel:GetWidth()") == narrow[1]
+      and "12345g" in ev(R1 + ".profit:GetText()")
+      and columns_apart("VendorProfit.HistoryPanel.Frame()", [R1 + "." + k for k in ["date", "item", "cost", "sold", "profit"]])
+      and columns_apart("VendorProfit.HistoryPanel.Frame()", ["VendorProfit.HistoryPanel.Frame().headings[%d]" % i for i in range(1, 6)]))
+check("...sized as the same coins and digits, all nines, so it doesn't change at every new number",
+      ev(R1 + ".profit:GetWidth()") == ev("__stub.TextWidth(VendorProfit.FormatMoney(999999999))"))
+run('table.remove(VendorProfitCharDB.history.sales); VendorProfit.Panel.Refresh()')
+check("...and narrow again once it's gone", (ev(R1 + ".profit:GetWidth()"), ev("VendorProfitPanel:GetWidth()")) == narrow)
+run('table.insert(VendorProfitCharDB.history.sales, { item = 2903, n = 1, cost = 10000000000000, sold = 5000000000000, time = time(), how = "auction" }); '
+    'VendorProfit.Panel.Refresh()')
+check("no room left for the item names' minimum: the window widens instead",
+      ev("VendorProfitPanel:GetWidth()") > narrow[1] and ev(R1 + ".item:GetWidth()") == ev("VendorProfit.Columns.FILL_MIN")
+      and ev("VendorProfitPanel:GetWidth()") == ev("VendorProfit.HistoryPanel.Frame().list:GetWidth()") + 2 * 16 + 24
+      and columns_apart("VendorProfit.HistoryPanel.Frame()", [R1 + "." + k for k in ["date", "item", "cost", "sold", "profit"]]))
+run('table.remove(VendorProfitCharDB.history.sales); VendorProfit.Panel.Refresh()')
+check("...and back once it's gone", ev("VendorProfitPanel:GetWidth()") == narrow[1])
 
 # Best Sellers: the three ring sales in one row.
 HF = "VendorProfit.HistoryPanel.Frame()"
@@ -1550,9 +1572,7 @@ check("Best Sellers columns never touch: values and headings a gap apart, inside
       columns_apart(HF, ["VendorProfit.HistoryPanel.SellerRow(1)." + k for k in ["item"] + seller_keys[1:]])
       and columns_apart(HF, [HF + ".sellerHeadings." + k for k in seller_keys]))
 check("...headings fit with their sort arrows", sorted_headings_fit([HF + ".sellerHeadings." + k for k in seller_keys]))
-check("...a total in the thousands of gold fits",
-      ev("__stub.TextWidth(VendorProfit.FormatMoney(-99999999)) <= VendorProfit.HistoryPanel.SellerRow(1).profit:GetWidth()"))
-check("...Sales and Best Sellers share the list's width, so the window doesn't jump between them",
+check("...the window fits the view's columns",
       ev(HF + ".list:GetWidth()") + 2 * 16 + 24 == ev("VendorProfitPanel:GetWidth()"))
 run('VendorProfit.HistoryPanel.SellerRow(1).hit:GetScript("OnEnter")()')
 tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
@@ -2081,6 +2101,13 @@ check("...the widest money, ROI and counts fit their columns",
       ev("__stub.TextWidth(VendorProfit.FormatMoney(-9999999)) <= VendorProfit.BestPanel.Row(1).investment:GetWidth()")
       and ev("__stub.TextWidth(VendorProfit.FormatROI(99.99)) <= VendorProfit.BestPanel.Row(1).roi:GetWidth()")
       and ev("__stub.TextWidth('999') <= VendorProfit.BestPanel.Row(1).auctions:GetWidth()"))
+run('__e = {}; for _, v in ipairs({ 120507, -507, 3 }) do VendorProfit.Columns.Track(__e, "m", v) end; '
+    'VendorProfit.Columns.Track(__e, "r", 0.37); VendorProfit.Columns.Track(__e, "n", 12); VendorProfit.Columns.Track(__e, "x", nil)')
+check("columns are sized for their widest values as nines: same coins and digits",
+      list(ev('VendorProfit.Columns.Money(__e, "m")').values()) == [ev("VendorProfit.FormatMoney(999999)"), ev("VendorProfit.FormatMoney(-999)")]
+      and list(ev('VendorProfit.Columns.Percent(__e, "r")').values()) == ["99%"]
+      and list(ev('VendorProfit.Columns.Count(__e, "n")').values()) == ["99"]
+      and len(list(ev('VendorProfit.Columns.Money(__e, "x")').values())) == 0)
 check("...the + and - buttons right of Q, a gap away",
       ev("VendorProfit.BestPanel.Row(1).queued.__point[4]") <= -(2 * 22 + 4 + ev("VendorProfit.Columns.GAP")))
 # Search: filters by name as you type, keeping each recipe's place.
