@@ -61,8 +61,9 @@ VendorProfit.L = {
 
     -- Best Crafts
     BEST_BUTTON = "Vendor Profit",
-    BEST_BUTTON_HELP = "Shows this profession's best crafts, each along its cheapest route, in the Vendor Profit window. Your shopping list is on its other tab.",
+    BEST_BUTTON_HELP = "Shows your best crafts from every profession you've opened (the Filter menu picks which), each along its cheapest route, in the Vendor Profit window. Your shopping list is on its other tab.",
     BEST_TITLE = "Best Crafts: %s",
+    BEST_TITLE_ALL = "Best Crafts",
     BEST_TAB_VENDOR = "Vendor",
     BEST_TAB_AUCTION = "Auction",
     BEST_RECIPE = "Recipe",
@@ -78,15 +79,15 @@ VendorProfit.L = {
     BEST_AUCTIONS_HEADING = "AH",
     BEST_AUCTIONS_HELP = "How many you have up for auction, as of your last visit to the auction house.",
     BEST_QUEUED_HELP = "Crafts in your shopping order.",
-    BEST_SCAN_HELP = "Looks up live lowest prices for every item in this profession's recipes, in a few batches. Auctionator saves them too.",
+    BEST_SCAN_HELP = "Looks up live lowest prices for every item in the shown professions' recipes, in a few batches. Auctionator saves them too.",
     BEST_SCAN_OPEN_AH = "Open the auction house to look up live prices.",
     BEST_SCANNING = "Looking up prices: batch %d of %d",
     BEST_SCANNED = "Live prices updated.",
     BEST_SCAN_FAILED = "The auction house didn't answer. Try Scan again.",
     BEST_AH_CLOSED = "The auction house closed before the scan finished.",
-    BEST_NOTHING_TO_SCAN = "Nothing in this profession can be listed on the auction house.",
-    BEST_OPEN_PROFESSION = "Open one of your professions to see its best crafts.",
-    BEST_NONE = "No saved recipes for this profession yet.",
+    BEST_NOTHING_TO_SCAN = "Nothing in these recipes can be listed on the auction house.",
+    BEST_OPEN_PROFESSION = "Open each of your professions once to list its recipes here. After that, they show here with the professions window closed.",
+    BEST_NONE = "No saved recipes for these professions yet.",
     BEST_NO_MATCH = "No recipes match \"%s\".",
     BEST_NO_MATCH_FILTERS = "No recipes pass the filters.",
     BEST_FILTER = "Filter",
@@ -97,7 +98,11 @@ VendorProfit.L = {
     BEST_SKILL_OPTIMAL = "Guaranteed",
     BEST_SKILL_MEDIUM = "Likely",
     BEST_SKILL_EASY = "Unlikely",
-    BEST_SKILL_UNKNOWN = "Skill-up colors are only known for the profession whose window is open.",
+    BEST_SKILL_UNKNOWN = "Some recipes have no skill-up color yet: open their profession once.",
+    BEST_SKILL_SAVED = "Skill-up color as of when you last opened %s.",
+    -- Two short lines: the menu is as wide as its widest line.
+    BEST_SKILL_SAVED_NOTE = "Closed professions:\ncolors as last seen.",
+    BEST_FILTER_PROFESSIONS = "Professions",
     BEST_NO_PRICE_FOR = "no price: %s",
     BEST_NO_VENDOR_PRICE = "no vendor price",
     BEST_NO_AUCTION_PRICE = "no auction price",
@@ -106,11 +111,17 @@ VendorProfit.L = {
 
     -- Queue button
     QUEUE = "Queue",
-    QUEUE_HELP = "Adds %d crafts of this recipe (the number in the Create box) to your shopping order.",
+    QUEUE_HELP = "Adds %d crafts of this recipe (the number in the Create box) to your shopping order, along the Cheapest Route: reagents are crafted yourself where that's cheaper.",
+    QUEUE_EXACT_HELP = "Adds %d crafts of this recipe (the number in the Create box) to your shopping order as it is: its reagents are bought or taken from what you have, never crafted.",
     QUEUED = "|cffffd100Vendor Profit:|r queued %d x %s. Shop for it on the Shopping List (/vprofit).",
 
     -- Shopping panel
     PANEL_TITLE = "Vendor Profit",
+    MINIMAP_CLICK = "Click: open or close the window.",
+    MINIMAP_DRAG = "Drag: move this button.",
+    MINIMAP_HIDE = "/vprofit minimap hides it.",
+    MINIMAP_HIDDEN = "|cffffd100Vendor Profit:|r minimap button hidden. /vprofit minimap shows it again.",
+    MINIMAP_SHOWN = "|cffffd100Vendor Profit:|r minimap button shown.",
     TAB_SHOPPING = "Shopping List",
     TAB_BEST = "Best Crafts",
     TAB_HISTORY = "Profit History",
@@ -184,6 +195,8 @@ VendorProfit.L = {
     QUEUED_MORE = "Craft one more. Shift-click: five more.",
     QUEUED_FEWER = "Craft one fewer. Shift-click: five fewer.",
     QUEUED_COST = "Cost (cheapest route)",
+    QUEUED_COST_EXACT = "Cost (exact recipe)",
+    QUEUED_EXACT_MARK = "(exact)",
     QUEUED_NO_VENDOR = "can't be sold to vendors",
     NOT_SCANNED = "not scanned",
     ONLY_LISTED = "only %d listed",
@@ -232,6 +245,14 @@ VendorProfit.L = {
     OPEN_TO_CRAFT = "Open %s to craft %s",
     OPEN_AFTER_COMBAT = "Open %s after combat to craft %s",
     OPEN_PROFESSION_HELP = "Opens %s.",
+    PROFESSIONS_BUTTON = "Professions",
+    PROFESSIONS_NEXT = "Next %d/%d",
+    PROFESSIONS_CLOSE = "Close",
+    PROFESSIONS_OPEN_HELP = "Opens %s (%d of %d) to save its recipes and skill-up colors. Keep clicking: each click opens the next profession, and the last one closes the window.",
+    PROFESSIONS_CLOSE_HELP = "Closes the professions window: every profession is saved.",
+    PROFESSIONS_COMBAT = "Open your professions after combat.",
+    PROFESSIONS_REST = "All saved. Ready again in a moment.",
+    PROFESSIONS_NONE = "None of your professions has a window to open.",
     NEED_MATERIALS = "Missing materials for %s",
     NEED_STATION = "Needs %s nearby to craft %s",
     STATIONS_NONE = "|cffffd100Vendor Profit:|r nothing to craft.",
@@ -457,8 +478,8 @@ VendorProfit.COINS = {
 
 -- Money as coins, like the game's own money text, except that silver and
 -- copper are always two digits after a larger coin: 5s 07c, not 5s 7c, so it
--- can't be misread as 5s 70c. Coins that are zero are left out, and gold gets
--- thousands separators.
+-- can't be misread as 5s 70c. Coins that are zero are left out, except silver
+-- between gold and copper (1g 00s 38c). Gold gets thousands separators.
 function VendorProfit.FormatCoins(copper)
     copper = math.floor(math.abs(copper) + 0.5)
     local gold = math.floor(copper / 10000)
@@ -469,7 +490,9 @@ function VendorProfit.FormatCoins(copper)
     if gold > 0 then
         parts[#parts + 1] = (BreakUpLargeNumbers and BreakUpLargeNumbers(gold) or tostring(gold)) .. coins.gold
     end
-    if silver > 0 then
+    -- Between gold and copper, silver shows even when it's zero: 1g 00s 38c,
+    -- not 1g 38c, which reads as 1g 38s at a glance.
+    if silver > 0 or (gold > 0 and cop > 0) then
         parts[#parts + 1] = string.format(gold > 0 and "%02d" or "%d", silver) .. coins.silver
     end
     if cop > 0 or #parts == 0 then

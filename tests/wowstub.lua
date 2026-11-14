@@ -30,6 +30,16 @@ function CreateFrame(_, name, parent, template)
     end
     return f
 end
+-- Windows Escape closes: the game hides each one listed (CloseSpecialWindows).
+UISpecialFrames = {}
+function stub.PressEscape()
+    for _, name in ipairs(UISpecialFrames) do
+        local f = _G[name]
+        if f and f:IsShown() then f:Hide() end
+    end
+end
+-- The frame under the mouse: tests set stub.mouseFocus.
+function GetMouseFoci() return { stub.mouseFocus } end
 -- Like the modern client: HideUIPanel does nothing in combat.
 function HideUIPanel(f)
     if not stub.inCombat then f:Hide() end
@@ -130,16 +140,26 @@ function FrameMethods:RegisterForDrag(...) self.__drag = { ... } end
 function FrameMethods:SetUserPlaced(u) self.__userPlaced = u end
 -- Dragging: StartMoving, then the stub moves the frame to stub.dragTo = { left, top }.
 function FrameMethods:StartMoving() self.__moving = true end
+-- Like the game, a moved frame is left anchored by its center.
 function FrameMethods:StopMovingOrSizing()
     self.__moving = false
     if stub.dragTo then self.__left, self.__top = stub.dragTo[1], stub.dragTo[2] end
+    self.__point = { "CENTER", UIParent, "BOTTOMLEFT", self.__left or 0, self.__top or 0 }
 end
 function FrameMethods:GetLeft() return self.__left or 10 end
 function FrameMethods:GetTop() return self.__top end
 function FrameMethods:GetBottom() return self.__bottom or 20 end
 function FrameMethods:GetWidth() return self.__w or 100 end
 function FrameMethods:GetEffectiveScale() return 1 end
+function FrameMethods:GetCenter() return self.__centerX, self.__centerY end
 function FrameMethods:SetFrameStrata(s) self.__strata = s end
+function FrameMethods:GetFrameStrata()
+    if self.__strata then return self.__strata end
+    return self.__parent and self.__parent.GetFrameStrata and self.__parent:GetFrameStrata() or "MEDIUM"
+end
+-- Brought to the front of its strata: above every other frame's level.
+stub.topLevel = 100
+function FrameMethods:Raise() stub.topLevel = stub.topLevel + 10; self.__level = stub.topLevel; self.__raised = (self.__raised or 0) + 1 end
 function FrameMethods:SetToplevel(t) self.__toplevel = t end
 function FrameMethods:IsMouseOver() return true end
 function FrameMethods:SetScrollChild(child) self.__scrollChild = child end
@@ -180,6 +200,7 @@ function FrameMethods:CreateTexture()
     t.SetTexture = function(tex, path) tex.__texture = path end
     t.SetBlendMode = function(tex, mode) tex.__blend = mode end
     t.SetVertexColor = function(tex, ...) tex.__vertexColor = { ... } end
+    t.SetTexCoord = function(tex, ...) tex.__texCoord = { ... } end
     return t
 end
 -- Lines (CreateLine): a texture with two end points.
@@ -207,11 +228,24 @@ function FontMethods:SetWidth(w) self.__w = w end
 function FontMethods:GetWidth() return self.__w or 0 end
 function FontMethods:GetLeft() return self.__left or 20 end
 function FontMethods:GetRight() return self:GetLeft() + self:GetWidth() end
--- Roughly 5 per character, color codes and textures left out.
-function FontMethods:GetStringWidth()
-    local plain = (self.__text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", "")
-    return #plain * 5
+-- Roughly 5 per character, color codes left out; an inline texture is as
+-- wide as it's drawn (|Tpath:height:width|t; 0 means the font's height, 12).
+local function TextureWidth(spec)
+    local height, width = spec:match("^[^:]*:?(%d*):?(%d*)")
+    height, width = tonumber(height) or 0, tonumber(width) or 0
+    if width == 0 then width = height end
+    return width == 0 and 12 or width
 end
+function stub.TextWidth(text)
+    local textures = 0
+    local plain = (text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T(.-)|t", function(spec)
+        textures = textures + TextureWidth(spec)
+        return ""
+    end)
+    return #plain * 5 + textures
+end
+function FontMethods:GetStringWidth() return stub.TextWidth(self.__text) end
+function FontMethods:GetUnboundedStringWidth() return stub.TextWidth(self.__text) end
 function FontMethods:GetStringHeight() return 12 end
 function FontMethods:ClearAllPoints() self.__point = nil end
 function FontMethods:SetShown(s) self.__shown = not not s end
@@ -250,7 +284,7 @@ GameTooltip = { lines = {}, shown = false }
 function GameTooltip:SetOwner(owner, anchor) self.owner = owner; self.anchor = anchor; self.point = nil; self.lines = {} end
 function GameTooltip:ClearAllPoints() self.point = nil end
 stub.cursorX = 0
-function GetCursorPosition() return stub.cursorX, 0 end
+function GetCursorPosition() return stub.cursorX, stub.cursorY or 0 end
 function GameTooltip:SetPoint(...) self.point = { ... } end
 function GameTooltip:SetText(t) self.lines = { { left = t } } end
 function GameTooltip:AddLine(t) self.lines[#self.lines + 1] = { left = t } end
@@ -298,7 +332,9 @@ function print(...)
     rawPrint(...)
 end
 function GetCVarBool() return false end
-C_Spell = { GetSpellName = function(id) return ({ [2575] = "Mining", [2656] = "Smelting" })[id] end }
+C_Spell = { GetSpellName = function(id)
+    return ({ [2575] = "Mining", [2656] = "Smelting", [7620] = "Fishing", [7731] = "Fishing", [1278067] = "Bait and Tackle" })[id]
+end }
 stub.casting = nil
 function UnitCastingInfo(unit) if unit == "player" then return stub.casting end end
 function ButtonFrameTemplate_HidePortrait() end
@@ -444,6 +480,20 @@ C_TradeSkillUI = {
     IsNPCCrafting = function() return stub.tradeSkill.npc end,
 }
 
+C_TradeSkillUI.CloseTradeSkill = function() stub.CloseProfession() end
+
+-- The character's professions, by the game's slots (1 and 2 the main ones,
+-- 4 Fishing, 5 Cooking): { name, skillLine }.
+stub.playerProfessions = {}
+function GetProfessions()
+    local p = stub.playerProfessions
+    return p[1] and 1, p[2] and 2, p[3] and 3, p[4] and 4, p[5] and 5
+end
+function GetProfessionInfo(index)
+    local p = stub.playerProfessions[index]
+    return p.name, "icon", 1, 300, 0, 0, p.skillLine
+end
+
 -- Opens a profession window with these recipes and lets the addon save them.
 function stub.OpenProfession(id, name, recipes)
     stub.profession = { professionID = id, professionName = name }
@@ -572,6 +622,10 @@ stub.ah = {
 }
 local ah = stub.ah
 UIParent = UIParent or CreateFrame("Frame", "UIParent")
+-- The minimap: 140 across, centered at (1000, 700) on the screen.
+Minimap = CreateFrame("Frame", "Minimap", UIParent)
+Minimap:SetSize(140, 140)
+Minimap.__centerX, Minimap.__centerY = 1000, 700
 AuctionHouseFrame = CreateFrame("Frame", "AuctionHouseFrame")
 AuctionHouseFrame:Hide()
 

@@ -10,11 +10,13 @@ local _, ns = ...
 local VendorProfit = ns.VendorProfit
 local History = VendorProfit.History
 local Panel = VendorProfit.Panel
+local Columns = VendorProfit.Columns
 local L = VendorProfit.L
 
 local PurchasePanel = {}
 VendorProfit.PurchasePanel = PurchasePanel
 
+-- Wider if the columns need it (Columns.lua).
 local WIDTH = 540
 local PADDING = 16
 local ROW_HEIGHT = 18
@@ -23,16 +25,16 @@ local ROW_HEIGHT = 18
 local LIST_TOP = -66
 local VISIBLE_ROWS = 18
 local SCROLLBAR_WIDTH = 24
-local LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
--- Columns: Date and Item from the left; Market now, Total, Each, From from
--- the right.
-local DATE_WIDTH, FROM_WIDTH, MONEY_WIDTH, GAP = 34, 52, 70, 6
-local MARKET_RIGHT = 0
-local TOTAL_RIGHT = MARKET_RIGHT - MONEY_WIDTH - GAP
-local EACH_RIGHT = TOTAL_RIGHT - MONEY_WIDTH - GAP
-local FROM_RIGHT = EACH_RIGHT - MONEY_WIDTH - GAP
-local ITEM_LEFT = DATE_WIDTH + GAP
-local ITEM_WIDTH = LIST_WIDTH + FROM_RIGHT - FROM_WIDTH - GAP - ITEM_LEFT
+local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
+local LIST_WIDTH = BASE_LIST_WIDTH
+-- The columns, by key (Columns.lua), laid out for every purchase on each
+-- refresh: Date, Item, From, Each, Total, Now (the cheapest price today).
+-- The layout key changes only when the layout does.
+local col, layoutKey
+local KEYS = { "date", "item", "from", "each", "total", "market" }
+local FROM_LEFT = { date = true, item = true }
+-- This tab's entry in the window (Panel.AddPage), for the width.
+local pageDef
 
 local frame
 local rows = {}
@@ -99,14 +101,13 @@ local function GetRow(slot)
     if row == nil then
         local list = frame.list
         row = {}
-        row.date = Column(list, DATE_WIDTH, "LEFT")
-        row.item = Column(list, ITEM_WIDTH, "LEFT")
-        row.from = Column(list, FROM_WIDTH, "LEFT")
-        row.each = Column(list, MONEY_WIDTH, "RIGHT")
-        row.total = Column(list, MONEY_WIDTH, "RIGHT")
-        row.market = Column(list, MONEY_WIDTH, "RIGHT")
+        row.date = Column(list, 0, "LEFT")
+        row.item = Column(list, 0, "LEFT")
+        row.from = Column(list, 0, "LEFT")
+        row.each = Column(list, 0, "RIGHT")
+        row.total = Column(list, 0, "RIGHT")
+        row.market = Column(list, 0, "RIGHT")
         row.hit = CreateFrame("Frame", nil, list)
-        row.hit:SetSize(LIST_WIDTH, ROW_HEIGHT)
         row.hit:EnableMouse(true)
         row.hit:SetScript("OnEnter", function() ShowTooltip(row) end)
         row.hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -118,24 +119,68 @@ end
 
 -- Puts a row at a place in the list (1 = top of the whole list).
 local function PlaceRow(row, index)
-    if row.index == index then
+    if row.index == index and row.layoutKey == layoutKey then
         return
     end
-    row.index = index
+    row.index, row.layoutKey = index, layoutKey
     local list = frame.list
     local top = -(index - 1) * ROW_HEIGHT - 2
-    local function At(region, point, x)
+    for _, key in ipairs(KEYS) do
+        local region, column = row[key], col[key]
+        region:SetWidth(column.width)
         region:ClearAllPoints()
-        region:SetPoint(point, list, point, x, top)
+        if FROM_LEFT[key] then
+            region:SetPoint("TOPLEFT", list, "TOPLEFT", column.left, top)
+        else
+            region:SetPoint("TOPRIGHT", list, "TOPRIGHT", column.right, top)
+        end
     end
-    At(row.date, "TOPLEFT", 0)
-    At(row.item, "TOPLEFT", ITEM_LEFT)
-    At(row.from, "TOPRIGHT", FROM_RIGHT)
-    At(row.each, "TOPRIGHT", EACH_RIGHT)
-    At(row.total, "TOPRIGHT", TOTAL_RIGHT)
-    At(row.market, "TOPRIGHT", MARKET_RIGHT)
     row.hit:ClearAllPoints()
     row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top + 2)
+    row.hit:SetSize(LIST_WIDTH, ROW_HEIGHT)
+end
+
+-- Lays the columns out to fit every purchase (Columns.lua), not just the
+-- rows on screen, so nothing moves as the list scrolls. Places the headings
+-- again when that changes the layout; the rows follow as they're placed.
+local function LayOut()
+    local extents, market = {}, {}
+    for index = 1, History.PurchaseCount() do
+        local purchase = History.Purchase(index)
+        Columns.Track(extents, "each", purchase.total / purchase.n)
+        Columns.Track(extents, "total", purchase.total)
+        -- Each item's price once, however often it was bought.
+        if market[purchase.item] == nil then
+            market[purchase.item] = MarketNow(purchase.item) or false
+            Columns.Track(extents, "market", market[purchase.item] or nil)
+        end
+    end
+    local key
+    col, LIST_WIDTH, key = Columns.Layout(BASE_LIST_WIDTH, {
+        { key = "date", heading = L.HISTORY_DATE, samples = Columns.Date() },
+        { key = "item", heading = L.HISTORY_ITEM, fill = true },
+        { key = "from", heading = L.PURCHASES_FROM, samples = { L.HISTORY_VENDOR, L.HISTORY_AUCTION } },
+        { key = "each", heading = L.PURCHASES_EACH, samples = Columns.Money(extents, "each") },
+        { key = "total", heading = L.PURCHASES_TOTAL, samples = Columns.Money(extents, "total") },
+        { key = "market", heading = L.PURCHASES_NOW, samples = Columns.Money(extents, "market") },
+    })
+    if key == layoutKey then
+        return
+    end
+    layoutKey = key
+    WIDTH = LIST_WIDTH + 2 * PADDING + SCROLLBAR_WIDTH
+    pageDef.width = WIDTH
+    frame.list:SetWidth(LIST_WIDTH)
+    for index, heading in ipairs(frame.headings) do
+        local column = col[KEYS[index]]
+        heading:SetWidth(column.width)
+        heading:ClearAllPoints()
+        if FROM_LEFT[KEYS[index]] then
+            heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + column.left, LIST_TOP + 16)
+        else
+            heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + LIST_WIDTH + column.right, LIST_TOP + 16)
+        end
+    end
 end
 
 -- Fills the rows that fit on screen from where the list is scrolled to.
@@ -175,25 +220,20 @@ local function Create(page)
     frame.heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -32)
     frame.heading:SetText(L.TAB_PURCHASES)
 
-    local function Heading(text, width, justify, point, x)
+    -- In KEYS' order, placed with the columns (LayOut).
+    local function Heading(text, justify)
         local heading = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         heading:SetJustifyH(justify)
-        heading:SetWidth(width)
         heading:SetText(text)
-        if point == "LEFT" then
-            heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + x, LIST_TOP + 16)
-        else
-            heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + LIST_WIDTH + x, LIST_TOP + 16)
-        end
         return heading
     end
     frame.headings = {
-        Heading(L.HISTORY_DATE, DATE_WIDTH, "LEFT", "LEFT", 0),
-        Heading(L.HISTORY_ITEM, ITEM_WIDTH, "LEFT", "LEFT", ITEM_LEFT),
-        Heading(L.PURCHASES_FROM, FROM_WIDTH, "LEFT", "RIGHT", FROM_RIGHT),
-        Heading(L.PURCHASES_EACH, MONEY_WIDTH, "RIGHT", "RIGHT", EACH_RIGHT),
-        Heading(L.PURCHASES_TOTAL, MONEY_WIDTH, "RIGHT", "RIGHT", TOTAL_RIGHT),
-        Heading(L.PURCHASES_NOW, MONEY_WIDTH, "RIGHT", "RIGHT", MARKET_RIGHT),
+        Heading(L.HISTORY_DATE, "LEFT"),
+        Heading(L.HISTORY_ITEM, "LEFT"),
+        Heading(L.PURCHASES_FROM, "LEFT"),
+        Heading(L.PURCHASES_EACH, "RIGHT"),
+        Heading(L.PURCHASES_TOTAL, "RIGHT"),
+        Heading(L.PURCHASES_NOW, "RIGHT"),
     }
 
     frame.scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
@@ -212,6 +252,7 @@ local function Create(page)
 end
 
 local function Refresh()
+    LayOut()
     local count = History.PurchaseCount()
     local maxScroll = math.max(count - VISIBLE_ROWS, 0) * ROW_HEIGHT
     if (frame.scroll:GetVerticalScroll() or 0) > maxScroll then
@@ -258,13 +299,14 @@ function PurchasePanel.Frame()
     return frame
 end
 
-Panel.AddPage({
+pageDef = {
     name = "purchases",
     icon = "Interface\\Icons\\INV_Misc_Note_01",
     label = L.TAB_PURCHASES,
     width = WIDTH,
     create = Create,
     refresh = function() return Refresh() end,
-})
+}
+Panel.AddPage(pageDef)
 
 History.OnChange(PurchasePanel.Refresh)

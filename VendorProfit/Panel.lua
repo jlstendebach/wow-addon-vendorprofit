@@ -85,11 +85,9 @@ local function GetRow(index)
         -- Disabled buttons still show their tooltip, to say why.
         row.button:SetMotionScriptsWhileDisabled(true)
         row.button:SetScript("OnEnter", function(self)
-            -- The mouse only reaches the Craft button when the open-profession
-            -- cover isn't over it: the window moved under it (dragged, or
-            -- the display changed), or it was
-            -- hidden without the panel redrawing. Put it back under the mouse
-            -- so the click opens the profession.
+            -- The open-profession cover goes over the Craft button while
+            -- the mouse is on it (see OpenButton.lua), so the click opens
+            -- the profession.
             if craftCover and craftCover.button == self and not Order.IsEmpty() then
                 self:SetEnabled(OpenButton.Cover(self, craftCover.profession))
             end
@@ -705,11 +703,11 @@ local function SetBagsCollapsed(collapsed)
     Panel.Refresh()
 end
 
--- What one queued entry makes, on its own, along its cheapest route at
--- today's prices: { cost, vendor, auction } for all its crafts (vendor or
--- auction nil when there's no price to sell at).
+-- What one queued entry makes, on its own, at today's prices, along its
+-- cheapest route (or as it is, for an exact one): { cost, vendor, auction }
+-- for all its crafts (vendor or auction nil when there's no price to sell at).
 local function EntryProfit(entry)
-    local route = VendorProfit.Route.ForRecipe(entry.itemID, entry.reagents)
+    local route = VendorProfit.Route.ForRecipe(entry.itemID, entry.reagents, nil, entry.exact)
     local cost = math.floor(route.cost * entry.crafts + 0.5)
     local made = entry.count * entry.crafts
     local sellPrice = entry.sellPrice or select(11, C_Item.GetItemInfo(entry.itemID))
@@ -731,7 +729,7 @@ local function QueuedTooltip(entry)
         local profit = EntryProfit(entry)
         tooltip:SetText(ItemLabel(entry.itemID, entry.crafts * entry.count))
         tooltip:AddLine(" ")
-        tooltip:AddDoubleLine(L.QUEUED_COST, Money(-profit.cost))
+        tooltip:AddDoubleLine(entry.exact and L.QUEUED_COST_EXACT or L.QUEUED_COST, Money(-profit.cost))
         tooltip:AddDoubleLine(L.VENDOR_PROFIT_ROW,
             profit.vendor and Money(profit.vendor) or Gray(L.QUEUED_NO_VENDOR))
         tooltip:AddDoubleLine(L.AUCTION_PROFIT_ROW,
@@ -746,6 +744,9 @@ local function AddQueued(index, entry)
     local label = ItemLabel(entry.itemID, entry.crafts * entry.count)
     if not MakesMoney(profit.vendor, profit.auction) then
         label = Red(label)
+    end
+    if entry.exact then
+        label = label .. " " .. Gray(L.QUEUED_EXACT_MARK)
     end
     AddRow("row", label, nil, nil, {
         tooltip = QueuedTooltip(entry),
@@ -814,9 +815,10 @@ local function FinishLayout()
         end
     end
 
-    -- With the Craft button in place, cover it to open the profession, or
-    -- uncover.
-    if craftCover and not Order.IsEmpty() then
+    -- With the Craft button in place and the mouse on it, cover it to open
+    -- the profession (otherwise its OnEnter does, when the mouse gets
+    -- there), or uncover.
+    if craftCover and not Order.IsEmpty() and OpenButton.HasMouse(craftCover.button) then
         craftCover.button:SetEnabled(OpenButton.Cover(craftCover.button, craftCover.profession))
     else
         OpenButton.Hide()
@@ -875,12 +877,20 @@ local function CreateSideTab(index, def)
     return tab
 end
 
+local Place   -- puts the window where it belongs (below)
+
 local function Create()
     frame = CreateFrame("Frame", "VendorProfitPanel", UIParent, "ButtonFrameTemplate")
-    -- Above the professions window, auction house, bank and vendor it sits
-    -- beside, and brought to the front when clicked. (The secure Open button
-    -- over Craft is a strata higher still.)
-    frame:SetFrameStrata("HIGH")
+    -- Escape closes it along with the game's other windows, as they do. The
+    -- game hides it directly, which works in combat (it isn't protected).
+    if UISpecialFrames then
+        table.insert(UISpecialFrames, "VendorProfitPanel")
+    end
+    -- In the same strata as the game's windows (and most addons'), and
+    -- brought to the front when clicked: clicking another window brings that
+    -- one in front of it instead, as windows normally do. (A higher strata
+    -- kept it above everything, bags included, however you clicked.)
+    frame:SetFrameStrata("MEDIUM")
     frame:SetToplevel(true)
     ButtonFrameTemplate_HidePortrait(frame)
     ButtonFrameTemplate_HideButtonBar(frame)
@@ -911,6 +921,10 @@ local function Create()
         -- Saved by the addon, not the game's own layout cache.
         self:SetUserPlaced(false)
         Panel.SavePosition()
+        -- The game leaves a moved window anchored by a point of its choosing
+        -- (often its center), so the window would grow and shrink at both
+        -- edges as pages change height. Held by its top left corner again.
+        Place()
         Panel.Refresh()
     end)
     frame:Hide()
@@ -948,7 +962,7 @@ local DEFAULT_TOP = -120
 -- switch. Only ever anchored to UIParent: anchored to a protected window
 -- (the professions window, say) it would be protected too, and the game
 -- would block hiding it in combat.
-local function Place()
+function Place()
     frame:ClearAllPoints()
     local saved = SavedPosition()
     if saved and saved.left and saved.top then
@@ -974,13 +988,18 @@ local function Refresh()
         pages[def.name]:SetShown(active)
         frame.tabs[def.name]:SetChecked(active)
     end
-    if activeTab ~= "shopping" then
-        OpenButton.Hide()
+    -- Off the Shopping List: not over its Craft button. (Best Crafts has its
+    -- own button the cover goes over.)
+    if activeTab ~= "shopping" and craftCover then
+        OpenButton.Uncover(craftCover.button)
     end
     for _, def in ipairs(pageDefs) do
         if def.name == activeTab then
+            -- Refreshed first: a tab can change its width as it lays out
+            -- its columns (Columns.lua).
+            local height = def.refresh(pages[def.name])
             frame:SetWidth(def.width or WIDTH)
-            frame:SetHeight(math.max(def.refresh(pages[def.name]), MinHeight()))
+            frame:SetHeight(math.max(height, MinHeight()))
         end
     end
     -- The cover was placed while laying out; the new height can move a
@@ -1005,6 +1024,8 @@ function Panel.Show(tab)
     end
     Place()
     frame:Show()
+    -- Opened: in front of the other windows, as if clicked.
+    frame:Raise()
     Panel.Refresh()
 end
 
@@ -1185,6 +1206,8 @@ SlashCmdList.VENDORPROFIT = function(arg)
         Panel.Toggle("purchases")
     elseif command == "gold" then
         Panel.Toggle("gold")
+    elseif command == "minimap" then
+        VendorProfit.MinimapButton.Toggle()
     elseif command == "prices" then
         VendorProfit.Merchant.ShowPriceLines()
     elseif command == "stations" then

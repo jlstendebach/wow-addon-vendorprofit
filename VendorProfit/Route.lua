@@ -125,13 +125,17 @@ end
 -- The cheapest route for one craft of a recipe that makes outputItemID from
 -- reagents (Recipes.ReagentsFromSchematic format). Returns
 --   { cost = copper for one craft, children = ..., missing = bool }
--- with children's perUnit being the amount one craft takes.
-function Route.ForRecipe(outputItemID, reagents, getBuyPrices)
+-- with children's perUnit being the amount one craft takes. exact: the
+-- recipe as it is, its reagents only bought (vendor or auction, the
+-- cheaper), never crafted, as Auctionator prices it.
+function Route.ForRecipe(outputItemID, reagents, getBuyPrices, exact)
     local visiting = {}
     if outputItemID then
         visiting[outputItemID] = true
     end
-    local total, children, missing = ResolveReagents(reagents, visiting, 1, getBuyPrices or VendorProfit.GetBuyPrices)
+    -- Resolving at the depth limit considers buying only.
+    local depth = exact and Route.MAX_DEPTH or 1
+    local total, children, missing = ResolveReagents(reagents, visiting, depth, getBuyPrices or VendorProfit.GetBuyPrices)
     if total == nil then
         -- Only reachable if the recipe uses its own output; price it as given.
         return { cost = 0, children = {}, missing = true }

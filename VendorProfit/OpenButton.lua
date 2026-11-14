@@ -9,6 +9,15 @@
 -- moving it in combat. Instead this is a separate, invisible secure button
 -- laid exactly over the Craft button. It's only placed out of combat, and
 -- hidden as combat starts, so the panel itself stays unprotected.
+--
+-- It's only there while the mouse is on the Craft button (the button's
+-- OnEnter puts it there, and it goes when the mouse leaves it), in a strata
+-- above every window. Sat in the panel's own strata, just above the button,
+-- it ended up under it once the panel was raised to the front, and clicks
+-- hit the plain Craft button instead. Above everything but only under the
+-- mouse, it's always on top, and still can't open a profession through
+-- another window over the panel: the mouse never reaches the Craft button
+-- there, so it never appears.
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -18,6 +27,11 @@ local OpenButton = {}
 VendorProfit.OpenButton = OpenButton
 
 local MINING_SPELL, SMELTING_SPELL = 2575, 2656
+-- Forever's Fishing has a crafting window (Camping), opened by Bait and
+-- Tackle; its "Fishing" spell casts a line. (Seen in game: Fishing's
+-- spellbook entries are Bait and Tackle, 1278067, and Fishing, 7731; the
+-- profession itself is spell 7620.)
+local FISHING_SPELL, BAIT_AND_TACKLE_SPELL = 7620, 1278067
 
 local button
 local target             -- the button it's laid over
@@ -34,10 +48,16 @@ local function SpellName(spellID)
 end
 
 -- The spell that opens a profession's window: its own name, except Mining,
--- whose window opens with Smelting.
+-- whose window opens with Smelting, and Fishing, with Bait and Tackle.
+local OPENED_BY = { [MINING_SPELL] = SMELTING_SPELL, [FISHING_SPELL] = BAIT_AND_TACKLE_SPELL }
 function OpenButton.SpellFor(profession)
-    if profession ~= nil and profession == SpellName(MINING_SPELL) then
-        return SpellName(SMELTING_SPELL) or profession
+    if profession == nil then
+        return nil
+    end
+    for professionSpell, opener in pairs(OPENED_BY) do
+        if profession == SpellName(professionSpell) then
+            return SpellName(opener) or profession
+        end
     end
     return profession
 end
@@ -49,15 +69,23 @@ local function Create()
     button:SetHighlightTexture("Interface\\Buttons\\UI-Panel-Button-Highlight", "ADD")
     button:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(string.format(L.OPEN_PROFESSION_HELP, self.profession or ""), 1, 1, 1, 1, true)
+        GameTooltip:SetText(self.tooltip or string.format(L.OPEN_PROFESSION_HELP, self.profession or ""), 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
-    button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    button:SetScript("OnLeave", function(self)
+        GameTooltip:Hide()
+        if not InCombatLockdown() then
+            self:Hide()
+        end
+    end)
     -- Clicked: the profession is on its way. Casting its spell again would
     -- close the window it's opening, so the button goes away until it's open
     -- (or a few seconds pass), and the panel checks back as it loads.
     button:SetScript("PostClick", function(self)
         opening = { profession = self.profession, expires = GetTime() + OPENING_TIMEOUT }
+        if self.onClick then
+            self.onClick()
+        end
         if not InCombatLockdown() then
             self:Hide()
         end
@@ -110,9 +138,10 @@ local function Place(over)
     return true
 end
 
--- Lays the secure button over a button so clicking it opens profession.
+-- Lays the secure button over a button so clicking it opens profession,
+-- then calls onClick (if given). tooltip replaces its usual "Opens ...".
 -- Does nothing in combat. Returns true if it's in place.
-function OpenButton.Cover(over, profession)
+function OpenButton.Cover(over, profession, onClick, tooltip)
     if InCombatLockdown() then
         return false
     end
@@ -126,14 +155,32 @@ function OpenButton.Cover(over, profession)
     end
     button:SetAttribute("type", "spell")
     button:SetAttribute("spell", spell)
-    button.profession = profession
+    button.profession, button.onClick, button.tooltip = profession, onClick, tooltip
     button:Show()
     return true
+end
+
+-- Whether the mouse is on over: on it, or on the cover laid over it.
+function OpenButton.HasMouse(over)
+    local focus
+    if GetMouseFoci then
+        focus = GetMouseFoci()[1]
+    elseif GetMouseFocus then
+        focus = GetMouseFocus()
+    end
+    return focus ~= nil and (focus == over or (focus == button and target == over and button:IsShown()))
 end
 
 function OpenButton.Hide()
     if button and not InCombatLockdown() then
         button:Hide()
+    end
+end
+
+-- Hides it if it's over over (and leaves it alone over another button).
+function OpenButton.Uncover(over)
+    if target == over then
+        OpenButton.Hide()
     end
 end
 

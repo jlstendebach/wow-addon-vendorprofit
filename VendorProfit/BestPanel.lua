@@ -1,11 +1,17 @@
--- The Best Crafts tab of the Vendor Profit window: every saved recipe of the
--- open profession, ranked by profit per craft (BestCrafts.lua), losses
--- included, then the ones with no price to rank by, in a scrolling list with
--- Auction and Vendor tabs and Investment, Profit and ROI columns, sortable
--- by clicking a column's heading, filtered by name with the search box as
--- you type, and by profit and skill-up color with the Filter dropdown. Each has a magnifying glass (selects it in
--- the professions window) and + (adds one craft to the shopping order). Live
--- prices come from Scan.
+-- The Best Crafts tab of the Vendor Profit window: every saved recipe of
+-- every profession you've opened, ranked together by profit per craft
+-- (BestCrafts.lua), losses included, then the ones with no price to rank by,
+-- in a scrolling list with Auction and Vendor tabs and Investment, Profit and
+-- ROI columns, sortable by clicking a column's heading, filtered by name with
+-- the search box as you type, and by profit, skill-up color and profession
+-- with the Filter menu (every profession ticked to start with). It works with
+-- the professions window closed. Each row has - and + (one craft fewer or
+-- more in the shopping order); clicking a name selects it in the professions
+-- window while that profession's window is open. Live prices come from Scan.
+--
+-- Skill-up colors are live for the profession whose window is open; for the
+-- others they're as of when their window was last open (Recipes.SkillUp),
+-- which the Filter menu and each row's tooltip say.
 --
 -- Opened by the Vendor Profit button in the professions window's title bar,
 -- or /vprofit best.
@@ -14,6 +20,8 @@ local ADDON_NAME, ns = ...
 local VendorProfit = ns.VendorProfit
 local BestCrafts = VendorProfit.BestCrafts
 local Recipes = VendorProfit.Recipes
+local OpenButton = VendorProfit.OpenButton
+local ProfessionCycle = VendorProfit.ProfessionCycle
 local Order = VendorProfit.Order
 local Auctions = VendorProfit.Auctions
 local L = VendorProfit.L
@@ -22,29 +30,26 @@ local BestPanel = {}
 VendorProfit.BestPanel = BestPanel
 
 local Panel = VendorProfit.Panel
+local Columns = VendorProfit.Columns
 
 -- Wider than the Shopping List, for the money columns and the search and
--- filter controls.
+-- filter controls; wider still if the columns need it (LayOutColumns).
 local WIDTH = 520
 local PADDING = 16
 local ROW_HEIGHT = 22
 local LIST_TOP = -94
 local VISIBLE_ROWS = 14
 local SCROLLBAR_WIDTH = 24
-local LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
--- Columns, from the right of the list: + and - (queue and unqueue a craft),
--- Q (crafts queued, two digits wide), AH (your auctions of it, three digits),
--- ROI, Profit, Investment; the recipe name takes the rest.
-local ICON_BUTTON_WIDTH, MONEY_WIDTH, ROI_WIDTH, QUEUED_WIDTH, AH_WIDTH, GAP = 22, 72, 48, 16, 22, 6
--- The count columns are narrower than their headings once a sort arrow is
--- added, so they get wider gaps for it to grow into.
-local COUNT_GAP = 12
-local QUEUED_RIGHT = -(2 * ICON_BUTTON_WIDTH + 4 + 8)
-local AH_RIGHT = QUEUED_RIGHT - QUEUED_WIDTH - COUNT_GAP
-local ROI_RIGHT = AH_RIGHT - AH_WIDTH - COUNT_GAP
-local PROFIT_RIGHT = ROI_RIGHT - ROI_WIDTH - GAP
-local INVESTMENT_RIGHT = PROFIT_RIGHT - MONEY_WIDTH - GAP
-local NAME_WIDTH = LIST_WIDTH + INVESTMENT_RIGHT - MONEY_WIDTH - GAP
+local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
+local LIST_WIDTH = BASE_LIST_WIDTH
+local ICON_BUTTON_WIDTH = 22
+-- The columns, by key (Columns.lua), laid out for what's listed on each
+-- refresh: the recipe name, Investment, Profit, ROI, AH (your auctions of
+-- it), Q (crafts queued), then - and + (unqueue and queue a craft). The
+-- layout key changes only when the layout does.
+local col, layoutKey
+-- This tab's entry in the window (Panel.AddPage), for the width.
+local pageDef
 
 -- Sorting by column: Recipe (A to Z first), Investment, Profit, ROI (highest
 -- first). Clicking the sorted column again reverses it. Recipes with no
@@ -158,24 +163,18 @@ local function GetRow(index)
         local list = frame.list
         row = {}
         local top = -(index - 1) * ROW_HEIGHT
-        local function Column(width, right)
+        local function Column()
             local text = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             text:SetJustifyH("RIGHT")
             text:SetWordWrap(false)
-            text:SetWidth(width)
-            text:SetPoint("TOPRIGHT", list, "TOPRIGHT", right, top - 4)
             return text
         end
         row.left = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         row.left:SetJustifyH("LEFT")
         row.left:SetWordWrap(false)
-        row.left:SetWidth(NAME_WIDTH)
-        row.left:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top - 4)
         -- Clicking the name shows the recipe in the professions window (while
         -- it's open); hovering it shows what you've made selling the item.
         row.hit = CreateFrame("Frame", nil, list)
-        row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top)
-        row.hit:SetSize(NAME_WIDTH, ROW_HEIGHT)
         row.hit:EnableMouse(true)
         row.hit:SetScript("OnMouseUp", function(self, mouseButton)
             if mouseButton == "LeftButton" and self.recipe and ProfessionsWindowOpen() then
@@ -184,21 +183,21 @@ local function GetRow(index)
         end)
         row.hit:SetScript("OnEnter", function(self)
             if self.recipe then
-                BestPanel.ShowSalesTooltip(self, row.left, self.recipe.item)
+                BestPanel.ShowSalesTooltip(self, row.left, self.recipe.item, self.recipe)
             end
         end)
         row.hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
         -- Investment: what one craft's items cost along the cheapest route.
-        row.investment = Column(MONEY_WIDTH, INVESTMENT_RIGHT)
-        row.right = Column(MONEY_WIDTH, PROFIT_RIGHT)
+        row.investment = Column()
+        row.right = Column()
         -- Return on investment: profit as a share of the investment.
-        row.roi = Column(ROI_WIDTH, ROI_RIGHT)
+        row.roi = Column()
         -- How many of what it makes you have up for auction (Auctions.lua).
-        row.auctions = Column(AH_WIDTH, AH_RIGHT)
+        row.auctions = Column()
         -- How many crafts the shopping order holds.
-        row.queued = Column(QUEUED_WIDTH, QUEUED_RIGHT)
+        row.queued = Column()
         -- Why a recipe isn't ranked, across the columns it has no number for.
-        row.reason = Column(MONEY_WIDTH, ROI_RIGHT)
+        row.reason = Column()
 
         -- Queue: a plus, at the row's end; unqueue: a minus, before it.
         row.queue = SmallButton(list, "+", ICON_BUTTON_WIDTH)
@@ -208,6 +207,29 @@ local function GetRow(index)
         row.unqueue:SetPoint("RIGHT", row.queue, "LEFT", -4, 0)
         Tooltip(row.unqueue, L.BEST_UNQUEUE_HELP)
         rows[index] = row
+    end
+    -- Placed again only when the columns change.
+    if row.layoutKey ~= layoutKey then
+        row.layoutKey = layoutKey
+        local list, top = frame.list, -(index - 1) * ROW_HEIGHT
+        local function At(region, key)
+            region:SetWidth(col[key].width)
+            region:ClearAllPoints()
+            region:SetPoint("TOPRIGHT", list, "TOPRIGHT", col[key].right, top - 4)
+        end
+        row.left:SetWidth(col.name.width)
+        row.left:ClearAllPoints()
+        row.left:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left, top - 4)
+        row.hit:ClearAllPoints()
+        row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left, top)
+        row.hit:SetSize(col.name.width, ROW_HEIGHT)
+        At(row.investment, "investment")
+        At(row.right, "profit")
+        At(row.roi, "roi")
+        At(row.auctions, "auctions")
+        At(row.queued, "queued")
+        -- Its width depends on the columns it spans (set in Refresh).
+        At(row.reason, "roi")
     end
     return row
 end
@@ -304,9 +326,19 @@ local FormatROI = VendorProfit.FormatROI
 -- What you've made selling an item, over all time: its Best Sellers figures
 -- (Profit History), with the profit and ROIs. Placed like an item's
 -- tooltip: above the row, past the end of its name.
-function BestPanel.ShowSalesTooltip(owner, nameText, itemID)
+-- With a recipe (a row's), it also names the recipe's profession and says
+-- when its skill-up color is saved rather than live.
+function BestPanel.ShowSalesTooltip(owner, nameText, itemID, recipe)
     VendorProfit.SetNameTooltipOwner(owner, nameText)
     GameTooltip:SetText(ItemLabel(itemID))
+    if recipe then
+        GameTooltip:AddLine(recipe.profession, 1, 1, 1)
+        local skillUp, saved = Recipes.SkillUp(recipe)
+        if skillUp and saved then
+            GameTooltip:AddLine(string.format(L.BEST_SKILL_SAVED, recipe.profession),
+                GRAY_FONT_COLOR.r, GRAY_FONT_COLOR.g, GRAY_FONT_COLOR.b, true)
+        end
+    end
     local HistoryPanel = VendorProfit.HistoryPanel
     local item = HistoryPanel and HistoryPanel.AllTime(itemID)
     if item and item.n > 0 then
@@ -331,22 +363,32 @@ SKILL_UP = {
 
 -- A recipe's skill-up color key, if the game says (it only knows for the
 -- profession whose window is open).
-local function SkillUp(recipeID)
-    local info = C_TradeSkillUI.GetRecipeInfo(recipeID)
-    local difficulty = info and info.relativeDifficulty
-    if difficulty == nil then
-        return nil
+-- (Recipes.SkillUp: "trivial", no skill up, is left white here, as gray in
+-- the professions window would be hard to read.)
+
+-- Professions are filtered out by key: "prof:<key>" in the filters.
+local function ProfessionFilterKey(key)
+    return "prof:" .. tostring(key)
+end
+
+-- The saved professions the Filter menu leaves in: { key, name } by name.
+local function ShownProfessions()
+    local filters = Filters()
+    local shown = {}
+    for _, profession in ipairs(Recipes.Professions()) do
+        if not filters[ProfessionFilterKey(profession.key)] then
+            shown[#shown + 1] = profession
+        end
     end
-    local enum = Enum.TradeskillRelativeDifficulty or {}
-    if difficulty == (enum.Optimal or 0) then
-        return "optimal"
-    elseif difficulty == (enum.Medium or 1) then
-        return "medium"
-    elseif difficulty == (enum.Easy or 2) then
-        return "easy"
+    return shown
+end
+
+local function Keys(professions)
+    local keys = {}
+    for index, profession in ipairs(professions) do
+        keys[index] = profession.key
     end
-    -- No skill up (gray in the professions window): left white here.
-    return "trivial"
+    return keys
 end
 
 -- The filters, saved per character: { profitable, optimal, medium, easy }.
@@ -356,8 +398,7 @@ Filters = function()
 end
 
 FiltersActive = function()
-    local filters = Filters()
-    return filters.profitable or filters.optimal or filters.medium or filters.easy or false
+    return next(Filters()) ~= nil
 end
 
 local function SkillFilterActive()
@@ -392,7 +433,9 @@ local function PassesFilters(entry)
     return true
 end
 
--- The Filter menu: profitable only, then the skill-up colors.
+-- The Filter menu: profitable only, the skill-up colors (with a note that
+-- they're as of each profession's last opening), then the professions, each
+-- ticked while it's shown.
 FilterMenu = function(_, root)
     root:CreateCheckbox(L.BEST_FILTER_PROFITABLE,
         function() return Filters().profitable == true end,
@@ -403,6 +446,21 @@ FilterMenu = function(_, root)
         root:CreateCheckbox(skill.color:WrapTextInColorCode(skill.label),
             function() return Filters()[key] == true end,
             function() SetFilter(key, not Filters()[key]) end)
+    end
+    -- The note, a line at a time: the game's menu doesn't wrap text, and is
+    -- as wide as its widest line.
+    for line in L.BEST_SKILL_SAVED_NOTE:gmatch("[^\n]+") do
+        root:CreateTitle(GRAY_FONT_COLOR:WrapTextInColorCode(line))
+    end
+    local professions = Recipes.Professions()
+    if #professions > 0 then
+        root:CreateTitle(L.BEST_FILTER_PROFESSIONS)
+        for _, profession in ipairs(professions) do
+            local filterKey = ProfessionFilterKey(profession.key)
+            root:CreateCheckbox(profession.name,
+                function() return not Filters()[filterKey] end,
+                function() SetFilter(filterKey, not Filters()[filterKey]) end)
+        end
     end
 end
 
@@ -470,7 +528,7 @@ local function Create(page)
     frame.scan:SetPoint("RIGHT", frame, "TOPRIGHT", -PADDING, -38)
     frame.scan:SetMotionScriptsWhileDisabled(true)
     frame.scan:SetScript("OnClick", function()
-        BestCrafts.Scan(Recipes.OpenProfession())
+        BestCrafts.Scan(Keys(ShownProfessions()))
     end)
     frame.scan:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -478,6 +536,29 @@ local function Create(page)
         GameTooltip:Show()
     end)
     frame.scan:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    -- Professions: click it again and again to open each of your
+    -- professions in turn, saving their recipes, then close the window
+    -- (ProfessionCycle.lua). Opening goes through the secure cover, laid
+    -- over it while the mouse is on it (OpenButton.lua).
+    frame.professions = SmallButton(frame, L.PROFESSIONS_BUTTON, 90)
+    frame.professions:SetPoint("RIGHT", frame.scan, "LEFT", -4, 0)
+    frame.professions:SetMotionScriptsWhileDisabled(true)
+    frame.professions:SetScript("OnClick", function()
+        if ProfessionCycle.State().action == "close" then
+            ProfessionCycle.Close()
+        end
+    end)
+    frame.professions:SetScript("OnEnter", function(self)
+        local state = ProfessionCycle.State()
+        if state.action == "open" and not InCombatLockdown() then
+            OpenButton.Cover(self, state.entry.name, function() ProfessionCycle.Opened(state.entry) end, self.tooltip)
+        end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(self.tooltip or "", 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    frame.professions:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     -- Search: filters the list by name as you type. The game's own search
     -- box (magnifying glass, "Search" placeholder, clear button) where it
@@ -536,32 +617,26 @@ local function Create(page)
 
     -- Column headings over the list; click one to sort by it.
     frame.headings = {}
-    local function Heading(key, text, width, right, help)
+    -- Placed with the columns (LayOutColumns). Every column but the name is
+    -- a number, right-aligned.
+    local function Heading(key, text, help)
         local heading = CreateFrame("Button", nil, frame)
-        heading:SetSize(width, 14)
-        if right then
-            heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + LIST_WIDTH + right, LIST_TOP + 16)
-        else
-            heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, LIST_TOP + 16)
-        end
         heading.text = heading:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         heading.text:SetAllPoints(heading)
-        heading.text:SetJustifyH(right and "RIGHT" or "LEFT")
+        heading.text:SetJustifyH(key == "name" and "LEFT" or "RIGHT")
         heading.label = text
         heading:SetScript("OnClick", function() SetSort(key) end)
         Tooltip(heading, help or L.BEST_SORT_HELP)
         frame.headings[key] = heading
         return heading
     end
-    frame.nameHeading = Heading("name", L.BEST_RECIPE, NAME_WIDTH)
-    frame.investmentHeading = Heading("investment", L.BEST_INVESTMENT, MONEY_WIDTH, INVESTMENT_RIGHT)
-    frame.profitHeading = Heading("profit", L.BEST_PROFIT, MONEY_WIDTH, PROFIT_RIGHT)
-    frame.roiHeading = Heading("roi", L.BEST_ROI, ROI_WIDTH, ROI_RIGHT)
-    -- The count headings are wider than their columns, into the gap, to fit
-    -- the sort arrow.
-    frame.auctionsHeading = Heading("auctions", L.BEST_AUCTIONS_HEADING, AH_WIDTH + COUNT_GAP, AH_RIGHT,
+    frame.nameHeading = Heading("name", L.BEST_RECIPE)
+    frame.investmentHeading = Heading("investment", L.BEST_INVESTMENT)
+    frame.profitHeading = Heading("profit", L.BEST_PROFIT)
+    frame.roiHeading = Heading("roi", L.BEST_ROI)
+    frame.auctionsHeading = Heading("auctions", L.BEST_AUCTIONS_HEADING,
         L.BEST_AUCTIONS_HELP .. "\n" .. L.BEST_SORT_HELP)
-    frame.queuedHeading = Heading("queued", L.BEST_QUEUED_HEADING, QUEUED_WIDTH + COUNT_GAP, QUEUED_RIGHT,
+    frame.queuedHeading = Heading("queued", L.BEST_QUEUED_HEADING,
         L.BEST_QUEUED_HELP .. "\n" .. L.BEST_SORT_HELP)
 
     -- The list scrolls; the mouse wheel works over it.
@@ -576,9 +651,59 @@ local function Create(page)
     frame.status:SetWidth(WIDTH - 2 * PADDING)
 end
 
+-- Lays the columns out to fit the entries listed (Columns.lua), and places
+-- the headings and sets the tab's width when that changes the layout. The
+-- rows follow as they're filled (GetRow).
+local function LayOutColumns(ranked)
+    local extents = {}
+    for _, entry in ipairs(ranked) do
+        if entry.profit or entry.unpriced.output then
+            Columns.Track(extents, "investment", entry.cost)
+        end
+        Columns.Track(extents, "profit", entry.profit)
+        Columns.Track(extents, "roi", entry.profit and entry.roi)
+        Columns.Track(extents, "auctions", Auctions.Count(entry.recipe.item))
+        Columns.Track(extents, "queued", Queued(entry.recipe.recipeID))
+    end
+    local key
+    col, LIST_WIDTH, key = Columns.Layout(BASE_LIST_WIDTH, {
+        { key = "name", heading = L.BEST_RECIPE, sorts = true, fill = true },
+        { key = "investment", heading = L.BEST_INVESTMENT, sorts = true, samples = Columns.Money(extents, "investment") },
+        { key = "profit", heading = L.BEST_PROFIT, sorts = true, samples = Columns.Money(extents, "profit") },
+        { key = "roi", heading = L.BEST_ROI, sorts = true, samples = Columns.Percent(extents, "roi") },
+        { key = "auctions", heading = L.BEST_AUCTIONS_HEADING, sorts = true, samples = Columns.Count(extents, "auctions") },
+        { key = "queued", heading = L.BEST_QUEUED_HEADING, sorts = true, samples = Columns.Count(extents, "queued") },
+        { key = "buttons", width = 2 * ICON_BUTTON_WIDTH + 4 },
+    })
+    if key == layoutKey then
+        return
+    end
+    layoutKey = key
+    WIDTH = LIST_WIDTH + 2 * PADDING + SCROLLBAR_WIDTH
+    pageDef.width = WIDTH
+    frame.list:SetWidth(LIST_WIDTH)
+    for name, heading in pairs(frame.headings) do
+        heading:SetSize(col[name].width, 14)
+        heading:ClearAllPoints()
+        if name == "name" then
+            heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + col[name].left, LIST_TOP + 16)
+        else
+            heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + LIST_WIDTH + col[name].right, LIST_TOP + 16)
+        end
+    end
+end
+
 local function Refresh()
-    local profession, name = Recipes.OpenProfession()
-    frame.heading:SetText(string.format(L.BEST_TITLE, name or ""))
+    local saved = Recipes.Professions()
+    local shown = ShownProfessions()
+    local keys = Keys(shown)
+    local openKey = Recipes.OpenProfession()
+    -- One profession shown: its name in the title.
+    if #shown == 1 then
+        frame.heading:SetText(string.format(L.BEST_TITLE, shown[1].name))
+    else
+        frame.heading:SetText(L.BEST_TITLE_ALL)
+    end
 
     -- Filter: how many are on, and the reset X while any are.
     if frame.filter then
@@ -611,28 +736,57 @@ local function Refresh()
         scan.tooltip = batch and string.format(L.BEST_SCANNING, batch, batches) or L.BUY_SCANNING
     else
         scan:SetText(L.SCAN)
-        scan:SetEnabled(profession ~= nil and BestCrafts.CanScan())
+        scan:SetEnabled(#keys > 0 and BestCrafts.CanScan())
         scan.tooltip = BestCrafts.CanScan() and L.BEST_SCAN_HELP or L.BEST_SCAN_OPEN_AH
+    end
+
+    -- Professions button: what the next click does.
+    local professions, state = frame.professions, ProfessionCycle.State()
+    local text, enabled, tooltip = L.PROFESSIONS_BUTTON, false, nil
+    if state.action == "open" then
+        if state.started then
+            text = string.format(L.PROFESSIONS_NEXT, state.index, state.count)
+        end
+        enabled = not InCombatLockdown()
+        tooltip = enabled and string.format(L.PROFESSIONS_OPEN_HELP, state.entry.name, state.index, state.count)
+            or L.PROFESSIONS_COMBAT
+    elseif state.action == "wait" then
+        text, tooltip = L.OPENING_LABEL, string.format(L.OPENING_HELP, state.entry.name)
+    elseif state.action == "close" then
+        text, enabled, tooltip = L.PROFESSIONS_CLOSE, true, L.PROFESSIONS_CLOSE_HELP
+    elseif state.action == "rest" then
+        tooltip = L.PROFESSIONS_REST
+    else
+        tooltip = L.PROFESSIONS_NONE
+    end
+    professions:SetText(text)
+    professions:SetEnabled(enabled)
+    professions.tooltip = tooltip
+    -- The mouse on it as it becomes ready to open the next one: cover it
+    -- now, as its OnEnter would.
+    if state.action == "open" and enabled and OpenButton.HasMouse(professions) then
+        OpenButton.Cover(professions, state.entry.name, function() ProfessionCycle.Opened(state.entry) end, tooltip)
+    else
+        OpenButton.Uncover(professions)
     end
 
     -- Headings: the sorted one in white, with an arrow for its direction.
     local sort = Sort()
     for key, heading in pairs(frame.headings) do
         if key == sort.key then
-            local arrow = sort.ascending and L.BEST_SORT_UP or L.BEST_SORT_DOWN
-            heading.text:SetText(HIGHLIGHT_FONT_COLOR:WrapTextInColorCode(heading.label .. " " .. arrow))
+            heading.text:SetText(HIGHLIGHT_FONT_COLOR:WrapTextInColorCode(Columns.SortedText(heading.label, sort.ascending)))
         else
             heading.text:SetText(heading.label)
         end
     end
 
     local all = {}
-    if profession then
-        all = SortEntries(BestCrafts.Rank(profession, tab, BestPanel.Refresh))
+    if #keys > 0 then
+        all = SortEntries(BestCrafts.Rank(keys, tab, BestPanel.Refresh))
     end
     local ranked, unknownSkillUp = {}, false
     for _, entry in ipairs(all) do
-        entry.skillUp = SkillUp(entry.recipe.recipeID)
+        entry.skillUp, entry.skillUpSaved = Recipes.SkillUp(entry.recipe, openKey)
         if entry.skillUp == nil then
             unknownSkillUp = true
         end
@@ -641,6 +795,7 @@ local function Refresh()
             ranked[#ranked + 1] = entry
         end
     end
+    LayOutColumns(ranked)
     for index, entry in ipairs(ranked) do
         local row = GetRow(index)
         local reason
@@ -667,10 +822,10 @@ local function Refresh()
             row.right:SetText("")
             if unpriced.output then
                 row.investment:SetText(VendorProfit.FormatMoney(entry.cost))
-                row.reason:SetWidth(MONEY_WIDTH + GAP + ROI_WIDTH)
+                row.reason:SetWidth(Columns.Span(col, "profit", "roi"))
             else
                 row.investment:SetText("")
-                row.reason:SetWidth(2 * (MONEY_WIDTH + GAP) + ROI_WIDTH)
+                row.reason:SetWidth(Columns.Span(col, "investment", "roi"))
             end
         end
         row.reason:SetText(reason and Gray(reason) or "")
@@ -710,7 +865,7 @@ local function Refresh()
     frame.list:SetHeight(math.max(#ranked, 1) * ROW_HEIGHT)
     frame.scroll:SetSize(LIST_WIDTH, listHeight)
     frame.scroll:SetShown(#ranked > 0)
-    local listKey = tostring(profession) .. "/" .. tab .. "/" .. filter
+    local listKey = table.concat(keys, ",") .. "/" .. tab .. "/" .. filter
     if listKey ~= shownList then
         shownList = listKey
         frame.scroll:SetVerticalScroll(0)
@@ -719,8 +874,10 @@ local function Refresh()
 
     -- Status: why the list is empty, where prices are from, and messages.
     local lines = {}
-    if profession == nil then
+    if #saved == 0 then
         lines[#lines + 1] = L.BEST_OPEN_PROFESSION
+    elseif #keys == 0 then
+        lines[#lines + 1] = L.BEST_NO_MATCH_FILTERS
     elseif #all == 0 then
         lines[#lines + 1] = L.BEST_NONE
     elseif #ranked == 0 and filter ~= "" then
@@ -731,10 +888,10 @@ local function Refresh()
     if SkillFilterActive() and unknownSkillUp then
         lines[#lines + 1] = L.BEST_SKILL_UNKNOWN
     end
-    local liveTime = profession and BestCrafts.LiveTime(profession)
+    local liveTime = #keys > 0 and BestCrafts.LiveTime(keys)
     if liveTime then
         lines[#lines + 1] = string.format(L.BEST_LIVE_PRICES, date("%H:%M", liveTime))
-    elseif profession then
+    elseif #keys > 0 then
         lines[#lines + 1] = L.BEST_AUCTIONATOR_PRICES
     end
     local text, isError = BestCrafts.Message()
@@ -755,14 +912,15 @@ end
 
 Auctions.OnChange(BestPanel.Refresh)
 
-Panel.AddPage({
+pageDef = {
     name = "best",
     icon = "Interface\\Icons\\INV_Misc_Coin_02",
     label = L.TAB_BEST,
     create = Create,
     width = WIDTH,
     refresh = function() return Refresh() end,
-})
+}
+Panel.AddPage(pageDef)
 
 -- The rows shown, as "left | right" text (for tests and debugging), and the
 -- tab and Scan buttons.

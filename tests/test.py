@@ -34,6 +34,34 @@ def tooltip_at(owner, region):
             and point[1] == "BOTTOMLEFT" and ev("GameTooltip.point[2] == %s" % owner) and point[3] == "TOPLEFT"
             and point[4] == ev("%s:GetRight() - %s:GetLeft()" % (region, owner)) and point[5] == 0)
 
+# Where a column's text or heading sits across the list, from its anchor:
+# left and right edges, from the list's left edge.
+SPAN = """function __Span(region, page)
+    local p, w = region.__point, region:GetWidth()
+    local left
+    if p[2] == page.list then
+        left = p[1] == "TOPLEFT" and p[4] or page.list:GetWidth() + p[4] - w
+    else
+        left = p[4] - 16 - (p[1] == "TOPRIGHT" and w or 0)
+    end
+    return left, left + w
+end"""
+
+def columns_apart(page, regions):
+    """The regions (left to right) sit inside the list, at least the column
+    gap apart, and their text fits without being cut short."""
+    ev("(function() %s end)()" % SPAN.replace("function __Span", "__Span = function"))
+    spans = [ev("__Span(%s, %s)" % (r, page)) for r in regions]
+    gap = ev("VendorProfit.Columns.GAP")
+    fits = all(ev("__stub.TextWidth(%s:GetText()) <= %s:GetWidth()" % (r, r)) for r in regions)
+    return (gap >= 10 and spans[0][0] >= 0 and spans[-1][1] <= ev(page + ".list:GetWidth()") and fits
+            and all(b[0] - a[1] >= gap for a, b in zip(spans, spans[1:])))
+
+def sorted_headings_fit(headings):
+    """Each heading still fits its column with the sort arrow added."""
+    return all(ev("__stub.TextWidth(VendorProfit.Columns.SortedText(%s.label, %s)) <= %s:GetWidth()" % (h, up, h))
+               for h in headings for up in ("true", "false"))
+
 
 
 
@@ -65,7 +93,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "Auctions.lua", "History.lua", "Gold.lua", "Panel.lua", "BestCrafts.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua", "GoldPanel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "Auctions.lua", "History.lua", "Gold.lua", "Panel.lua", "MinimapButton.lua", "Columns.lua", "BestCrafts.lua", "ProfessionCycle.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua", "GoldPanel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("the .toc keeps the placeholder; releases and deploys stamp the real version", TOC_VERSION == "@project-version@")
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
@@ -215,8 +243,10 @@ run, ev = route_client()
 # --- Before Mining has been opened ------------------------------------------
 run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
 run('__stub.SetRecipe(%s)' % CUIRASS)
-check("route line shown under the vendor line",
-      ev(ROUTE + ":IsShown()") and ev(SECTION + ".separator.__point[2] == AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"))
+EXACT = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitExactQueueButton"
+check("route line shown under the vendor line (and its Queue button)",
+      ev(ROUTE + ":IsShown()") and ev(SECTION + ".separator.__point[2] == " + EXACT)
+      and ev(EXACT + ".__point[2] == AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"))
 check("separator titled Cheapest Route, with a gap above",
       ev(SECTION + ".separator.Label:GetText()") == "Cheapest Route" and ev(SECTION + ".separator.__point[5]") < -2
       and ev(SECTION + ".separator:IsShown()"))
@@ -599,6 +629,10 @@ check("panel can be dragged", ev("VendorProfitPanel.__movable") and ev("VendorPr
 run('__stub.Drag(VendorProfitPanel, 300, 700)')
 check("moved position saved", ev("VendorProfitCharDB.panel.left") == 300 and ev("VendorProfitCharDB.panel.top") == 700)
 check("not left in the game's layout cache", ev("VendorProfitPanel.__userPlaced") is False)
+check("held by its top left corner right after the drag, so pages change height downward",
+      ev("VendorProfitPanel.__point[1]") == "TOPLEFT" and ev("VendorProfitPanel.__point[2] == UIParent")
+      and ev("VendorProfitPanel.__point[3]") == "BOTTOMLEFT" and ev("VendorProfitPanel.__point[4]") == 300
+      and ev("VendorProfitPanel.__point[5]") == 700)
 run('VendorProfit.Panel.Hide(); VendorProfit.Panel.Show()')
 check("reopens where it was moved",
       ev("VendorProfitPanel.__point[1]") == "TOPLEFT" and ev("VendorProfitPanel.__point[2] == UIParent")
@@ -871,6 +905,42 @@ run('__stub.Fire("UI_ERROR_MESSAGE", 0, ERR_ITEM_NOT_FOUND)')
 check("an error while not buying is left alone", ev("VendorProfit.Shopper.Status()") == "ready")
 check("no errors buying single auctions", ev("#__stub.errors") == 0)
 
+# --- Queue the exact recipe (under Auctionator's Vendor Profit line) ---------------
+run, ev = shop_client()
+check("exact Queue under the Vendor Profit line, a small gap below it", ev(EXACT + ":IsShown()")
+      and ev(EXACT + ".__point[2] == AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine")
+      and ev(EXACT + ".__point[5]") == -6 and ev(EXACT + ":GetHeight()") == 20 and ev(EXACT + ".__text") == "Queue")
+run(EXACT + ':GetScript("OnEnter")(' + EXACT + ')')
+check("its tooltip says it's the recipe as it is", "as it is" in ev("GameTooltip.lines[2].left")
+      and "never crafted" in ev("GameTooltip.lines[2].left"))
+run(QUEUE + ':GetScript("OnEnter")(' + QUEUE + ')')
+check("...and the Cheapest Route one says it crafts where cheaper", "Cheapest Route" in ev("GameTooltip.lines[2].left"))
+run("GameTooltip:Hide()")
+run('__stub.createCount = 4; __stub.bags[2841] = 0'); run(EXACT + ':Click()')
+entry = ev("VendorProfit.Order.Entries()[1]")
+check("queues the exact recipe", entry.exact == True and entry.crafts == 4 and entry.recipeID == 2670)
+plan = ev("VendorProfit.Order.Plan()")
+check("...buying its reagents as they are: Bronze Bars, not smelted", plan.buy[2841] is not None
+      and plan.buy[2841].quantity == 28 and plan.buy[2841].source == "auction"
+      and [s.itemID for s in plan.crafts.values()] == [2866])
+run(QUEUE + ':Click()')
+check("the cheapest-route Queue adds its own entry", ev("#VendorProfit.Order.Entries()") == 2
+      and ev("VendorProfit.Order.Entries()[2].exact") is None)
+run(EXACT + ':Click()')
+check("queuing the exact recipe again adds to its own entry", ev("#VendorProfit.Order.Entries()") == 2
+      and ev("VendorProfit.Order.Entries()[1].crafts") == 8)
+check("the exact one is marked in the Queued list", has_line(ev, "Rough Bronze Cuirass x8", "(exact)")
+      and has_line(ev, "Rough Bronze Cuirass x4") and not has_line(ev, "Rough Bronze Cuirass x4", "(exact)"))
+run('VendorProfit.Panel.FindRow("Rough Bronze Cuirass x8").hit:GetScript("OnEnter")(VendorProfit.Panel.FindRow("Rough Bronze Cuirass x8").hit)')
+check("...its tooltip prices the exact recipe", any(l.left == "Cost (exact recipe)" for l in ev("GameTooltip.lines").values()))
+run("GameTooltip:Hide(); VendorProfit.Order.Clear()")
+run('__stub.items["item:2866"].sellPrice = 0; AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
+check("nothing a vendor buys: hidden, folded so no gap is left", not ev(EXACT + ":IsShown()")
+      and ev(EXACT + ":GetHeight()") < 0.01 and ev(EXACT + ".__point[5]") == 0)
+run('__stub.items["item:2866"].sellPrice = 600; AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
+check("...and back", ev(EXACT + ":IsShown()") and ev(EXACT + ":GetHeight()") == 20)
+check("no errors queuing exact recipes", ev("#__stub.errors") == 0)
+
 # --- Queue rules and saving -------------------------------------------------------
 run, ev = shop_client()
 run('__stub.items["item:2866"].sellPrice = 0; AuctionatorCraftingInfoProfessionsFrame:UpdateTotal()')
@@ -969,24 +1039,32 @@ run, ev = shop_client()
 run('__stub.bags[2841] = 0; __stub.bags[2840] = 0; __stub.bank[2840] = 0')
 run('__stub.createCount = 2'); run(QUEUE + ':Click()')
 OPEN = "VendorProfitOpenProfessionButton"
-check("before: Open Mining, covered", ev(CRAFT + ".__text") == "Open Mining" and ev(OPEN + ":IsShown()"))
+COVERED = OPEN + " ~= nil and " + OPEN + ":IsShown()"
+# The mouse onto the Craft button.
+HOVER = '__stub.mouseFocus = %s; __stub.mouseFocus.__scripts.OnEnter(__stub.mouseFocus)' % CRAFT
+check("before: Open Mining, not covered until the mouse is on it",
+      ev(CRAFT + ".__text") == "Open Mining" and ev(CRAFT + ":IsEnabled()") and not ev(COVERED))
+run(HOVER)
+check("mouse on it: covered", ev(COVERED))
 run(OPEN + ':Click()')
 check("clicked: the cover goes, so a second click can't close the window it's opening",
-      not ev(OPEN + ":IsShown()") and ev(CRAFT + ".__text") == "Opening..." and not ev(CRAFT + ":IsEnabled()")
+      not ev(COVERED) and ev(CRAFT + ".__text") == "Opening..." and not ev(CRAFT + ":IsEnabled()")
       and ev(CRAFT + ".tooltip") == "Waiting for Mining to open.")
+run(HOVER)
+check("...and the mouse back on the plain button doesn't bring it back while it opens", not ev(COVERED))
 # The window shows Mining but its data is still loading.
 run('__stub.tradeSkill.ready = false; __stub.OpenProfession(186, "Mining", %s)' % MINING)
 run('__stub.Advance(4)')
-check("window showing Mining but still loading: still waiting, no cover", ev(CRAFT + ".__text") == "Opening..." and not ev(OPEN + ":IsShown()"))
+check("window showing Mining but still loading: still waiting, no cover", ev(CRAFT + ".__text") == "Opening..." and not ev(COVERED))
 run('__stub.tradeSkill.ready = true; __stub.Fire("TRADE_SKILL_DATA_SOURCE_CHANGED")')
-check("loaded (data source changed): ready to craft", ev(CRAFT + ".__text") == "Craft" and not ev(OPEN + ":IsShown()"))
+check("loaded (data source changed): ready to craft", ev(CRAFT + ".__text") == "Craft" and not ev(COVERED))
 # A click that never opens anything: the cover comes back after a few seconds.
 run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
 run('__stub.Advance(1)')
-check("back on another profession: Open Mining again", ev(CRAFT + ".__text") == "Open Mining" and ev(OPEN + ":IsShown()"))
+check("back on another profession: Open Mining again", ev(CRAFT + ".__text") == "Open Mining" and ev(COVERED))
 run(OPEN + ':Click()')
 run('__stub.Advance(4)')
-check("nothing opened after a few seconds: the cover is back", ev(CRAFT + ".__text") == "Open Mining" and ev(OPEN + ":IsShown()"))
+check("nothing opened after a few seconds: the cover is back", ev(CRAFT + ".__text") == "Open Mining" and ev(COVERED))
 check("no errors", ev("#__stub.errors") == 0)
 
 
@@ -995,30 +1073,41 @@ run, ev = shop_client()
 run('__stub.bags[2841] = 0; __stub.bags[2840] = 0; __stub.bank[2840] = 0')
 run('__stub.createCount = 2'); run(QUEUE + ':Click()')
 OPEN = "VendorProfitOpenProfessionButton"
+COVERED = OPEN + " ~= nil and " + OPEN + ":IsShown()"
 check("blacksmithing open, first step is mining: offers to open it",
       ev(CRAFT + ".__text") == "Open Mining" and ev(CRAFT + ".tooltip") == "Open Mining to craft Copper Bar" and ev(CRAFT + ":IsEnabled()"))
 check("next step marked on the left", any(l.startswith("|cffffd100\u00bb|r ") and "Copper Bar x7" in l for l in lines(ev)))
+check("not covered while the mouse is elsewhere", not ev(COVERED) and ev(CRAFT + ":IsEnabled()"))
+run(HOVER)
 check("a secure button covers the craft button and casts Smelting (how Mining opens)",
-      ev(OPEN + ":IsShown()") and ev(OPEN + ':GetAttribute("type")') == "spell" and ev(OPEN + ':GetAttribute("spell")') == "Smelting")
+      ev(COVERED) and ev(OPEN + ':GetAttribute("type")') == "spell" and ev(OPEN + ':GetAttribute("spell")') == "Smelting")
 check("cover placed on the screen, not anchored to the panel",
       ev(OPEN + ".__point[2] == UIParent") and ev(OPEN + ".__point[4]") == ev(CRAFT + ":GetLeft()"))
-check("cover is on top", ev(OPEN + ".__strata") == "DIALOG")
+check("cover above every window, so it's on top however the panel was raised", ev(OPEN + ".__strata") == "DIALOG")
+run('__stub.mouseFocus = nil; ' + OPEN + '.__scripts.OnLeave(' + OPEN + ')')
+check("mouse off it: the cover goes, so it can't sit over a window in front of the panel", not ev(COVERED))
+run('VendorProfit.Panel.Refresh()')
+check("...and a redraw doesn't bring it back", not ev(COVERED) and ev(CRAFT + ":IsEnabled()"))
+run(HOVER)
+run('__stub.mouseFocus = ' + OPEN + '; VendorProfit.Panel.Refresh()')
+check("a redraw with the mouse on the cover keeps it", ev(COVERED))
+run(HOVER)
 run('__stub.inCombat = true; __stub.Fire("PLAYER_REGEN_DISABLED")')
-check("combat starting hides the cover", not ev(OPEN + ":IsShown()"))
+check("combat starting hides the cover", not ev(COVERED))
 run('VendorProfit.Panel.Refresh()')
 check("in combat: says to open it after combat, not clickable",
-      ev(CRAFT + ".tooltip") == "Open Mining after combat to craft Copper Bar" and not ev(CRAFT + ":IsEnabled()") and not ev(OPEN + ":IsShown()"))
+      ev(CRAFT + ".tooltip") == "Open Mining after combat to craft Copper Bar" and not ev(CRAFT + ":IsEnabled()") and not ev(COVERED))
 run('__stub.inCombat = false; __stub.Fire("PLAYER_REGEN_ENABLED")')
-check("after combat the cover is back", ev(OPEN + ":IsShown()") and ev(CRAFT + ":IsEnabled()"))
+check("after combat the cover is back", ev(COVERED) and ev(CRAFT + ":IsEnabled()"))
 run('VendorProfit.Panel.Hide()')
-check("hiding the panel hides the cover", not ev(OPEN + ":IsShown()"))
+check("hiding the panel hides the cover", not ev(COVERED))
 run('VendorProfit.Panel.Show()')
 run('VendorProfitPanel.__scripts.OnDragStart(VendorProfitPanel)')
-check("dragging the panel hides the cover", not ev(OPEN + ":IsShown()"))
+check("dragging the panel hides the cover", not ev(COVERED))
 run('VendorProfitPanel.__scripts.OnDragStop(VendorProfitPanel)')
-check("...and it's back after the drag", ev(OPEN + ":IsShown()"))
+check("...and it's back after the drag", ev(COVERED))
 run('__stub.OpenProfession(186, "Mining", %s)' % MINING)
-check("mining open: no cover", not ev(OPEN + ":IsShown()"))
+check("mining open: no cover", not ev(COVERED))
 check("mining open but no ore: missing materials",
       ev(CRAFT + ".__text") == "Craft" and ev(CRAFT + ".tooltip") == "Missing materials for Copper Bar" and not ev(CRAFT + ":IsEnabled()"))
 run('__stub.bank[2770] = 7; __stub.Fire("BAG_UPDATE_DELAYED")')
@@ -1039,16 +1128,17 @@ check("copper bars made: next is bronze bars", ev(CRAFT + ".tooltip") == "Craft 
 run('__stub.bags[2840] = 0; __stub.bags[3576] = 0; __stub.bags[2841] = 14; __stub.Fire("BAG_UPDATE_DELAYED")')
 check("bronze made: the cuirass is in blacksmithing", ev(CRAFT + ".__text") == "Open Blacksmithing"
       and ev(CRAFT + ".tooltip") == "Open Blacksmithing to craft Rough Bronze Cuirass")
-check("cover casts Blacksmithing", ev(OPEN + ':GetAttribute("spell")') == "Blacksmithing" and ev(OPEN + ":IsShown()"))
+run(HOVER)
+check("cover casts Blacksmithing", ev(OPEN + ':GetAttribute("spell")') == "Blacksmithing" and ev(COVERED))
 # The window moves under the cover without a redraw: the mouse reaches the
 # real button, which puts the cover back under it.
 run(CRAFT + '.__left = 400')
-run(CRAFT + '.__scripts.OnEnter(' + CRAFT + ')')
-check("cover left behind: hovering the button puts it back over it", ev(OPEN + ":IsShown()")
+run(HOVER)
+check("cover left behind: hovering the button puts it back over it", ev(COVERED)
       and ev(OPEN + ".__point[4]") == 400 and ev(CRAFT + ":IsEnabled()"))
 run(OPEN + ':Hide()')
-run(CRAFT + '.__scripts.OnEnter(' + CRAFT + ')')
-check("...and when it was hidden without a redraw", ev(OPEN + ":IsShown()"))
+run(HOVER)
+check("...and when it was hidden without a redraw", ev(COVERED))
 run(CRAFT + '.__left = 500')
 run('__stub.Fire("DISPLAY_SIZE_CHANGED")')
 check("the display changing (alt-tab) places it again", ev(OPEN + ".__point[4]") == 500)
@@ -1059,9 +1149,9 @@ check("the button moves: the cover follows it", ev(OPEN + ".__point[4]") == 300 
 run(CRAFT + '.__left = nil; ' + CRAFT + '.__bottom = nil; VendorProfit.OpenButton.Follow()')
 check("...back again", ev(OPEN + ".__point[4]") == ev(CRAFT + ":GetLeft()"))
 run('__craft = ' + CRAFT + '; __craft:Hide(); VendorProfit.OpenButton.Follow()')
-check("the button gone from view: the cover goes too", not ev(OPEN + ":IsShown()"))
+check("the button gone from view: the cover goes too", not ev(COVERED))
 run('__craft:Show(); VendorProfit.Panel.Refresh()')
-check("...and comes back with it", ev(OPEN + ":IsShown()"))
+check("...and comes back with it", ev(COVERED))
 run('__stub.requirements[2670] = { { name = "Anvil", met = false } }')
 run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
 check("blacksmithing open away from an anvil: says so, not clickable", ev(CRAFT + ".__text") == "Craft"
@@ -1448,6 +1538,32 @@ run('local r = VendorProfit.HistoryPanel.Row(1); r.hit.__left = 10; r.date.__lef
 check("...moving along as the cursor crosses into another column", tooltip_at("VendorProfit.HistoryPanel.Row(1).hit", "VendorProfit.HistoryPanel.Row(1).item"))
 run('GameTooltip:Hide(); VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnUpdate")(VendorProfit.HistoryPanel.Row(1).hit)')
 check("...and stops following once the tooltip's gone", ev('VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnUpdate")') is None)
+check("Sales columns never touch: values and headings a gap apart, inside the list",
+      columns_apart("VendorProfit.HistoryPanel.Frame()", ["VendorProfit.HistoryPanel.Row(1)." + k for k in ["date", "item", "cost", "sold", "profit"]])
+      and columns_apart("VendorProfit.HistoryPanel.Frame()", ["VendorProfit.HistoryPanel.Frame().headings[%d]" % i for i in range(1, 6)]))
+# Columns fit what's listed: a big sale widens them, and they narrow again
+# when it's gone.
+R1 = "VendorProfit.HistoryPanel.Row(1)"
+narrow = ev(R1 + ".profit:GetWidth()"), ev("VendorProfitPanel:GetWidth()")
+run('table.insert(VendorProfitCharDB.history.sales, { item = 2903, n = 1, cost = 100, sold = 123456789, time = time(), how = "auction" }); '
+    'VendorProfit.Panel.Refresh()')
+check("a big sale widens its columns to fit, taking room from the item names",
+      ev(R1 + ".profit:GetWidth()") > narrow[0] and ev("VendorProfitPanel:GetWidth()") == narrow[1]
+      and "12345g" in ev(R1 + ".profit:GetText()")
+      and columns_apart("VendorProfit.HistoryPanel.Frame()", [R1 + "." + k for k in ["date", "item", "cost", "sold", "profit"]])
+      and columns_apart("VendorProfit.HistoryPanel.Frame()", ["VendorProfit.HistoryPanel.Frame().headings[%d]" % i for i in range(1, 6)]))
+check("...sized as the same coins and digits, all nines, so it doesn't change at every new number",
+      ev(R1 + ".profit:GetWidth()") == ev("__stub.TextWidth(VendorProfit.FormatMoney(999999999))"))
+run('table.remove(VendorProfitCharDB.history.sales); VendorProfit.Panel.Refresh()')
+check("...and narrow again once it's gone", (ev(R1 + ".profit:GetWidth()"), ev("VendorProfitPanel:GetWidth()")) == narrow)
+run('table.insert(VendorProfitCharDB.history.sales, { item = 2903, n = 1, cost = 10000000000000, sold = 5000000000000, time = time(), how = "auction" }); '
+    'VendorProfit.Panel.Refresh()')
+check("no room left for the item names' minimum: the window widens instead",
+      ev("VendorProfitPanel:GetWidth()") > narrow[1] and ev(R1 + ".item:GetWidth()") == ev("VendorProfit.Columns.FILL_MIN")
+      and ev("VendorProfitPanel:GetWidth()") == ev("VendorProfit.HistoryPanel.Frame().list:GetWidth()") + 2 * 16 + 24
+      and columns_apart("VendorProfit.HistoryPanel.Frame()", [R1 + "." + k for k in ["date", "item", "cost", "sold", "profit"]]))
+run('table.remove(VendorProfitCharDB.history.sales); VendorProfit.Panel.Refresh()')
+check("...and back once it's gone", ev("VendorProfitPanel:GetWidth()") == narrow[1])
 
 # Best Sellers: the three ring sales in one row.
 HF = "VendorProfit.HistoryPanel.Frame()"
@@ -1468,6 +1584,13 @@ check("Best Sellers: one row per item: units sold, average profit each, total, a
       and ev(HF + ".views.items.__lit") and not ev(HF + ".views.sales.__lit"))
 check("...sorted by total profit by default, its heading marked", ev("VendorProfit.HistoryPanel.Sort().key") == "profit"
       and "Arrow-Down" in ev(HF + ".sellerHeadings.profit.text:GetText()") and not ev(HF + ".headings[1]:IsShown()"))
+seller_keys = ["name", "n", "average", "profit", "averageRoi", "roi"]
+check("Best Sellers columns never touch: values and headings a gap apart, inside the list",
+      columns_apart(HF, ["VendorProfit.HistoryPanel.SellerRow(1)." + k for k in ["item"] + seller_keys[1:]])
+      and columns_apart(HF, [HF + ".sellerHeadings." + k for k in seller_keys]))
+check("...headings fit with their sort arrows", sorted_headings_fit([HF + ".sellerHeadings." + k for k in seller_keys]))
+check("...the window fits the view's columns",
+      ev(HF + ".list:GetWidth()") + 2 * 16 + 24 == ev("VendorProfitPanel:GetWidth()"))
 run('VendorProfit.HistoryPanel.SellerRow(1).hit:GetScript("OnEnter")()')
 tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
 check("hover: how many in how many sales, the averages, vendor and auction counts, when it last sold",
@@ -1619,7 +1742,11 @@ check("purchases listed newest first: date, item, from, each, total, now", len(b
       and "|t Copper Bar | Vendor | |cffffffff1s 50c|r | |cffffffff1s 50c|r | " in bought[1]
       and "|t Copper Bar | Auction | |cffffffff1s|r | |cffffffff1s|r | " in bought[2])
 check("...with today's cheapest price to compare", bought[2].endswith(ev('VendorProfit.FormatMoney(math.min(150, %d))' % 120)))
-check("window as wide as the history", ev("VendorProfitPanel:GetWidth()") == 540 and ev("VendorProfitPanel.tabs.purchases.label") == "Purchase History")
+check("window as wide as the columns need", ev("VendorProfitPanel:GetWidth()") >= 540 and ev("VendorProfitPanel.tabs.purchases.label") == "Purchase History")
+PF = "VendorProfit.PurchasePanel.Frame()"
+check("Purchase columns never touch: values and headings a gap apart, inside the list",
+      columns_apart(PF, ["VendorProfit.PurchasePanel.Row(1)." + k for k in ["date", "item", "from", "each", "total", "market"]])
+      and columns_apart(PF, [PF + ".headings[%d]" % i for i in range(1, 7)]))
 run('local r = VendorProfit.PurchasePanel.Row(1); r.hit.__left = 10; r.date.__left = 10; r.item.__left = 80; r.from.__left = 300; '
     'r.each.__left = 340; r.total.__left = 400; r.market.__left = 460; __stub.cursorX = 120')
 run('VendorProfit.PurchasePanel.Row(1).hit:GetScript("OnEnter")()')
@@ -1867,10 +1994,11 @@ check("no Clear button on Queued", ev('VendorProfit.Panel.RowButton("Queued")') 
 check("no buttons left at the bottom", ev('VendorProfit.Panel.FindButton("Scan again")') is None)
 
 
-# --- Money: two-digit silver and copper after a larger coin --------------------------
+# --- Money: two-digit silver and copper after a larger coin; silver kept between gold and copper
 run, ev = client()
 for copper, text in [(507, "5s 07c"), (570, "5s 70c"), (7, "7c"), (500, "5s"), (10507, "1g 05s 07c"),
-                     (10007, "1g 07c"), (10000, "1g"), (0, "0c"), (-507, "5s 07c")]:
+                     (10007, "1g 00s 07c"), (10038, "1g 00s 38c"), (10000, "1g"), (10500, "1g 05s"),
+                     (0, "0c"), (-507, "5s 07c")]:
     check("coins: %d -> %s" % (copper, text), ev("VendorProfit.FormatCoins(%d)" % copper) == text)
 check("loss in red with a minus", ev("VendorProfit.FormatMoney(-507)") == "|cffff2020-5s 07c|r")
 
@@ -1894,6 +2022,9 @@ check("Vendor Profit button in the professions title bar, left of the close butt
       ev(TITLEBTN + ".__text") == "Vendor Profit" and ev(TITLEBTN + ".__point[2] == ProfessionsFrame")
       and ev(TITLEBTN + ".__point[1]") == "TOPRIGHT" and ev(TITLEBTN + ".__point[4]") == -111)
 check("...above the window's border art", ev(TITLEBTN + ":GetFrameLevel()") >= 502)
+# Mining is saved too (routes smelt bars with it), so every profession shows
+# at first; Blacksmithing alone, from here, is Mining unticked in Filter.
+run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
 run(TITLEBTN + ":Click()")
 check("opens the Vendor Profit window on its Best Crafts tab",
       ev("VendorProfit.Panel.IsShown()") and ev("VendorProfit.Panel.ActiveTab()") == "best"
@@ -1907,8 +2038,8 @@ check("side tabs on the window's right edge, Best Crafts checked",
 check("only the Best Crafts page shows", ev(B + ":IsShown()") and not ev("VendorProfitPanel.tabs ~= nil and VendorProfit.Panel.FindButton('Remove')"))
 run('VendorProfit.Order.Clear()')
 run("VendorProfitPanel.tabs.shopping:Click()")
-check("window above the professions window and the like, raised when clicked",
-      ev("VendorProfitPanel.__strata") == "HIGH" and ev("VendorProfitPanel.__toplevel"))
+check("window in the game's windows' strata, brought to the front when clicked and when opened",
+      ev("VendorProfitPanel.__strata") == "MEDIUM" and ev("VendorProfitPanel.__toplevel") and ev("VendorProfitPanel.__raised") >= 1)
 check("short page: the window is still tall enough for both side tabs",
       ev("VendorProfitPanel:GetHeight()") >= ev("VendorProfitPanel.tabs.best.__point[5] * -1") + 32)
 check("Shopping List back to its own width", ev("VendorProfitPanel:GetWidth()") == 380)
@@ -1975,7 +2106,27 @@ check("the sort is saved", ev("VendorProfitCharDB.bestSort.key") == "roi")
 run(B + ".profitHeading:Click()")
 check("no investment where a reagent has no price; shown where only the sale price is missing",
       ev("VendorProfit.BestPanel.Row(4).investment:GetText()") == "" and ev("VendorProfit.BestPanel.Row(5).investment:GetText()") != "")
-check("Best Crafts is wider than the Shopping List, for the columns", ev("VendorProfitPanel:GetWidth()") == 520)
+check("Best Crafts is wider than the Shopping List, for the columns", ev("VendorProfitPanel:GetWidth()") >= 520
+      and ev("VendorProfitPanel:GetWidth()") == ev("VendorProfit.BestPanel.Frame().list:GetWidth()") + 2 * 16 + 24)
+BF = "VendorProfit.BestPanel.Frame()"
+best_keys = ["name", "investment", "profit", "roi", "auctions", "queued"]
+check("Best Crafts columns never touch: values and headings a gap apart, inside the list",
+      columns_apart(BF, ["VendorProfit.BestPanel.Row(1)." + k for k in ["left", "investment", "right", "roi", "auctions", "queued"]])
+      and columns_apart(BF, [BF + ".%sHeading" % k for k in best_keys]))
+check("...headings fit with their sort arrows", sorted_headings_fit([BF + ".%sHeading" % k for k in best_keys]))
+check("...the widest money, ROI and counts fit their columns",
+      ev("__stub.TextWidth(VendorProfit.FormatMoney(-9999999)) <= VendorProfit.BestPanel.Row(1).investment:GetWidth()")
+      and ev("__stub.TextWidth(VendorProfit.FormatROI(99.99)) <= VendorProfit.BestPanel.Row(1).roi:GetWidth()")
+      and ev("__stub.TextWidth('999') <= VendorProfit.BestPanel.Row(1).auctions:GetWidth()"))
+run('__e = {}; for _, v in ipairs({ 120507, -507, 3 }) do VendorProfit.Columns.Track(__e, "m", v) end; '
+    'VendorProfit.Columns.Track(__e, "r", 0.37); VendorProfit.Columns.Track(__e, "n", 12); VendorProfit.Columns.Track(__e, "x", nil)')
+check("columns are sized for their widest values as nines: same coins and digits",
+      list(ev('VendorProfit.Columns.Money(__e, "m")').values()) == [ev("VendorProfit.FormatMoney(999999)"), ev("VendorProfit.FormatMoney(-999)")]
+      and list(ev('VendorProfit.Columns.Percent(__e, "r")').values()) == ["99%"]
+      and list(ev('VendorProfit.Columns.Count(__e, "n")').values()) == ["99"]
+      and len(list(ev('VendorProfit.Columns.Money(__e, "x")').values())) == 0)
+check("...the + and - buttons right of Q, a gap away",
+      ev("VendorProfit.BestPanel.Row(1).queued.__point[4]") <= -(2 * 22 + 4 + ev("VendorProfit.Columns.GAP")))
 # Search: filters by name as you type, keeping each recipe's place.
 run(B + '.search:Type("bronze")')
 check("typing filters the list at once: only names containing it", [l.split(" | ")[0] for l in best()]
@@ -1998,14 +2149,19 @@ def menu():
     items = [(i.text, i.title or False) for i in ev("__stub.Menu(nil)").values()]
     run('__stub.menu:Hide(); __stub.Advance(1)')
     return items
-check("a Filter button in the page's style (not the game's dropdown) opens the menu: profitable only, then skill-up colors",
-      ev(F + ".__text") == "Filter" and [t for t, _ in menu()] ==
-      ["Profitable only", "Skill up", "|cffff8040Guaranteed|r", "|cffffff00Likely|r", "|cff40bf40Unlikely|r"])
+check("a Filter button in the page's style (not the game's dropdown) opens the menu: profitable only, skill-up colors, professions",
+      ev(F + ".__text") == "Filter (1)" and [t for t, _ in menu()] ==
+      ["Profitable only", "Skill up", "|cffff8040Guaranteed|r", "|cffffff00Likely|r", "|cff40bf40Unlikely|r",
+       "|cff808080Closed professions:|r", "|cff808080colors as last seen.|r",
+       "Professions", "Blacksmithing", "Mining"])
+run(F + ':Click()')
+check("...the shown professions ticked: Mining was unticked", [i.checked() for i in ev("__stub.Menu(nil)").values() if i.checked][-2:] == [True, False])
+run('__stub.menu:Hide(); __stub.Advance(1)')
 check("names in their skill-up color, as the professions window shows them",
       "|cffff8040Rough Bronze Cuirass|r" in best()[0] and "|cffffff00Rough Bronze Shoulders|r" in best()[1])
 check("no skill up: left white, not gray", "|Ticon2902:0|t Plain Ring |" in best()[4])
-check("the reset X stays, grayed out, while no filter is on", ev(B + ".filterReset:IsShown()")
-      and not ev(B + ".filterReset:IsEnabled()") and ev(B + ".filterReset.icon.__desaturated"))
+check("an unticked profession counts as a filter: the reset X is on", ev(B + ".filterReset:IsShown()")
+      and ev(B + ".filterReset:IsEnabled()") and not ev(B + ".filterReset.icon.__desaturated"))
 run(F + ':Click()')
 check("the menu opens under the button, not at the mouse", ev("__stub.menu.__point[1]") == "TOPLEFT"
       and ev("__stub.menu.__point[2] == " + F) and ev("__stub.menu.__point[3]") == "BOTTOMLEFT")
@@ -2025,25 +2181,31 @@ check("profitable only: the losing vest and the unpriced ones go, places kept",
 run(F + ':Click()')
 check("the checkbox shows it's on, and it's saved", ev("__stub.Menu(nil)[1].checked()") and ev("VendorProfitCharDB.bestFilters.profitable"))
 run('__stub.menu:Hide(); __stub.Advance(1)')
-check("the button says how many are on, and the reset X is on", ev(F + ".__text") == "Filter (1)" and ev(B + ".filterReset:IsEnabled()"))
+check("the button says how many are on, and the reset X is on", ev(F + ".__text") == "Filter (2)" and ev(B + ".filterReset:IsEnabled()"))
 toggle(1)
 toggle(3)
 check("guaranteed only: just the orange recipe", len(best()) == 1 and "Rough Bronze Cuirass" in best()[0])
 toggle(5)
 check("guaranteed or unlikely: orange and green", [("Cuirass" in l, "Vest" in l) for l in best()] == [(True, False), (False, True)])
 run(B + '.filterReset:Click()')
-check("the red X resets them all, and grays out", len(best()) == 5 and ev("VendorProfitCharDB.bestFilters") is None
+check("the red X resets them all, every profession ticked again, and grays out", len(best()) == 5 + 3
+      and ev("VendorProfitCharDB.bestFilters") is None
       and not ev(B + ".filterReset:IsEnabled()") and ev(F + ".__text") == "Filter")
+check("...two professions shown: a plain title", ev(B + ".heading:GetText()") == "Best Crafts")
+def reset_filters():
+    run(B + '.filterReset:Click()')
+    run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
+run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
 toggle(1); toggle(5); run(B + '.search:Type("cuirass")')
 check("nothing passes: says so", best() == [] and 'No recipes match "cuirass".' in ev(B + ".status:GetText()"))
 run(B + '.search:Type("")')
 check("...and with no search text, that it's the filters", best() == [] and "No recipes pass the filters." in ev(B + ".status:GetText()"))
-run(B + '.filterReset:Click()')
-run('__stub.recipes[3328].difficulty = nil; VendorProfit.BestPanel.Refresh()')
+reset_filters()
+run('__stub.recipes[3328].difficulty = nil; VendorProfitCharDB.professions[164].recipes[3328].skillUp = nil; VendorProfit.BestPanel.Refresh()')
 toggle(4)
-check("a recipe whose color isn't known can't pass a skill-up filter, and it says why",
-      best() == [] and "only known for the profession whose window is open" in ev(B + ".status:GetText()"))
-run(B + '.filterReset:Click()')
+check("a recipe whose color isn't known (live or saved) can't pass a skill-up filter, and it says why",
+      best() == [] and "no skill-up color yet: open their profession once" in ev(B + ".status:GetText()"))
+reset_filters()
 run('for _, id in ipairs({ 2670, 3328, 2671, 9102 }) do if __stub.recipes[id] then __stub.recipes[id].difficulty = nil end end')
 run('if __stub.recipe then __stub.recipe.difficulty = nil end; VendorProfit.BestPanel.Refresh()')
 check("unpriced ones can still be queued and shown", ev("VendorProfit.BestPanel.Row(4).queue:IsShown()") and ev("VendorProfit.BestPanel.Row(4).hit:IsShown()"))
@@ -2201,8 +2363,7 @@ check("/vprofit best closes it", not ev("VendorProfit.Panel.IsShown()"))
 run('SlashCmdList.VENDORPROFIT("best")')
 check("...and opens it", ev("VendorProfit.BestPanel.IsShown()"))
 run('__stub.tradeSkill.linked = true; VendorProfit.BestPanel.Refresh()')
-check("no profession of yours open: says to open one", best() == []
-      and "Open one of your professions" in ev("" + B + ".status:GetText()"))
+check("someone else's profession open: still your own saved crafts", len(best()) == 3)
 run('__stub.tradeSkill.linked = false')
 # Hovering a recipe: what you've made selling its item, all time.
 run('''
@@ -2222,8 +2383,8 @@ R = best_row(2866)
 run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
 tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
 check("hovering a recipe: its sales, all time, with profit and ROIs",
-      ev("GameTooltip.shown") and "Rough Bronze Cuirass" in tip[0][0] and tip[1][0] == "Your sales, all time"
-      and tip[2][0] == "3 sold in 2 sales" and ("Avg profit", ev("VendorProfit.FormatMoney(700)")) in tip
+      ev("GameTooltip.shown") and "Rough Bronze Cuirass" in tip[0][0] and tip[1][0] == "Blacksmithing"
+      and tip[2][0] == "Your sales, all time" and tip[3][0] == "3 sold in 2 sales" and ("Avg profit", ev("VendorProfit.FormatMoney(700)")) in tip
       and ("Profit", ev("VendorProfit.FormatMoney(2100)")) in tip
       and ("Avg ROI", "150%") in tip and ("ROI", "175%") in tip  # (200% x 2 + 50%) / 3; 2100 / 1200
       and ("Sold to vendors", "1") in tip and ("Sold at auction", "2") in tip and tip[-1][0].startswith("Last sold "))
@@ -2233,9 +2394,140 @@ run(R + '.hit:GetScript("OnLeave")(' + R + '.hit)')
 check("...gone when the mouse leaves", not ev("GameTooltip.shown"))
 R = best_row(2865)
 run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
-check("a recipe whose item hasn't sold: says so", [l.left for l in ev("GameTooltip.lines").values()][1] == "No sales of it recorded yet.")
+check("a recipe whose item hasn't sold: says so", [l.left for l in ev("GameTooltip.lines").values()][2] == "No sales of it recorded yet.")
 run("GameTooltip:Hide()")
 check("no errors from Best Crafts", ev("#__stub.errors") == 0)
+
+# --- Best Crafts with the professions window closed: every saved profession ------
+DUMP_DB = '''
+    local function dump(v)
+        if type(v) == "table" then
+            local parts = {}
+            for k, x in pairs(v) do
+                local key = type(k) == "number" and ("[" .. k .. "]") or ("[" .. string.format("%q", k) .. "]")
+                parts[#parts + 1] = key .. "=" .. dump(x)
+            end
+            return "{" .. table.concat(parts, ",") .. "}"
+        elseif type(v) == "string" then
+            return string.format("%q", v)
+        end
+        return tostring(v)
+    end
+    return dump(VendorProfitCharDB)
+'''
+run, ev = route_client()
+run('__stub.OpenProfession(186, "Mining", %s)' % MINING)
+run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS.replace("quantityMin = 1,", "quantityMin = 1, difficulty = 0,"))
+check("a profession's skill-up colors are saved when its window is open",
+      ev("VendorProfitCharDB.professions[164].recipes[2670].skillUp") == "optimal")
+saved = run(DUMP_DB)
+# A new session: no professions window opened at all.
+run, ev = route_client("VendorProfitCharDB = " + saved)
+run('VendorProfit.Panel.Show("best")')
+B2 = "VendorProfit.BestPanel.Frame()"
+names = lambda: [l.split(" | ")[0].split("|t ")[-1] for l in ev("VendorProfit.BestPanel.Lines()").values()]
+check("no professions window open: every saved profession's recipes, ranked together", ev("VendorProfit.Recipes.OpenProfession()") is None
+      and "|cffff8040Rough Bronze Cuirass|r" in names() and "Copper Bar" in names() and "Bronze Bar" in names()
+      and ev(B2 + ".heading:GetText()") == "Best Crafts")
+check("...the saved skill-up color shown", "|cffff8040Rough Bronze Cuirass|r" in names())
+row = next(i for i in range(1, 10) if "Cuirass" in ev("VendorProfit.BestPanel.Row(%d).left:GetText()" % i))
+R2 = "VendorProfit.BestPanel.Row(%d)" % row
+run(R2 + '.hit:GetScript("OnEnter")(' + R2 + '.hit)')
+tip = [l.left for l in ev("GameTooltip.lines").values()]
+check("hover: its profession, and that the color is as of the last opening",
+      tip[1] == "Blacksmithing" and tip[2] == "Skill-up color as of when you last opened Blacksmithing.")
+run("GameTooltip:Hide()")
+run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
+check("Mining unticked: Blacksmithing alone, named in the title", names() == ["|cffff8040Rough Bronze Cuirass|r"]
+      and ev(B2 + ".heading:GetText()") == "Best Crafts: Blacksmithing")
+run('VendorProfit.BestPanel.Row(1).queue:Click()')
+check("+ queues it with its profession closed", ev("VendorProfit.Order.Entries()[1].recipeID") == 2670
+      and ev("VendorProfit.Order.Entries()[1].profession") == "Blacksmithing")
+run('VendorProfit.BestPanel.SetFilter("prof:164", true)')
+check("nothing ticked: says it's the filters", names() == [] and "No recipes pass the filters." in ev(B2 + ".status:GetText()")
+      and ev(B2 + ".heading:GetText()") == "Best Crafts" and not ev(B2 + ".scan:IsEnabled()"))
+check("live prices: a scan covers the professions it looked up", ev("VendorProfit.BestCrafts.LiveTime({ 164 })") is None)
+run, ev = client()
+run('VendorProfit.Panel.Show("best")')
+check("no profession opened yet: says to open each once", "Open each of your professions once"
+      in ev("VendorProfit.BestPanel.Frame().status:GetText()"))
+check("no errors listing saved professions", ev("#__stub.errors") == 0)
+
+# --- Best Crafts' Professions button: opens each profession in turn ---------------
+run, ev = route_client()
+run('__stub.playerProfessions = { { name = "Blacksmithing", skillLine = 164 }, { name = "Herbalism", skillLine = 182 }, '
+    '[5] = { name = "Cooking", skillLine = 185 } }')
+run('VendorProfit.Panel.Show("best")')
+PB = "VendorProfit.BestPanel.Frame().professions"
+OPEN = "VendorProfitOpenProfessionButton"
+COVERED = OPEN + " ~= nil and " + OPEN + ":IsShown()"
+PHOVER = '__stub.mouseFocus = %s; __stub.mouseFocus.__scripts.OnEnter(__stub.mouseFocus)' % PB
+check("your professions with a window, in the game's order: no Herbalism (or Skinning)",
+      [p.name for p in ev("VendorProfit.Recipes.PlayerProfessions()").values()] == ["Blacksmithing", "Cooking"])
+run('__stub.playerProfessions = { { name = "Blacksmithing", skillLine = 164 }, { name = "Mining", skillLine = 186 }, '
+    '[5] = { name = "Cooking", skillLine = 185 } }; VendorProfit.Panel.Refresh()')
+check("a Professions button left of Scan, in the page's style",
+      ev(PB + ".__text") == "Professions" and ev(PB + ":IsEnabled()")
+      and ev(PB + ".__point[1]") == "RIGHT" and ev(PB + ".__point[2] == VendorProfit.BestPanel.Frame().scan")
+      and ev(PB + ".__point[3]") == "LEFT" and ev(PB + ".__point[4]") == -4)
+check("...saying what it does: Blacksmithing first", "Opens Blacksmithing (1 of 3)" in ev(PB + ".tooltip") and not ev(COVERED))
+run(PHOVER)
+check("mouse on it: the secure cover over it casts Blacksmithing, with the button's tooltip",
+      ev(COVERED) and ev(OPEN + ':GetAttribute("spell")') == "Blacksmithing" and ev(OPEN + ".tooltip") == ev(PB + ".tooltip"))
+run(OPEN + ':Click()')
+check("clicked: waits for it to open, the cover gone", ev(PB + ".__text") == "Opening..." and not ev(PB + ":IsEnabled()")
+      and not ev(COVERED) and ev(PB + ".tooltip") == "Waiting for Blacksmithing to open.")
+run(PHOVER)
+run(PB + ':Click()')
+check("clicking on while it opens does nothing: nothing skipped", not ev(COVERED) and ev(PB + ".__text") == "Opening...")
+run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
+check("Blacksmithing open and saved: the next click opens Mining (with Smelting), the mouse still on it",
+      ev(PB + ".__text") == "Next 2/3" and ev(COVERED) and ev(OPEN + ':GetAttribute("spell")') == "Smelting"
+      and ev("VendorProfitCharDB.professions[164] ~= nil"))
+run(OPEN + ':Click()')
+run('__stub.OpenProfession(186, "Mining", %s)' % MINING)
+check("...then Cooking", ev(PB + ".__text") == "Next 3/3" and ev(OPEN + ':GetAttribute("spell")') == "Cooking")
+run(OPEN + ':Click()')
+run('__stub.OpenProfession(185, "Cooking", {})')
+check("all open and saved: the last click closes the window, no cover",
+      ev(PB + ".__text") == "Close" and ev(PB + ":IsEnabled()") and not ev(COVERED) and ev("ProfessionsFrame:IsShown()"))
+run(PB + ':Click()')
+check("closed, and the button rests a second, so a click too many doesn't start again",
+      not ev("ProfessionsFrame:IsShown()") and ev(PB + ".__text") == "Professions" and not ev(PB + ":IsEnabled()")
+      and ev(PB + ".tooltip") == "All saved. Ready again in a moment.")
+run(PB + ':Click()'); run(PHOVER)
+check("...clicks then do nothing", not ev("ProfessionsFrame:IsShown()") and not ev(COVERED))
+run('__stub.Advance(1.1)')
+check("...then it's ready again, from the first", ev(PB + ":IsEnabled()") and "Opens Blacksmithing (1 of 3)" in ev(PB + ".tooltip"))
+# Started with a profession already open: it's saved already, so skipped.
+run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
+check("a profession already open is skipped: casting it again would close it",
+      "Opens Mining (1 of 2)" in ev(PB + ".tooltip") and ev(OPEN + ':GetAttribute("spell")') == "Smelting")
+run(OPEN + ':Click()')
+run('__stub.Advance(3.2)')
+check("didn't open within a few seconds: the same click again", ev(PB + ".__text") == "Next 1/2" and ev(PB + ":IsEnabled()")
+      and "Opens Mining (1 of 2)" in ev(PB + ".tooltip"))
+run('__stub.CloseProfession()')
+check("the window closed by hand part way through: it starts over", ev(PB + ".__text") == "Professions"
+      and "Opens Blacksmithing (1 of 3)" in ev(PB + ".tooltip"))
+run('__stub.mouseFocus = nil; ' + OPEN + '.__scripts.OnLeave(' + OPEN + ')')
+run('__stub.inCombat = true; __stub.Fire("PLAYER_REGEN_DISABLED"); VendorProfit.Panel.Refresh()')
+run(PHOVER)
+check("in combat: off, saying so, no cover", not ev(PB + ":IsEnabled()") and ev(PB + ".tooltip") == "Open your professions after combat."
+      and not ev(COVERED))
+run('__stub.inCombat = false; __stub.Fire("PLAYER_REGEN_ENABLED")')
+check("after combat: back on, covered with the mouse on it", ev(PB + ":IsEnabled()") and ev(COVERED))
+run('VendorProfit.Panel.Show("shopping")')
+check("off Best Crafts: the cover over its button goes once out of view",
+      run('VendorProfit.OpenButton.Follow()') is None and not ev(COVERED))
+run('__stub.playerProfessions = { [4] = { name = "Fishing", skillLine = 356 } }; VendorProfit.Panel.Show("best")')
+check("Fishing has a window on Forever (Camping): opened with Bait and Tackle, not Fishing, which casts a line",
+      "Opens Fishing (1 of 1)" in ev(PB + ".tooltip") and ev('VendorProfit.OpenButton.SpellFor("Fishing")') == "Bait and Tackle")
+run('__stub.playerProfessions = { [1] = { name = "Herbalism", skillLine = 182 } }; VendorProfit.Panel.Show("best")')
+check("no profession with a window: off, saying so", not ev(PB + ":IsEnabled()")
+      and ev(PB + ".tooltip") == "None of your professions has a window to open.")
+check("no errors from the Professions button", ev("#__stub.errors") == 0)
+
 
 # --- Items the game hasn't sent yet: asked for once, redrawn once per batch ---------
 # Each arrival used to redraw Best Crafts, and each redraw asked again for every
@@ -2265,6 +2557,50 @@ run('__stub.Advance(0.3)')
 check("...but once, a moment later, with the names", ev("__ranks") == ranks + 1
       and "Thing" in ev("VendorProfit.BestPanel.Row(1).left:GetText()") and waiting() == 0)
 check("no errors loading item names", ev("#__stub.errors") == 0)
+
+# --- Minimap button ------------------------------------------------------------------
+import math
+run, ev = client()
+MB = "VendorProfitMinimapButton"
+r = 70 + 5
+check("a minimap button on the minimap's edge, lower left to start", ev(MB + ":GetParent() == Minimap")
+      and ev(MB + ".__point[1]") == "CENTER" and ev(MB + ".__point[2] == Minimap")
+      and abs(ev(MB + ".__point[4]") - r * math.cos(math.radians(225))) < 1e-6
+      and abs(ev(MB + ".__point[5]") - r * math.sin(math.radians(225))) < 1e-6 and ev(MB + ":IsShown()"))
+check("...with the addon's coin icon", ev(MB + ".icon.__texture") == "Interface\\Icons\\INV_Misc_Coin_02")
+run(MB + ':GetScript("OnEnter")(' + MB + ')')
+check("hover: what clicking and dragging do", [l.left for l in ev("GameTooltip.lines").values()] ==
+      ["Vendor Profit", "Click: open or close the window.", "Drag: move this button.", "/vprofit minimap hides it."])
+run(MB + ':GetScript("OnLeave")(' + MB + ')')
+run(MB + ':Click()')
+check("click opens the window", ev("VendorProfit.Panel.IsShown()"))
+run(MB + ':Click()')
+check("...and closes it", not ev("VendorProfit.Panel.IsShown()"))
+run('VendorProfit.Panel.Show("gold"); VendorProfit.Panel.Hide()')
+run(MB + ':Click()')
+check("...on the tab last used", ev("VendorProfit.Panel.ActiveTab()") == "gold")
+run(MB + ':Click()')
+# Dragging: the button follows the cursor around the edge.
+run('__stub.cursorX, __stub.cursorY = 1000, 900; ' + MB + ':GetScript("OnDragStart")(' + MB + ')')
+check("dragging follows the cursor while the button is held", ev(MB + ':GetScript("OnUpdate")') is not None)
+run(MB + ':GetScript("OnUpdate")(' + MB + ')')
+check("...cursor straight above the minimap: the button at the top", abs(ev(MB + ".__point[4]")) < 1e-6
+      and abs(ev(MB + ".__point[5]") - r) < 1e-6)
+run('__stub.cursorX, __stub.cursorY = 1100, 700; ' + MB + ':GetScript("OnDragStop")(' + MB + ')')
+check("dropped to the right: stays there, saved for the account", ev(MB + ':GetScript("OnUpdate")') is None
+      and abs(ev("VendorProfitDB.minimap.angle")) < 1e-6 and abs(ev(MB + ".__point[4]") - r) < 1e-6)
+run('GetMinimapShape = function() return "SQUARE" end; VendorProfitDB.minimap.angle = 45; VendorProfit.MinimapButton.Place()')
+check("a square minimap: out to its corner", abs(ev(MB + ".__point[4]") - r) < 1e-6 and abs(ev(MB + ".__point[5]") - r) < 1e-6)
+run('GetMinimapShape = nil')
+run('SlashCmdList.VENDORPROFIT("minimap")')
+check("/vprofit minimap hides it, saved, and says how to undo it", not ev(MB + ":IsShown()")
+      and ev("VendorProfitDB.minimap.hide") == True and "/vprofit minimap shows it again" in ev("__stub.printed[#__stub.printed]"))
+run('SlashCmdList.VENDORPROFIT("minimap")')
+check("...again: shown", ev(MB + ":IsShown()") and ev("VendorProfitDB.minimap.hide") is None)
+run2, ev2 = client("VendorProfitDB = { minimap = { angle = 90, hide = true } }")
+check("a new session: where it was left, hidden if it was", not ev2(MB + ":IsShown()")
+      and abs(ev2(MB + ".__point[5]") - r) < 1e-6)
+check("no errors from the minimap button", ev("#__stub.errors") == 0 and ev2("#__stub.errors") == 0)
 
 # --- Gold ------------------------------------------------------------------------------
 
@@ -2474,6 +2810,14 @@ run, ev = client(CLOCK + '__stub.money = 200000; VendorProfitDB = { gold = { ["J
 run('VendorProfit.Panel.Show("gold")')
 check("the zero line reads 0g on a gold axis", list(ev(GP + ".YLabels()").values())[0] == "0g")
 
+# Escape closes it, as the game's own windows close, in combat too.
+run('VendorProfit.Panel.Show("gold")')
+check("Escape closes the window", ev("VendorProfit.Panel.IsShown()") and run('__stub.PressEscape()') is None
+      and not ev("VendorProfit.Panel.IsShown()"))
+run('VendorProfit.Panel.Show("gold"); __stub.inCombat = true; __stub.PressEscape(); __stub.inCombat = false')
+check("...in combat too", not ev("VendorProfit.Panel.IsShown()"))
+check("...registered once, however often it opens", ev("#UISpecialFrames") == 1)
+run('VendorProfit.Panel.Show("gold")')
 # Closing the window in combat: the template's close button can't, ours can.
 run('__stub.inCombat = true; VendorProfitPanel.CloseButton:Click()')
 check("the close button closes the window in combat", not ev("VendorProfit.Panel.IsShown()"))

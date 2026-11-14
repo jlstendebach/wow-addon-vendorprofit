@@ -12,7 +12,10 @@
 --         item = outputItemID,
 --         count = minimum number made,
 --         reagents = { { items = { itemID, ... }, quantity = n }, ... },
---         stations = { "Anvil", ... } or nil: what it must be crafted at
+--         stations = { "Anvil", ... } or nil: what it must be crafted at,
+--         skillUp = "optimal", "medium", "easy" or "trivial": its skill-up
+--             color when the window was last open (the game only says for
+--             the open profession; see Recipes.SkillUp)
 --     } },
 -- }
 -- A reagent slot lists every item that can fill it.
@@ -30,6 +33,7 @@ Recipes.SCAN_DELAY = 0.5
 local db                -- VendorProfitCharDB, once loaded
 local byItem = {}       -- itemID -> { recipe, ... }: saved fields plus recipeID, profession
 local byRecipe = {}     -- recipeID -> the same entry
+local lastScan          -- { key, name, time } of the last profession saved
 local NONE = {}
 
 local function RebuildIndex()
@@ -126,6 +130,53 @@ function Recipes.ForItem(itemID)
     return byItem[itemID] or NONE
 end
 
+-- The professions saved for this character, by name: { key, name }.
+function Recipes.Professions()
+    local list = {}
+    if db then
+        for key, profession in pairs(db.professions) do
+            list[#list + 1] = { key = key, name = profession.name }
+        end
+    end
+    table.sort(list, function(a, b) return a.name < b.name end)
+    return list
+end
+
+-- A recipe's skill-up color key from its recipe info: "optimal", "medium",
+-- "easy", "trivial" (no skill up), or nil if the game doesn't say.
+function Recipes.SkillUpFromInfo(info)
+    local difficulty = info and info.relativeDifficulty
+    if difficulty == nil then
+        return nil
+    end
+    local enum = Enum.TradeskillRelativeDifficulty or {}
+    if difficulty == (enum.Optimal or 0) then
+        return "optimal"
+    elseif difficulty == (enum.Medium or 1) then
+        return "medium"
+    elseif difficulty == (enum.Easy or 2) then
+        return "easy"
+    end
+    return "trivial"
+end
+
+-- A saved recipe's skill-up color, and whether it's saved rather than live:
+-- live for the profession whose window is open, otherwise as of when its
+-- window was last open (it may have changed since, as you skilled up).
+-- openKey: Recipes.OpenProfession()'s key, when the caller has it already.
+function Recipes.SkillUp(recipe, openKey)
+    if openKey == nil then
+        openKey = Recipes.OpenProfession()
+    end
+    if openKey ~= nil and openKey == recipe.professionKey then
+        local live = Recipes.SkillUpFromInfo(C_TradeSkillUI.GetRecipeInfo(recipe.recipeID))
+        if live then
+            return live, false
+        end
+    end
+    return recipe.skillUp, recipe.skillUp ~= nil
+end
+
 -- Names of the professions saved for this character, sorted.
 function Recipes.ProfessionNames()
     local names = {}
@@ -165,7 +216,7 @@ function Recipes.OpenProfession()
 end
 
 -- The saved recipes of one profession: { recipeID, item, count, reagents,
--- profession }, sorted by recipeID.
+-- profession (its name), professionKey, skillUp }, sorted by recipeID.
 -- Showing a recipe in the professions window ----------------------------------
 
 -- Whether the professions window is open (a recipe can only be shown then).
@@ -212,6 +263,7 @@ function Recipes.ForProfession(key)
             list[#list + 1] = {
                 recipeID = recipeID, item = recipe.item, count = recipe.count,
                 reagents = recipe.reagents, profession = saved.name,
+                professionKey = key, skillUp = recipe.skillUp,
             }
         end
     end
@@ -252,6 +304,7 @@ function Recipes.Scan()
                     count = math.max(schematic.quantityMin or 1, 1),
                     reagents = Recipes.ReagentsFromSchematic(schematic),
                     stations = Recipes.StationsFromRequirements(recipeID),
+                    skillUp = Recipes.SkillUpFromInfo(recipeInfo),
                 }
             end
         end
@@ -261,6 +314,7 @@ function Recipes.Scan()
         name = info.professionName or tostring(key),
         recipes = recipes,
     }
+    lastScan = { key = key, name = db.professions[key].name, time = GetTime() }
     RebuildIndex()
     VendorProfit.Refresh()
     -- Best Crafts lists every saved recipe (BestPanel.lua loads later).
@@ -268,6 +322,37 @@ function Recipes.Scan()
         VendorProfit.BestPanel.Refresh()
     end
     return true
+end
+
+-- The last profession saved: its key, name, and when (GetTime), or nil.
+function Recipes.LastScan()
+    return lastScan
+end
+
+-- Skill lines with no profession window to open: Herbalism, Skinning,
+-- Archaeology. (Forever's Fishing has one, for Camping.)
+local NO_WINDOW = { [182] = true, [393] = true, [794] = true }
+
+-- This character's professions that open a window (so their recipes can be
+-- saved), in the game's order: the two main ones, then the secondary ones.
+-- { key (skill line, as the window reports it), name }.
+function Recipes.PlayerProfessions()
+    local list = {}
+    if GetProfessions == nil or GetProfessionInfo == nil then
+        return list
+    end
+    -- Holes for professions not learned, so not ipairs.
+    local slots = { GetProfessions() }
+    for slot = 1, 5 do
+        local index = slots[slot]
+        if index then
+            local name, _, _, _, _, _, skillLine = GetProfessionInfo(index)
+            if name and not NO_WINDOW[skillLine] then
+                list[#list + 1] = { key = skillLine or name, name = name }
+            end
+        end
+    end
+    return list
 end
 
 local scanQueued = false

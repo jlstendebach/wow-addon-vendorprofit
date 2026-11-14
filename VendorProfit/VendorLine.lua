@@ -2,6 +2,8 @@
 -- vendor, using Auctionator's To Craft cost:
 --
 --     vendor sell price x number made - cost to craft
+--
+-- Under it, a Queue button for the exact recipe (QueueButton.lua).
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -32,11 +34,13 @@ function VendorLine.Create(frame, anchor)
     line:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
     line:Hide()
     frame.VendorProfitLine = line
-    return line
+    -- The next line (the Cheapest Route) hangs under the button.
+    return VendorProfit.QueueButton.CreateExact(frame, line)
 end
 
 function VendorLine.Refresh(frame, result)
     local line = frame.VendorProfitLine
+    VendorProfit.QueueButton.RefreshExact(frame, result)
     if result == nil then
         line:Hide()
         return

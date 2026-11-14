@@ -16,11 +16,17 @@ time" route mode).
   (the game's filter dropdown, Scan off on its own) were replaced with the
   addon's own style.
 - **One window, pages as side tabs** (Shopping List, Best Crafts, Profit
-  History, Purchase History, Gold). Strata HIGH and toplevel, so it sits above
-  the professions window and auction house. A minimum height keeps every side
-  tab on the window.
+  History, Purchase History, Gold). A minimum height keeps every side tab on
+  the window.
+- **Front and back like any window**: MEDIUM strata (the game's windows' and
+  most addons') and toplevel, raised when it opens. Clicking it brings it to
+  the front; clicking another window (bags, the auction house) brings that
+  one in front of it. It used to be HIGH strata, above everything however
+  you clicked. (The secure Open button over Craft: see Crafting.)
 - **Opens and closes only when you do**: `/vprofit` (and its tab commands),
-  the title-bar button, its close button. It used to open by itself at the
+  the title-bar button, its close button, Escape (it's in UISpecialFrames,
+  so Escape closes it along with the game's other windows, as they close;
+  in combat too). It used to open by itself at the
   auction house, bank and a vendor with an order, and on Queue (switching to
   the Shopping List); now Queue just says so in chat.
 - **Closes in combat**: the window template's close button closes through
@@ -31,12 +37,40 @@ time" route mode).
   auction house, bank, vendor or professions window). It opens centered
   near the top of the screen until you move it, then where you left it,
   held by its top left corner either way (by its center, its edges jumped
-  as tabs of different sizes switched). It's only ever anchored to
+  as tabs of different sizes switched), including right after a drag (the
+  game leaves a moved window anchored by its center until it's re-anchored,
+  so pages changing height grew it at both edges). It's only ever anchored to
   UIParent: anchored to a protected window it would be protected too, and
   hiding it in combat would be blocked.
+- **Minimap button**: our own small button (the usual round look, from the
+  game's own textures, with the addon's coin icon), not LibDBIcon or another
+  library: the addon needs nothing but Auctionator. Click opens or closes the
+  window on the last tab; drag moves it around the edge (square minimaps
+  too); saved for the account; `/vprofit minimap` hides or shows it.
 - **Spacing**: the gap between a page's title, its totals line and its table
   is the same everywhere (about 6px between text lines).
+- **Table columns** (Columns.lua) never touch, values or headings. Hand-set
+  widths kept failing: money columns sized before coin icons and "00s" were
+  counted cut "11g 48s 95c" short, and headings got a sort arrow that ran
+  into the next one (patched with wider gaps per column). Now one rule:
+  a column is as wide as its heading with a sort arrow (whether or not it's
+  sorted) and the widest value in the whole list, measured in the game's
+  own fonts; 12px between columns; the name takes the rest, at least 160,
+  the window widening if needed. Sized first for fixed worst cases (money
+  to -999g 99s 99c, totals to -9,999g): never touched, but left wide empty
+  columns for everyday values, so now it's laid out again on each refresh
+  for what's listed. Not from the rows on screen (the history lists only
+  build those, so columns would jump as you scroll, and measuring 10,000
+  sales each refresh is slow): each column's lowest and highest numbers
+  are found with arithmetic, and one sample per end is measured, with the
+  same coins and digits but all nines (12g 05s 07c sizes as 99g 99s 99c),
+  so widths change only when a value gains a digit or a coin. The window's
+  right edge can move as the list changes (it's held by its top left); if
+  that grates, the fix is growing only until the window closes.
 - **Dates** are mm/dd, to save space.
+- **Money**: two-digit silver and copper after a larger coin (5s 07c), and
+  a zero silver kept between gold and copper (1g 00s 38c): "1g 38c" was
+  read as 1g 38s, making a correct 57% ROI look wrong.
 - **Row tooltips** (tried at the cursor, at the column's left, at the
   row's end): Shopping List rows put the tooltip above the row at the end of
   the item's name, like a Classic item. History rows put it above the row at
@@ -44,6 +78,42 @@ time" route mode).
   columns. Buttons keep the usual ANCHOR_RIGHT.
 
 ## Best Crafts
+
+- **Professions button** (left of Scan): made to be clicked again and
+  again, opening each of your professions in turn and closing the window
+  with the last click, so every profession's recipes and skill-up colors
+  are saved. Opening goes through the same secure cover as the Shopping
+  List's Open button (an addon can only open a profession by casting its
+  spell from a secure button); closing is C_TradeSkillUI.CloseTradeSkill,
+  which needs no secure button (TradeSkillMaster closes it the same way on
+  Forever). After each click it waits until that profession is open *and
+  saved* before the next click counts, so fast clicking can't skip one
+  (3s, then the same one can be tried again). The open profession is
+  skipped (its spell would close it). Professions come from GetProfessions,
+  without the skill lines that have no window (Herbalism, Skinning,
+  Archaeology). Fishing is included: Forever gives it a crafting window
+  (Camping), opened by casting Bait and Tackle (1278067), its first
+  spellbook entry; "Fishing" (7731) casts a line. Seen in game with a /run
+  of Fishing's spellbook entries. A 1s rest after closing, so the click after Close
+  doesn't open the first profession again.
+- **Every profession, window closed**: Best Crafts lists the saved recipes of
+  every profession you've opened (each is saved when its window opens), ranked
+  together: gold is gold whichever profession made it, and the cross-profession
+  view is the useful one. A one-profession picker was considered and dropped
+  for that. The Filter menu has a Professions section (all ticked at first,
+  unticked ones count as filters, the red X ticks them all again); the title
+  names the profession when only one is shown. Opening it from a profession's
+  title-bar button leaves the ticks alone: the window doesn't change things by
+  itself. Live prices are per item; a scan "covers" the professions it looked
+  up, for the "Live prices from" line. Ranking 450 recipes takes about 11 ms
+  in the test harness, so the ranking isn't cached.
+- **Skill-up colors** are only reported for the open profession, so each
+  recipe's color is saved when its window is open, and shown for the others
+  as of their last opening (possibly out of date). Josh wanted that said: a
+  note in the Filter menu under the colors, and a line in a recipe's tooltip
+  when its color is a saved one. The menu note is two short lines ("Closed
+  professions: / colors as last seen."): the game's menu doesn't wrap and is
+  as wide as its widest line, and a one-line note made it far too wide.
 
 - **Columns**: Recipe, Investment, Profit, ROI, AH, Q, then **-** and **+**.
   No rank numbers (they took space and meant little once you sort and
@@ -58,8 +128,7 @@ time" route mode).
   column (looked offset). Final: a narrow right-aligned "Q" column at the row's
   end, a gray dash for none, sortable. **AH** (your auctions of the item)
   works the same way. Both sort every recipe, priced or not, ties keeping the
-  profit order. The count columns get a 12px gap so a sort arrow doesn't touch
-  the next column.
+  profit order.
 - **Item info not loaded yet** (the first time a profession's list shows):
   each item is asked for once, and the list redraws once per batch, 0.2s
   after items start arriving (`VendorProfit.RedrawWhenLoaded`, used by every
@@ -83,6 +152,12 @@ time" route mode).
 
 ## Shopping List
 
+- **Two Queue buttons**: under the Cheapest Route (along that route), and
+  under Auctionator's Vendor Profit line for the exact recipe: its reagents
+  only bought (or taken from what you have), never crafted, as Auctionator
+  prices it. An exact entry is its own entry (marked "(exact)"), so the same
+  recipe can be queued both ways. The exact button folds to nothing when
+  hidden (nothing a vendor buys), so the Cheapest Route doesn't move down.
 - **Queued rows**: - + and a red X; clicking the name shows the recipe; the
   name is red when neither vendor nor auction makes money; the tooltip shows
   the item's cost and both profits. A profit box was tried and removed.
@@ -148,8 +223,17 @@ opens.
 
 - **Opening another profession** needs a secure button. It's a separate
   invisible overlay laid over the Craft button at screen coordinates, never
-  anchored to the panel (that would make the panel protected in combat). It
-  hides in combat and after a click (until the profession opens or 3s pass).
+  anchored to the panel (that would make the panel protected in combat). It's
+  there only while the mouse is on the Craft button, in DIALOG strata above
+  every window. It used to sit in the panel's strata, just above the Craft
+  button by frame level, so a window in front of the panel would cover it:
+  but once the panel was raised to the front (on opening, or a click), it
+  ended up under the Craft button, and clicks hit the plain button and
+  opened nothing. Above everything but only under the mouse, it's on top
+  however the window was raised, and it can't open a profession through
+  another window over the panel, since the mouse never reaches the Craft
+  button there. It hides in combat and after a click (until the profession
+  opens or 3s pass).
 - **It used to get left behind** when the window moved without redrawing
   (a docked window moving, back when it docked; height change while
   centered; alt-tab display
@@ -302,4 +386,5 @@ opens.
   zoom), gold read right after login, and that the game says the world is
   being left before logout reports 0 gold; whether stations are reported for
   professions that aren't open; the owned-auctions counts against the Auctions
-  tab; tooltip placement and the filter menu position feel.
+  tab; tooltip placement and the filter menu position feel; that a hidden
+  font string measures text (Columns.lua) as a shown one does.

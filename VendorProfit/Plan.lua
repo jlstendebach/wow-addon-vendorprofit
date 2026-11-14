@@ -32,7 +32,8 @@ local Plan = {}
 VendorProfit.Plan = Plan
 
 -- Queue entries: { itemID, recipeID, profession, count (made per craft),
--- crafts (how many crafts queued), reagents (Recipes format), sellPrice }.
+-- crafts (how many crafts queued), reagents (Recipes format), sellPrice,
+-- exact (its reagents bought as they are, never crafted) }.
 function Plan.Build(entries, available, getBuyPrices)
     local plan = {
         buy = {}, buyOrder = {}, crafts = {}, uses = {},
@@ -117,7 +118,7 @@ function Plan.Build(entries, available, getBuyPrices)
     end
 
     for _, entry in ipairs(entries) do
-        local route = Route.ForRecipe(entry.itemID, entry.reagents, getBuyPrices)
+        local route = Route.ForRecipe(entry.itemID, entry.reagents, getBuyPrices, entry.exact)
         AddCraft(entry.itemID, entry.recipeID, entry.profession, entry.crafts, entry.count, 0, entry.reagents)
         for _, child in ipairs(route.children) do
             Require(child.node, child.quantity * entry.crafts, 1)

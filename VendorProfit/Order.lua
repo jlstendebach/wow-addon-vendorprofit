@@ -65,12 +65,13 @@ function Order.Spent()
 end
 
 -- Queues crafts of a recipe: fields = { itemID, recipeID, profession, count,
--- reagents (Recipes format), sellPrice }. Queuing a recipe already in the
--- order adds to it.
+-- reagents (Recipes format), sellPrice, exact }. Queuing a recipe already in
+-- the order the same way (exact or along the cheapest route) adds to it.
 function Order.AddRecipe(fields, crafts)
     local order = DB()
+    local exact = fields.exact and true or nil
     for _, entry in ipairs(order.entries) do
-        if entry.recipeID == fields.recipeID then
+        if entry.recipeID == fields.recipeID and entry.exact == exact then
             entry.crafts = entry.crafts + crafts
             Changed()
             return entry
@@ -84,14 +85,16 @@ function Order.AddRecipe(fields, crafts)
         crafts = crafts,
         reagents = fields.reagents,
         sellPrice = fields.sellPrice,
+        exact = exact,
     }
     order.entries[#order.entries + 1] = entry
     Changed()
     return entry
 end
 
--- Queues crafts of the recipe in a VendorProfit.Calculate result.
-function Order.Add(result, crafts, profession)
+-- Queues crafts of the recipe in a VendorProfit.Calculate result: along the
+-- cheapest route, or with exact as it is (reagents bought, never crafted).
+function Order.Add(result, crafts, profession, exact)
     return Order.AddRecipe({
         itemID = result.itemID,
         recipeID = result.recipeSchematic.recipeID,
@@ -99,6 +102,7 @@ function Order.Add(result, crafts, profession)
         count = result.count,
         reagents = VendorProfit.Recipes.ReagentsFromSchematic(result.recipeSchematic),
         sellPrice = result.sellPrice,
+        exact = exact,
     }, crafts)
 end
 

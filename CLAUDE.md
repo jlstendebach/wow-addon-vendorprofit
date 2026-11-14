@@ -22,7 +22,15 @@ changing a feature, so a rejected idea isn't tried again by accident.
 - **Text** shown in game goes in the `L` table in `Core.lua`; every string
   there must be used, and nothing unused left behind.
 - **Money** is shown with `VendorProfit.FormatMoney` (silver and copper
-  always two digits after a larger coin: 5s 07c).
+  always two digits after a larger coin: 5s 07c; a zero silver still shows
+  between gold and copper: 1g 00s 38c).
+- **Table columns never touch** (values or headings, sort arrow
+  included). Lay tables out with `VendorProfit.Columns.Layout` on each
+  refresh: each column is as wide as its heading with the arrow and the
+  widest value in the whole list (`Columns.Track`, then `Columns.Money` and
+  friends), measured in game; columns are `Columns.GAP` apart; the name
+  column takes the rest and the window widens if it must. No hand-set
+  column widths.
 - **No secure frames in the panel.** Opening a profession goes through the
   separate overlay in `OpenButton.lua` so the panel stays unprotected and
   works in combat.
