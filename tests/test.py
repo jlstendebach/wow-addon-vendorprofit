@@ -2047,7 +2047,7 @@ def menu():
 check("a Filter button in the page's style (not the game's dropdown) opens the menu: profitable only, skill-up colors, professions",
       ev(F + ".__text") == "Filter (1)" and [t for t, _ in menu()] ==
       ["Profitable only", "Skill up", "|cffff8040Guaranteed|r", "|cffffff00Likely|r", "|cff40bf40Unlikely|r",
-       "|cff808080Colors are live for the open profession, and as of the last opening for the others.|r",
+       "|cff808080Closed professions:|r", "|cff808080colors as last seen.|r",
        "Professions", "Blacksmithing", "Mining"])
 run(F + ':Click()')
 check("...the shown professions ticked: Mining was unticked", [i.checked() for i in ev("__stub.Menu(nil)").values() if i.checked][-2:] == [True, False])

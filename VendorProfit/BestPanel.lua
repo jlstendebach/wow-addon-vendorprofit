@@ -431,7 +431,11 @@ FilterMenu = function(_, root)
             function() return Filters()[key] == true end,
             function() SetFilter(key, not Filters()[key]) end)
     end
-    root:CreateTitle(GRAY_FONT_COLOR:WrapTextInColorCode(L.BEST_SKILL_SAVED_NOTE))
+    -- The note, a line at a time: the game's menu doesn't wrap text, and is
+    -- as wide as its widest line.
+    for line in L.BEST_SKILL_SAVED_NOTE:gmatch("[^\n]+") do
+        root:CreateTitle(GRAY_FONT_COLOR:WrapTextInColorCode(line))
+    end
     local professions = Recipes.Professions()
     if #professions > 0 then
         root:CreateTitle(L.BEST_FILTER_PROFESSIONS)

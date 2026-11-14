@@ -65,7 +65,9 @@ time" route mode).
   recipe's color is saved when its window is open, and shown for the others
   as of their last opening (possibly out of date). Josh wanted that said: a
   note in the Filter menu under the colors, and a line in a recipe's tooltip
-  when its color is a saved one.
+  when its color is a saved one. The menu note is two short lines ("Closed
+  professions: / colors as last seen."): the game's menu doesn't wrap and is
+  as wide as its widest line, and a one-line note made it far too wide.
 
 - **Columns**: Recipe, Investment, Profit, ROI, AH, Q, then **-** and **+**.
   No rank numbers (they took space and meant little once you sort and

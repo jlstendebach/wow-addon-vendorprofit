@@ -100,7 +100,8 @@ VendorProfit.L = {
     BEST_SKILL_EASY = "Unlikely",
     BEST_SKILL_UNKNOWN = "Some recipes have no skill-up color yet: open their profession once.",
     BEST_SKILL_SAVED = "Skill-up color as of when you last opened %s.",
-    BEST_SKILL_SAVED_NOTE = "Colors are live for the open profession, and as of the last opening for the others.",
+    -- Two short lines: the menu is as wide as its widest line.
+    BEST_SKILL_SAVED_NOTE = "Closed professions:\ncolors as last seen.",
     BEST_FILTER_PROFESSIONS = "Professions",
     BEST_NO_PRICE_FOR = "no price: %s",
     BEST_NO_VENDOR_PRICE = "no vendor price",
