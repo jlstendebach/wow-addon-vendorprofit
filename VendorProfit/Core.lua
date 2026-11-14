@@ -297,6 +297,7 @@ VendorProfit.L = {
     PRICE_UNAVAILABLE = "%s isn't available at that price any more. Scanning it again.",
     BOUGHT = "Bought %d %s for %s.",
     PURCHASE_FAILED = "Buying %s failed. Scanning it again.",
+    AUCTION_SEARCH_AGAIN = "Finding %s's auctions again: the auction house only sells from the latest search.",
     AUCTION_GONE = "%s was bought by someone else first. Buy goes on to the next cheapest.",
 }
 

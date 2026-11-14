@@ -649,6 +649,7 @@ C_AuctionHouse = {
     SendSearchQuery = function(itemKey)
         local id = itemKey.itemID
         ah.searches[#ah.searches + 1] = id
+        ah.lastSearch = id
         if ah.dropSearches > 0 then ah.dropSearches = ah.dropSearches - 1 return end
         ah.loaded[id] = math.min(ah.pageSize, ah.nonCommodity[id] and #Auctions(id) or #Rows(id))
         local empty = false
@@ -688,6 +689,8 @@ C_AuctionHouse = {
         Later(function() stub.Fire("ITEM_SEARCH_RESULTS_ADDED", key) end)
     end,
     -- Buying a single auction at its buyout: "won", or an error message.
+    -- Like the game, only an auction of the item searched last can be
+    -- bought; any other is "not found".
     PlaceBid = function(auctionID, amount)
         ah.bids[#ah.bids + 1] = { auctionID, amount }
         if ah.noBidReply then return end
@@ -697,6 +700,10 @@ C_AuctionHouse = {
                 for i, a in ipairs(list) do
                     if a.auctionID == auctionID then foundIn, foundAt = id, i end
                 end
+            end
+            if foundIn ~= nil and foundIn ~= ah.lastSearch then
+                stub.Fire("UI_ERROR_MESSAGE", 0, ERR_ITEM_NOT_FOUND)
+                return
             end
             if ah.goneNext or foundIn == nil then
                 ah.goneNext = false

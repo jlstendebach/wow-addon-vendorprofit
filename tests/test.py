@@ -873,6 +873,18 @@ check("bid-only and your own auctions left out", [r.auctionID for r in ev("Vendo
       == [101, 102, 103, 104, 105, 106, 107, 108])
 check("Buy offers the cheapest auction", ev(BUY + ".__text") == "Buy"
       and ev(BUY + ".tooltip") == "Buy 1 Tin Bar for |cffffffff70c|r")
+# Another item searched since (the scan's next item, Auctionator, the game's
+# window): the game only sells from the latest search.
+run('C_AuctionHouse.SendSearchQuery(C_AuctionHouse.MakeItemKey(2770), {}, false)'); run('__stub.Advance(0.5)')
+searches = ev("#__stub.ah.searches")
+click(run, "buy")
+check("another item searched since: Buy searches Tin Bar again first, no bid (it would be 'not found')",
+      ev("#__stub.ah.bids") == 0 and ev("__stub.ah.searches[%d]" % (searches + 1)) == 3576
+      and "Finding Tin Bar's auctions again" in ev("(VendorProfit.Shopper.Message())"))
+run('__stub.Advance(1)')
+check("...then the next click buys", ev("VendorProfit.Shopper.Status()") == "ready"
+      and ev("(VendorProfit.Shopper.Message())") == "Prices are in. Click Buy for Tin Bar."
+      and ev(BUY + ".tooltip") == "Buy 1 Tin Bar for |cffffffff70c|r")
 money = ev("__stub.money")
 click(run, "buy")
 check("one click buys it outright at its buyout: no quote, no Confirm", list(ev("__stub.ah.bids[1]").values()) == [101, 70]

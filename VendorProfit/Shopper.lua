@@ -32,6 +32,11 @@
 -- confirm: an auction's buyout is fixed and already on the button. The game
 -- says "won" when it's bought; if someone else bought it first it says the
 -- item wasn't found, and that auction is dropped so Buy goes on to the next.
+-- The auction house only sells an auction from the latest search, though
+-- (anyone's: the scan's next item, Auctionator, the game's own window): an
+-- auction from an older search is "not found" too. So when another search
+-- came since the item's, Buy searches the item again first, and the click
+-- after that buys (TradeSkillMaster searches again before every buy).
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -384,14 +389,23 @@ end
 
 -- When every item search was sent (by anyone): the server's limit counts
 -- them all.
+-- And which item was searched last: only its auctions can be bought.
 local searchTimes = {}
+local lastSearched      -- itemID of the latest search (anyone's), nil if unknown
 local function CountSearch()
     searchTimes[#searchTimes + 1] = GetTime()
 end
-for _, name in ipairs({ "SendSearchQuery", "SendSellSearchQuery" }) do
-    if C_AuctionHouse[name] then
-        hooksecurefunc(C_AuctionHouse, name, CountSearch)
-    end
+if C_AuctionHouse.SendSearchQuery then
+    hooksecurefunc(C_AuctionHouse, "SendSearchQuery", function(itemKey)
+        CountSearch()
+        lastSearched = type(itemKey) == "table" and itemKey.itemID or nil
+    end)
+end
+if C_AuctionHouse.SendSellSearchQuery then
+    hooksecurefunc(C_AuctionHouse, "SendSellSearchQuery", function()
+        CountSearch()
+        lastSearched = nil
+    end)
 end
 
 -- Seconds until there's room under the search limit (0 if there is now).
@@ -719,6 +733,14 @@ function Shopper.Buy()
         Changed()
         return
     end
+    -- A single auction from an older search would be "not found": search
+    -- its item again; the next click buys.
+    if nextPurchase.auctionID and lastSearched ~= nextPurchase.itemID then
+        SetMessage(string.format(L.AUCTION_SEARCH_AGAIN, ItemName(nextPurchase.itemID)))
+        buyAfterScan = true
+        Rescan(nextPurchase.itemID)
+        return
+    end
     purchase = nextPurchase
     SetMessage(nil)
     Order.BeforePurchase(purchase.itemID)
@@ -1004,6 +1026,7 @@ local function Closed()
     end
     status = "closed"
     buyAfterScan = false
+    lastSearched = nil
     lookup, batch = nil, nil
     purchase, scanning = nil, nil
     scanQueue = {}

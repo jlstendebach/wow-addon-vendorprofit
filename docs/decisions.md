@@ -194,6 +194,14 @@ time" route mode).
   found" (someone else bought it first) drops that auction and Buy goes on
   to the next cheapest without a new scan; any other error scans the item
   again; no reply in 15s says so, and a late win is still recorded.
+- **Only from the latest search**: the first try said "not found" for every
+  auction and bought nothing. The auction house only sells an auction from
+  the latest item search, anyone's, and the scan had searched other items
+  since (TradeSkillMaster searches the item again before every buy for
+  this reason). Every search is watched (a hook on SendSearchQuery); when
+  the latest isn't the item's, Buy searches it again first and says so,
+  and the next click buys. Buying several of one item in a row needs no
+  new search.
   Unconfirmed in game: the notification and error events for a buyout on
   Forever (taken from TSM's handling), and whether a search finds suffixed
   versions of an item ("of the Monkey").
