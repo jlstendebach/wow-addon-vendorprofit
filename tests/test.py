@@ -65,7 +65,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "Auctions.lua", "History.lua", "Gold.lua", "Panel.lua", "BestCrafts.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua", "GoldPanel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "Auctions.lua", "History.lua", "Gold.lua", "Panel.lua", "MinimapButton.lua", "BestCrafts.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua", "GoldPanel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("the .toc keeps the placeholder; releases and deploys stamp the real version", TOC_VERSION == "@project-version@")
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
@@ -2379,6 +2379,50 @@ run('__stub.Advance(0.3)')
 check("...but once, a moment later, with the names", ev("__ranks") == ranks + 1
       and "Thing" in ev("VendorProfit.BestPanel.Row(1).left:GetText()") and waiting() == 0)
 check("no errors loading item names", ev("#__stub.errors") == 0)
+
+# --- Minimap button ------------------------------------------------------------------
+import math
+run, ev = client()
+MB = "VendorProfitMinimapButton"
+r = 70 + 5
+check("a minimap button on the minimap's edge, lower left to start", ev(MB + ":GetParent() == Minimap")
+      and ev(MB + ".__point[1]") == "CENTER" and ev(MB + ".__point[2] == Minimap")
+      and abs(ev(MB + ".__point[4]") - r * math.cos(math.radians(225))) < 1e-6
+      and abs(ev(MB + ".__point[5]") - r * math.sin(math.radians(225))) < 1e-6 and ev(MB + ":IsShown()"))
+check("...with the addon's coin icon", ev(MB + ".icon.__texture") == "Interface\\Icons\\INV_Misc_Coin_02")
+run(MB + ':GetScript("OnEnter")(' + MB + ')')
+check("hover: what clicking and dragging do", [l.left for l in ev("GameTooltip.lines").values()] ==
+      ["Vendor Profit", "Click: open or close the window.", "Drag: move this button.", "/vprofit minimap hides it."])
+run(MB + ':GetScript("OnLeave")(' + MB + ')')
+run(MB + ':Click()')
+check("click opens the window", ev("VendorProfit.Panel.IsShown()"))
+run(MB + ':Click()')
+check("...and closes it", not ev("VendorProfit.Panel.IsShown()"))
+run('VendorProfit.Panel.Show("gold"); VendorProfit.Panel.Hide()')
+run(MB + ':Click()')
+check("...on the tab last used", ev("VendorProfit.Panel.ActiveTab()") == "gold")
+run(MB + ':Click()')
+# Dragging: the button follows the cursor around the edge.
+run('__stub.cursorX, __stub.cursorY = 1000, 900; ' + MB + ':GetScript("OnDragStart")(' + MB + ')')
+check("dragging follows the cursor while the button is held", ev(MB + ':GetScript("OnUpdate")') is not None)
+run(MB + ':GetScript("OnUpdate")(' + MB + ')')
+check("...cursor straight above the minimap: the button at the top", abs(ev(MB + ".__point[4]")) < 1e-6
+      and abs(ev(MB + ".__point[5]") - r) < 1e-6)
+run('__stub.cursorX, __stub.cursorY = 1100, 700; ' + MB + ':GetScript("OnDragStop")(' + MB + ')')
+check("dropped to the right: stays there, saved for the account", ev(MB + ':GetScript("OnUpdate")') is None
+      and abs(ev("VendorProfitDB.minimap.angle")) < 1e-6 and abs(ev(MB + ".__point[4]") - r) < 1e-6)
+run('GetMinimapShape = function() return "SQUARE" end; VendorProfitDB.minimap.angle = 45; VendorProfit.MinimapButton.Place()')
+check("a square minimap: out to its corner", abs(ev(MB + ".__point[4]") - r) < 1e-6 and abs(ev(MB + ".__point[5]") - r) < 1e-6)
+run('GetMinimapShape = nil')
+run('SlashCmdList.VENDORPROFIT("minimap")')
+check("/vprofit minimap hides it, saved, and says how to undo it", not ev(MB + ":IsShown()")
+      and ev("VendorProfitDB.minimap.hide") == True and "/vprofit minimap shows it again" in ev("__stub.printed[#__stub.printed]"))
+run('SlashCmdList.VENDORPROFIT("minimap")')
+check("...again: shown", ev(MB + ":IsShown()") and ev("VendorProfitDB.minimap.hide") is None)
+run2, ev2 = client("VendorProfitDB = { minimap = { angle = 90, hide = true } }")
+check("a new session: where it was left, hidden if it was", not ev2(MB + ":IsShown()")
+      and abs(ev2(MB + ".__point[5]") - r) < 1e-6)
+check("no errors from the minimap button", ev("#__stub.errors") == 0 and ev2("#__stub.errors") == 0)
 
 # --- Gold ------------------------------------------------------------------------------
 

@@ -117,6 +117,11 @@ VendorProfit.L = {
 
     -- Shopping panel
     PANEL_TITLE = "Vendor Profit",
+    MINIMAP_CLICK = "Click: open or close the window.",
+    MINIMAP_DRAG = "Drag: move this button.",
+    MINIMAP_HIDE = "/vprofit minimap hides it.",
+    MINIMAP_HIDDEN = "|cffffd100Vendor Profit:|r minimap button hidden. /vprofit minimap shows it again.",
+    MINIMAP_SHOWN = "|cffffd100Vendor Profit:|r minimap button shown.",
     TAB_SHOPPING = "Shopping List",
     TAB_BEST = "Best Crafts",
     TAB_HISTORY = "Profit History",

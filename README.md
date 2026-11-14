@@ -216,6 +216,8 @@ Items the plan gets from a vendor (Weak Flux, thread, vials) are bought at a ven
 
 **The window.** The Shopping List, Best Crafts, Profit History, Purchase History and Gold are tabs down the right side of one Vendor Profit window. It comes to the front when it opens or you click it, and another window you click (your bags, the auction house) comes in front of it. It opens centered near the top of the screen; drag it anywhere, and from then on it opens where you left it (saved per character). It only opens when you open it (`/vprofit`, a `/vprofit` tab command, or the title-bar button) and only closes when you close it (its close button, Escape, the title-bar button, or `/vprofit`), in combat too: never by itself at the auction house, bank or a vendor, or when you queue something. `/vprofit reset` puts it back there.
 
+**Minimap button.** The coin button on the minimap's edge opens or closes the window, on the tab you last used. Drag it to move it around the edge (on a square minimap too); where you leave it is saved for the whole account. `/vprofit minimap` hides it, and again shows it.
+
 The order is saved per character. Each queued recipe has three small buttons: **-** and **+** craft one fewer or one more (five with **Shift-click**; at least one), and **x** takes it out of the order; removing the last one empties the order and its record. Hover a queued recipe to see its own cost along the cheapest route and its vendor and auction profit at today's prices; click it to show its recipe in the professions window (when that window is open). Its name is red when neither would make money.
 
 **Vendor profit** and **Auction profit** are red, label and all, when they're a loss.
@@ -311,6 +313,7 @@ Files:
 | `Merchant.lua` | Buying what the order needs from the vendor you're talking to |
 | `Auctions.lua` | How many of each item you have up for auction, as of your last visit |
 | `Panel.lua` | The Vendor Profit window and its tabs, the Shopping List tab, moving it, and `/vprofit` |
+| `MinimapButton.lua` | The minimap button |
 | `BestCrafts.lua` | Ranking a profession's recipes, and the batch price lookup |
 | `BestPanel.lua` | The Best Crafts tab, and the button in the professions window's title bar |
 | `History.lua` | Profit history: what items cost you as they come in, and their sales |
@@ -336,6 +339,7 @@ Saved data, for the whole account (`VendorProfitDB`):
 
 - `gold[name-realm] = { name, realm, log }`: each character's gold over time. `log` is one string, `minute:copper;...` oldest first (minutes since 1970), each point holding until the next.
 - `goldHidden[name-realm] = true`: characters left out of the Gold tab.
+- `minimap = { angle, hide }`: where the minimap button sits on the minimap's edge (degrees, 0 = right), and whether it's hidden.
 
 Opening a profession uses a secure action button casting the profession's spell, as TradeSkillMaster does in Forever. It's a separate invisible button laid over the Craft button rather than part of the panel, because a secure button inside the panel would make the panel protected and the game would block showing, hiding or moving it in combat. It's only placed out of combat and hidden as combat starts.
 

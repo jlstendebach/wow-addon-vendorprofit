@@ -149,6 +149,7 @@ function FrameMethods:GetTop() return self.__top end
 function FrameMethods:GetBottom() return self.__bottom or 20 end
 function FrameMethods:GetWidth() return self.__w or 100 end
 function FrameMethods:GetEffectiveScale() return 1 end
+function FrameMethods:GetCenter() return self.__centerX, self.__centerY end
 function FrameMethods:SetFrameStrata(s) self.__strata = s end
 function FrameMethods:GetFrameStrata()
     if self.__strata then return self.__strata end
@@ -197,6 +198,7 @@ function FrameMethods:CreateTexture()
     t.SetTexture = function(tex, path) tex.__texture = path end
     t.SetBlendMode = function(tex, mode) tex.__blend = mode end
     t.SetVertexColor = function(tex, ...) tex.__vertexColor = { ... } end
+    t.SetTexCoord = function(tex, ...) tex.__texCoord = { ... } end
     return t
 end
 -- Lines (CreateLine): a texture with two end points.
@@ -267,7 +269,7 @@ GameTooltip = { lines = {}, shown = false }
 function GameTooltip:SetOwner(owner, anchor) self.owner = owner; self.anchor = anchor; self.point = nil; self.lines = {} end
 function GameTooltip:ClearAllPoints() self.point = nil end
 stub.cursorX = 0
-function GetCursorPosition() return stub.cursorX, 0 end
+function GetCursorPosition() return stub.cursorX, stub.cursorY or 0 end
 function GameTooltip:SetPoint(...) self.point = { ... } end
 function GameTooltip:SetText(t) self.lines = { { left = t } } end
 function GameTooltip:AddLine(t) self.lines[#self.lines + 1] = { left = t } end
@@ -589,6 +591,10 @@ stub.ah = {
 }
 local ah = stub.ah
 UIParent = UIParent or CreateFrame("Frame", "UIParent")
+-- The minimap: 140 across, centered at (1000, 700) on the screen.
+Minimap = CreateFrame("Frame", "Minimap", UIParent)
+Minimap:SetSize(140, 140)
+Minimap.__centerX, Minimap.__centerY = 1000, 700
 AuctionHouseFrame = CreateFrame("Frame", "AuctionHouseFrame")
 AuctionHouseFrame:Hide()
 

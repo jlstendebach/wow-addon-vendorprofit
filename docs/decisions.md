@@ -43,6 +43,11 @@ time" route mode).
   so pages changing height grew it at both edges). It's only ever anchored to
   UIParent: anchored to a protected window it would be protected too, and
   hiding it in combat would be blocked.
+- **Minimap button**: our own small button (the usual round look, from the
+  game's own textures, with the addon's coin icon), not LibDBIcon or another
+  library: the addon needs nothing but Auctionator. Click opens or closes the
+  window on the last tab; drag moves it around the edge (square minimaps
+  too); saved for the account; `/vprofit minimap` hides or shows it.
 - **Spacing**: the gap between a page's title, its totals line and its table
   is the same everywhere (about 6px between text lines).
 - **Dates** are mm/dd, to save space.

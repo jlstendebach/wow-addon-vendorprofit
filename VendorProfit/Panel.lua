@@ -1202,6 +1202,8 @@ SlashCmdList.VENDORPROFIT = function(arg)
         Panel.Toggle("purchases")
     elseif command == "gold" then
         Panel.Toggle("gold")
+    elseif command == "minimap" then
+        VendorProfit.MinimapButton.Toggle()
     elseif command == "prices" then
         VendorProfit.Merchant.ShowPriceLines()
     elseif command == "stations" then

@@ -28,6 +28,7 @@ Auctions.lua
 History.lua
 Gold.lua
 Panel.lua
+MinimapButton.lua
 BestCrafts.lua
 BestPanel.lua
 HistoryPanel.lua
