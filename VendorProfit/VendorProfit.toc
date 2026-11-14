@@ -29,6 +29,7 @@ History.lua
 Gold.lua
 Panel.lua
 MinimapButton.lua
+Columns.lua
 BestCrafts.lua
 BestPanel.lua
 HistoryPanel.lua

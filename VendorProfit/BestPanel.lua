@@ -28,9 +28,10 @@ local BestPanel = {}
 VendorProfit.BestPanel = BestPanel
 
 local Panel = VendorProfit.Panel
+local Columns = VendorProfit.Columns
 
 -- Wider than the Shopping List, for the money columns and the search and
--- filter controls.
+-- filter controls; wider still if the columns need it (set in Create).
 local WIDTH = 520
 local PADDING = 16
 local ROW_HEIGHT = 22
@@ -38,19 +39,13 @@ local LIST_TOP = -94
 local VISIBLE_ROWS = 14
 local SCROLLBAR_WIDTH = 24
 local LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
--- Columns, from the right of the list: + and - (queue and unqueue a craft),
--- Q (crafts queued, two digits wide), AH (your auctions of it, three digits),
--- ROI, Profit, Investment; the recipe name takes the rest.
-local ICON_BUTTON_WIDTH, MONEY_WIDTH, ROI_WIDTH, QUEUED_WIDTH, AH_WIDTH, GAP = 22, 72, 48, 16, 22, 6
--- The count columns are narrower than their headings once a sort arrow is
--- added, so they get wider gaps for it to grow into.
-local COUNT_GAP = 12
-local QUEUED_RIGHT = -(2 * ICON_BUTTON_WIDTH + 4 + 8)
-local AH_RIGHT = QUEUED_RIGHT - QUEUED_WIDTH - COUNT_GAP
-local ROI_RIGHT = AH_RIGHT - AH_WIDTH - COUNT_GAP
-local PROFIT_RIGHT = ROI_RIGHT - ROI_WIDTH - GAP
-local INVESTMENT_RIGHT = PROFIT_RIGHT - MONEY_WIDTH - GAP
-local NAME_WIDTH = LIST_WIDTH + INVESTMENT_RIGHT - MONEY_WIDTH - GAP
+local ICON_BUTTON_WIDTH = 22
+-- The columns, by key (Columns.lua), laid out when the tab is built: the
+-- recipe name, Investment, Profit, ROI, AH (your auctions of it), Q (crafts
+-- queued), then - and + (unqueue and queue a craft).
+local col
+-- This tab's entry in the window (Panel.AddPage), for the width.
+local pageDef
 
 -- Sorting by column: Recipe (A to Z first), Investment, Profit, ROI (highest
 -- first). Clicking the sorted column again reverses it. Recipes with no
@@ -164,24 +159,24 @@ local function GetRow(index)
         local list = frame.list
         row = {}
         local top = -(index - 1) * ROW_HEIGHT
-        local function Column(width, right)
+        local function Column(key)
             local text = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             text:SetJustifyH("RIGHT")
             text:SetWordWrap(false)
-            text:SetWidth(width)
-            text:SetPoint("TOPRIGHT", list, "TOPRIGHT", right, top - 4)
+            text:SetWidth(col[key].width)
+            text:SetPoint("TOPRIGHT", list, "TOPRIGHT", col[key].right, top - 4)
             return text
         end
         row.left = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         row.left:SetJustifyH("LEFT")
         row.left:SetWordWrap(false)
-        row.left:SetWidth(NAME_WIDTH)
+        row.left:SetWidth(col.name.width)
         row.left:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top - 4)
         -- Clicking the name shows the recipe in the professions window (while
         -- it's open); hovering it shows what you've made selling the item.
         row.hit = CreateFrame("Frame", nil, list)
         row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top)
-        row.hit:SetSize(NAME_WIDTH, ROW_HEIGHT)
+        row.hit:SetSize(col.name.width, ROW_HEIGHT)
         row.hit:EnableMouse(true)
         row.hit:SetScript("OnMouseUp", function(self, mouseButton)
             if mouseButton == "LeftButton" and self.recipe and ProfessionsWindowOpen() then
@@ -195,16 +190,16 @@ local function GetRow(index)
         end)
         row.hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
         -- Investment: what one craft's items cost along the cheapest route.
-        row.investment = Column(MONEY_WIDTH, INVESTMENT_RIGHT)
-        row.right = Column(MONEY_WIDTH, PROFIT_RIGHT)
+        row.investment = Column("investment")
+        row.right = Column("profit")
         -- Return on investment: profit as a share of the investment.
-        row.roi = Column(ROI_WIDTH, ROI_RIGHT)
+        row.roi = Column("roi")
         -- How many of what it makes you have up for auction (Auctions.lua).
-        row.auctions = Column(AH_WIDTH, AH_RIGHT)
+        row.auctions = Column("auctions")
         -- How many crafts the shopping order holds.
-        row.queued = Column(QUEUED_WIDTH, QUEUED_RIGHT)
+        row.queued = Column("queued")
         -- Why a recipe isn't ranked, across the columns it has no number for.
-        row.reason = Column(MONEY_WIDTH, ROI_RIGHT)
+        row.reason = Column("roi")
 
         -- Queue: a plus, at the row's end; unqueue: a minus, before it.
         row.queue = SmallButton(list, "+", ICON_BUTTON_WIDTH)
@@ -578,13 +573,28 @@ local function Create(page)
 
     -- Column headings over the list; click one to sort by it.
     frame.headings = {}
-    local function Heading(key, text, width, right, help)
+    -- Every column but the name is a number, right-aligned.
+    local samples = Columns.Samples()
+    col, LIST_WIDTH = Columns.Layout(LIST_WIDTH, {
+        { key = "name", heading = L.BEST_RECIPE, sorts = true, fill = true },
+        { key = "investment", heading = L.BEST_INVESTMENT, sorts = true, samples = samples.money },
+        { key = "profit", heading = L.BEST_PROFIT, sorts = true, samples = samples.money },
+        { key = "roi", heading = L.BEST_ROI, sorts = true, samples = samples.roi },
+        { key = "auctions", heading = L.BEST_AUCTIONS_HEADING, sorts = true, samples = { "999" } },
+        { key = "queued", heading = L.BEST_QUEUED_HEADING, sorts = true, samples = { "99" } },
+        { key = "buttons", width = 2 * ICON_BUTTON_WIDTH + 4 },
+    })
+    WIDTH = LIST_WIDTH + 2 * PADDING + SCROLLBAR_WIDTH
+    pageDef.width = WIDTH
+
+    local function Heading(key, text, help)
+        local right = key ~= "name"
         local heading = CreateFrame("Button", nil, frame)
-        heading:SetSize(width, 14)
+        heading:SetSize(col[key].width, 14)
         if right then
-            heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + LIST_WIDTH + right, LIST_TOP + 16)
+            heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + LIST_WIDTH + col[key].right, LIST_TOP + 16)
         else
-            heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, LIST_TOP + 16)
+            heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + col[key].left, LIST_TOP + 16)
         end
         heading.text = heading:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         heading.text:SetAllPoints(heading)
@@ -595,15 +605,13 @@ local function Create(page)
         frame.headings[key] = heading
         return heading
     end
-    frame.nameHeading = Heading("name", L.BEST_RECIPE, NAME_WIDTH)
-    frame.investmentHeading = Heading("investment", L.BEST_INVESTMENT, MONEY_WIDTH, INVESTMENT_RIGHT)
-    frame.profitHeading = Heading("profit", L.BEST_PROFIT, MONEY_WIDTH, PROFIT_RIGHT)
-    frame.roiHeading = Heading("roi", L.BEST_ROI, ROI_WIDTH, ROI_RIGHT)
-    -- The count headings are wider than their columns, into the gap, to fit
-    -- the sort arrow.
-    frame.auctionsHeading = Heading("auctions", L.BEST_AUCTIONS_HEADING, AH_WIDTH + COUNT_GAP, AH_RIGHT,
+    frame.nameHeading = Heading("name", L.BEST_RECIPE)
+    frame.investmentHeading = Heading("investment", L.BEST_INVESTMENT)
+    frame.profitHeading = Heading("profit", L.BEST_PROFIT)
+    frame.roiHeading = Heading("roi", L.BEST_ROI)
+    frame.auctionsHeading = Heading("auctions", L.BEST_AUCTIONS_HEADING,
         L.BEST_AUCTIONS_HELP .. "\n" .. L.BEST_SORT_HELP)
-    frame.queuedHeading = Heading("queued", L.BEST_QUEUED_HEADING, QUEUED_WIDTH + COUNT_GAP, QUEUED_RIGHT,
+    frame.queuedHeading = Heading("queued", L.BEST_QUEUED_HEADING,
         L.BEST_QUEUED_HELP .. "\n" .. L.BEST_SORT_HELP)
 
     -- The list scrolls; the mouse wheel works over it.
@@ -669,8 +677,7 @@ local function Refresh()
     local sort = Sort()
     for key, heading in pairs(frame.headings) do
         if key == sort.key then
-            local arrow = sort.ascending and L.BEST_SORT_UP or L.BEST_SORT_DOWN
-            heading.text:SetText(HIGHLIGHT_FONT_COLOR:WrapTextInColorCode(heading.label .. " " .. arrow))
+            heading.text:SetText(HIGHLIGHT_FONT_COLOR:WrapTextInColorCode(Columns.SortedText(heading.label, sort.ascending)))
         else
             heading.text:SetText(heading.label)
         end
@@ -717,10 +724,10 @@ local function Refresh()
             row.right:SetText("")
             if unpriced.output then
                 row.investment:SetText(VendorProfit.FormatMoney(entry.cost))
-                row.reason:SetWidth(MONEY_WIDTH + GAP + ROI_WIDTH)
+                row.reason:SetWidth(Columns.Span(col, "profit", "roi"))
             else
                 row.investment:SetText("")
-                row.reason:SetWidth(2 * (MONEY_WIDTH + GAP) + ROI_WIDTH)
+                row.reason:SetWidth(Columns.Span(col, "investment", "roi"))
             end
         end
         row.reason:SetText(reason and Gray(reason) or "")
@@ -807,14 +814,15 @@ end
 
 Auctions.OnChange(BestPanel.Refresh)
 
-Panel.AddPage({
+pageDef = {
     name = "best",
     icon = "Interface\\Icons\\INV_Misc_Coin_02",
     label = L.TAB_BEST,
     create = Create,
     width = WIDTH,
     refresh = function() return Refresh() end,
-})
+}
+Panel.AddPage(pageDef)
 
 -- The rows shown, as "left | right" text (for tests and debugging), and the
 -- tab and Scan buttons.

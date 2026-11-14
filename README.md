@@ -314,6 +314,7 @@ Files:
 | `Auctions.lua` | How many of each item you have up for auction, as of your last visit |
 | `Panel.lua` | The Vendor Profit window and its tabs, the Shopping List tab, moving it, and `/vprofit` |
 | `MinimapButton.lua` | The minimap button |
+| `Columns.lua` | Lays out the tabs' table columns so values and headings never touch |
 | `BestCrafts.lua` | Ranking a profession's recipes, and the batch price lookup |
 | `BestPanel.lua` | The Best Crafts tab, and the button in the professions window's title bar |
 | `History.lua` | Profit history: what items cost you as they come in, and their sales |

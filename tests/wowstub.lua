@@ -226,11 +226,24 @@ function FontMethods:SetWidth(w) self.__w = w end
 function FontMethods:GetWidth() return self.__w or 0 end
 function FontMethods:GetLeft() return self.__left or 20 end
 function FontMethods:GetRight() return self:GetLeft() + self:GetWidth() end
--- Roughly 5 per character, color codes and textures left out.
-function FontMethods:GetStringWidth()
-    local plain = (self.__text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T.-|t", "")
-    return #plain * 5
+-- Roughly 5 per character, color codes left out; an inline texture is as
+-- wide as it's drawn (|Tpath:height:width|t; 0 means the font's height, 12).
+local function TextureWidth(spec)
+    local height, width = spec:match("^[^:]*:?(%d*):?(%d*)")
+    height, width = tonumber(height) or 0, tonumber(width) or 0
+    if width == 0 then width = height end
+    return width == 0 and 12 or width
 end
+function stub.TextWidth(text)
+    local textures = 0
+    local plain = (text or ""):gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", ""):gsub("|T(.-)|t", function(spec)
+        textures = textures + TextureWidth(spec)
+        return ""
+    end)
+    return #plain * 5 + textures
+end
+function FontMethods:GetStringWidth() return stub.TextWidth(self.__text) end
+function FontMethods:GetUnboundedStringWidth() return stub.TextWidth(self.__text) end
 function FontMethods:GetStringHeight() return 12 end
 function FontMethods:ClearAllPoints() self.__point = nil end
 function FontMethods:SetShown(s) self.__shown = not not s end

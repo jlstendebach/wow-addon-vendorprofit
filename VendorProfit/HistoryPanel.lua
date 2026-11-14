@@ -25,11 +25,13 @@ local _, ns = ...
 local VendorProfit = ns.VendorProfit
 local History = VendorProfit.History
 local Panel = VendorProfit.Panel
+local Columns = VendorProfit.Columns
 local L = VendorProfit.L
 
 local HistoryPanel = {}
 VendorProfit.HistoryPanel = HistoryPanel
 
+-- Wider if the columns need it (set in Create).
 local WIDTH = 540
 local PADDING = 16
 local ROW_HEIGHT = 18
@@ -42,26 +44,12 @@ local LIST_TOP = -108
 local VISIBLE_ROWS = 18
 local SCROLLBAR_WIDTH = 24
 local LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
-local MONEY_WIDTH, GAP = 70, 6
--- Sales columns: Date and Item from the left; Profit, Sold for, Cost from the
--- right.
-local DATE_WIDTH = 34
-local PROFIT_RIGHT = 0
-local SOLD_RIGHT = PROFIT_RIGHT - MONEY_WIDTH - GAP
-local COST_RIGHT = SOLD_RIGHT - MONEY_WIDTH - GAP
-local ITEM_LEFT = DATE_WIDTH + GAP
-local ITEM_WIDTH = LIST_WIDTH + COST_RIGHT - MONEY_WIDTH - GAP - ITEM_LEFT
--- Best Sellers columns: Item from the left; ROI (overall), Avg ROI, Profit
--- (total), Avg profit, Sold from the right. Sold is narrow, with room left
--- of it for its sort arrow.
-local COUNT_WIDTH, COUNT_GAP = 36, 12
-local ROI_WIDTH = 52
-local ROI_RIGHT = 0
-local AVERAGE_ROI_RIGHT = ROI_RIGHT - ROI_WIDTH - GAP
-local TOTAL_RIGHT = AVERAGE_ROI_RIGHT - ROI_WIDTH - GAP
-local AVERAGE_RIGHT = TOTAL_RIGHT - MONEY_WIDTH - GAP
-local COUNT_RIGHT = AVERAGE_RIGHT - MONEY_WIDTH - COUNT_GAP
-local SELLER_WIDTH = LIST_WIDTH + COUNT_RIGHT - COUNT_WIDTH - COUNT_GAP
+-- The columns, by key (Columns.lua), laid out when the tab is built. Sales:
+-- Date, Item, Cost, Sold for, Profit. Best Sellers: Item, Sold, Avg profit,
+-- Profit (total), Avg ROI, ROI (overall).
+local sales, sellers
+-- This tab's entry in the window (Panel.AddPage), for the width.
+local pageDef
 local WEEK = 7 * 24 * 60 * 60
 
 -- Best Sellers' sort: by total profit, highest first, unless changed (saved
@@ -463,10 +451,10 @@ local function PlaceRow(row, index)
         region:SetPoint(point, list, point, x, top)
     end
     At(row.date, "TOPLEFT", 0)
-    At(row.item, "TOPLEFT", ITEM_LEFT)
-    At(row.cost, "TOPRIGHT", COST_RIGHT)
-    At(row.sold, "TOPRIGHT", SOLD_RIGHT)
-    At(row.profit, "TOPRIGHT", PROFIT_RIGHT)
+    At(row.item, "TOPLEFT", sales.item.left)
+    At(row.cost, "TOPRIGHT", sales.cost.right)
+    At(row.sold, "TOPRIGHT", sales.sold.right)
+    At(row.profit, "TOPRIGHT", sales.profit.right)
     row.hit:ClearAllPoints()
     row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top + 2)
 end
@@ -477,11 +465,11 @@ local function GetRow(slot)
     if row == nil then
         local list = frame.list
         row = {}
-        row.date = Column(list, DATE_WIDTH, "LEFT")
-        row.item = Column(list, ITEM_WIDTH, "LEFT")
-        row.cost = Column(list, MONEY_WIDTH, "RIGHT")
-        row.sold = Column(list, MONEY_WIDTH, "RIGHT")
-        row.profit = Column(list, MONEY_WIDTH, "RIGHT")
+        row.date = Column(list, sales.date.width, "LEFT")
+        row.item = Column(list, sales.item.width, "LEFT")
+        row.cost = Column(list, sales.cost.width, "RIGHT")
+        row.sold = Column(list, sales.sold.width, "RIGHT")
+        row.profit = Column(list, sales.profit.width, "RIGHT")
         HitArea(row, list, 0, ShowSaleTooltip)
         row.regions = { row.date, row.item, row.cost, row.sold, row.profit, row.hit }
         rows[slot] = row
@@ -495,18 +483,12 @@ local function GetSellerRow(index)
         local list = frame.list
         local top = -(index - 1) * ROW_HEIGHT - 2
         row = {}
-        row.item = Column(list, SELLER_WIDTH, "LEFT")
-        row.item:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top)
-        row.n = Column(list, COUNT_WIDTH, "RIGHT")
-        row.n:SetPoint("TOPRIGHT", list, "TOPRIGHT", COUNT_RIGHT, top)
-        row.average = Column(list, MONEY_WIDTH, "RIGHT")
-        row.average:SetPoint("TOPRIGHT", list, "TOPRIGHT", AVERAGE_RIGHT, top)
-        row.profit = Column(list, MONEY_WIDTH, "RIGHT")
-        row.profit:SetPoint("TOPRIGHT", list, "TOPRIGHT", TOTAL_RIGHT, top)
-        row.averageRoi = Column(list, ROI_WIDTH, "RIGHT")
-        row.averageRoi:SetPoint("TOPRIGHT", list, "TOPRIGHT", AVERAGE_ROI_RIGHT, top)
-        row.roi = Column(list, ROI_WIDTH, "RIGHT")
-        row.roi:SetPoint("TOPRIGHT", list, "TOPRIGHT", ROI_RIGHT, top)
+        row.item = Column(list, sellers.name.width, "LEFT")
+        row.item:SetPoint("TOPLEFT", list, "TOPLEFT", sellers.name.left, top)
+        for _, key in ipairs({ "n", "average", "profit", "averageRoi", "roi" }) do
+            row[key] = Column(list, sellers[key].width, "RIGHT")
+            row[key]:SetPoint("TOPRIGHT", list, "TOPRIGHT", sellers[key].right, top)
+        end
         HitArea(row, list, top, ShowSellerTooltip)
         row.regions = { row.item, row.n, row.average, row.profit, row.averageRoi, row.roi, row.hit }
         sellerRows[index] = row
@@ -527,8 +509,38 @@ local function SetView(name)
     HistoryPanel.Refresh()
 end
 
+-- Lays out both views' columns for one list width, widening it if either
+-- needs more. Returns the list width.
+local function LayOut(listWidth)
+    local samples = Columns.Samples()
+    local salesWidth, sellersWidth
+    sales, salesWidth = Columns.Layout(listWidth, {
+        { key = "date", heading = L.HISTORY_DATE, samples = samples.date },
+        { key = "item", heading = L.HISTORY_ITEM, fill = true },
+        { key = "cost", heading = L.HISTORY_COST, samples = samples.total },
+        { key = "sold", heading = L.HISTORY_SOLD, samples = samples.total },
+        { key = "profit", heading = L.BEST_PROFIT, samples = samples.total },
+    })
+    sellers, sellersWidth = Columns.Layout(listWidth, {
+        { key = "name", heading = L.HISTORY_ITEM, sorts = true, fill = true },
+        { key = "n", heading = L.HISTORY_SOLD_UNITS, sorts = true, samples = samples.count },
+        { key = "average", heading = L.HISTORY_AVERAGE, sorts = true, samples = samples.money },
+        { key = "profit", heading = L.BEST_PROFIT, sorts = true, samples = samples.total },
+        { key = "averageRoi", heading = L.HISTORY_AVERAGE_ROI, sorts = true, samples = samples.roi },
+        { key = "roi", heading = L.BEST_ROI, sorts = true, samples = samples.roi },
+    })
+    return math.max(salesWidth, sellersWidth)
+end
+
 local function Create(page)
     frame = page
+    -- Twice when one view widens the list, so the other spreads to match.
+    local listWidth = LayOut(LIST_WIDTH)
+    if listWidth > LIST_WIDTH then
+        LIST_WIDTH = LayOut(listWidth)
+    end
+    WIDTH = LIST_WIDTH + 2 * PADDING + SCROLLBAR_WIDTH
+    pageDef.width = WIDTH
 
     frame.heading = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     frame.heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -32)
@@ -601,22 +613,23 @@ local function Create(page)
         return heading
     end
     frame.headings = {
-        Heading(L.HISTORY_DATE, DATE_WIDTH, "LEFT", "LEFT", 0),
-        Heading(L.HISTORY_ITEM, ITEM_WIDTH, "LEFT", "LEFT", ITEM_LEFT),
-        Heading(L.HISTORY_COST, MONEY_WIDTH, "RIGHT", "RIGHT", COST_RIGHT),
-        Heading(L.HISTORY_SOLD, MONEY_WIDTH, "RIGHT", "RIGHT", SOLD_RIGHT),
-        Heading(L.BEST_PROFIT, MONEY_WIDTH, "RIGHT", "RIGHT", PROFIT_RIGHT),
+        Heading(L.HISTORY_DATE, sales.date.width, "LEFT", "LEFT", sales.date.left),
+        Heading(L.HISTORY_ITEM, sales.item.width, "LEFT", "LEFT", sales.item.left),
+        Heading(L.HISTORY_COST, sales.cost.width, "RIGHT", "RIGHT", sales.cost.right),
+        Heading(L.HISTORY_SOLD, sales.sold.width, "RIGHT", "RIGHT", sales.sold.right),
+        Heading(L.BEST_PROFIT, sales.profit.width, "RIGHT", "RIGHT", sales.profit.right),
     }
 
     -- Best Sellers headings: click one to sort by it, as on Best Crafts.
     frame.sellerHeadings = {}
-    local function SortHeading(key, text, width, right)
+    local function SortHeading(key, text)
+        local right = key ~= "name"
         local heading = CreateFrame("Button", nil, frame)
-        heading:SetSize(width, 14)
+        heading:SetSize(sellers[key].width, 14)
         if right then
-            heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + LIST_WIDTH + right, LIST_TOP + 16)
+            heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + LIST_WIDTH + sellers[key].right, LIST_TOP + 16)
         else
-            heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, LIST_TOP + 16)
+            heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + sellers[key].left, LIST_TOP + 16)
         end
         heading.text = heading:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         heading.text:SetAllPoints(heading)
@@ -632,13 +645,12 @@ local function Create(page)
         frame.sellerHeadings[key] = heading
         return heading
     end
-    SortHeading("name", L.HISTORY_ITEM, SELLER_WIDTH)
-    -- Wider than its column, into the gap, to fit the sort arrow.
-    SortHeading("n", L.HISTORY_SOLD_UNITS, COUNT_WIDTH + COUNT_GAP, COUNT_RIGHT)
-    SortHeading("average", L.HISTORY_AVERAGE, MONEY_WIDTH, AVERAGE_RIGHT)
-    SortHeading("profit", L.BEST_PROFIT, MONEY_WIDTH, TOTAL_RIGHT)
-    SortHeading("averageRoi", L.HISTORY_AVERAGE_ROI, ROI_WIDTH, AVERAGE_ROI_RIGHT)
-    SortHeading("roi", L.BEST_ROI, ROI_WIDTH, ROI_RIGHT)
+    SortHeading("name", L.HISTORY_ITEM)
+    SortHeading("n", L.HISTORY_SOLD_UNITS)
+    SortHeading("average", L.HISTORY_AVERAGE)
+    SortHeading("profit", L.BEST_PROFIT)
+    SortHeading("averageRoi", L.HISTORY_AVERAGE_ROI)
+    SortHeading("roi", L.BEST_ROI)
 
     frame.scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
     frame.scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, LIST_TOP)
@@ -768,8 +780,7 @@ local function Refresh()
     for key, heading in pairs(frame.sellerHeadings) do
         heading:SetShown(view == "items" and shown > 0)
         if key == sort.key then
-            local arrow = sort.ascending and L.BEST_SORT_UP or L.BEST_SORT_DOWN
-            heading.text:SetText(HIGHLIGHT_FONT_COLOR:WrapTextInColorCode(heading.label .. " " .. arrow))
+            heading.text:SetText(HIGHLIGHT_FONT_COLOR:WrapTextInColorCode(Columns.SortedText(heading.label, sort.ascending)))
         else
             heading.text:SetText(heading.label)
         end
@@ -833,13 +844,14 @@ function HistoryPanel.Frame()
     return frame
 end
 
-Panel.AddPage({
+pageDef = {
     name = "history",
     icon = "Interface\\Icons\\INV_Scroll_03",
     label = L.TAB_HISTORY,
     width = WIDTH,
     create = Create,
     refresh = function() return Refresh() end,
-})
+}
+Panel.AddPage(pageDef)
 
 History.OnChange(HistoryPanel.Refresh)

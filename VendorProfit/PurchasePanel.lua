@@ -10,11 +10,13 @@ local _, ns = ...
 local VendorProfit = ns.VendorProfit
 local History = VendorProfit.History
 local Panel = VendorProfit.Panel
+local Columns = VendorProfit.Columns
 local L = VendorProfit.L
 
 local PurchasePanel = {}
 VendorProfit.PurchasePanel = PurchasePanel
 
+-- Wider if the columns need it (set in Create).
 local WIDTH = 540
 local PADDING = 16
 local ROW_HEIGHT = 18
@@ -24,15 +26,11 @@ local LIST_TOP = -66
 local VISIBLE_ROWS = 18
 local SCROLLBAR_WIDTH = 24
 local LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
--- Columns: Date and Item from the left; Market now, Total, Each, From from
--- the right.
-local DATE_WIDTH, FROM_WIDTH, MONEY_WIDTH, GAP = 34, 52, 70, 6
-local MARKET_RIGHT = 0
-local TOTAL_RIGHT = MARKET_RIGHT - MONEY_WIDTH - GAP
-local EACH_RIGHT = TOTAL_RIGHT - MONEY_WIDTH - GAP
-local FROM_RIGHT = EACH_RIGHT - MONEY_WIDTH - GAP
-local ITEM_LEFT = DATE_WIDTH + GAP
-local ITEM_WIDTH = LIST_WIDTH + FROM_RIGHT - FROM_WIDTH - GAP - ITEM_LEFT
+-- The columns, by key (Columns.lua), laid out when the tab is built: Date,
+-- Item, From, Each, Total, Now (the cheapest price today).
+local col
+-- This tab's entry in the window (Panel.AddPage), for the width.
+local pageDef
 
 local frame
 local rows = {}
@@ -99,12 +97,12 @@ local function GetRow(slot)
     if row == nil then
         local list = frame.list
         row = {}
-        row.date = Column(list, DATE_WIDTH, "LEFT")
-        row.item = Column(list, ITEM_WIDTH, "LEFT")
-        row.from = Column(list, FROM_WIDTH, "LEFT")
-        row.each = Column(list, MONEY_WIDTH, "RIGHT")
-        row.total = Column(list, MONEY_WIDTH, "RIGHT")
-        row.market = Column(list, MONEY_WIDTH, "RIGHT")
+        row.date = Column(list, col.date.width, "LEFT")
+        row.item = Column(list, col.item.width, "LEFT")
+        row.from = Column(list, col.from.width, "LEFT")
+        row.each = Column(list, col.each.width, "RIGHT")
+        row.total = Column(list, col.total.width, "RIGHT")
+        row.market = Column(list, col.market.width, "RIGHT")
         row.hit = CreateFrame("Frame", nil, list)
         row.hit:SetSize(LIST_WIDTH, ROW_HEIGHT)
         row.hit:EnableMouse(true)
@@ -129,11 +127,11 @@ local function PlaceRow(row, index)
         region:SetPoint(point, list, point, x, top)
     end
     At(row.date, "TOPLEFT", 0)
-    At(row.item, "TOPLEFT", ITEM_LEFT)
-    At(row.from, "TOPRIGHT", FROM_RIGHT)
-    At(row.each, "TOPRIGHT", EACH_RIGHT)
-    At(row.total, "TOPRIGHT", TOTAL_RIGHT)
-    At(row.market, "TOPRIGHT", MARKET_RIGHT)
+    At(row.item, "TOPLEFT", col.item.left)
+    At(row.from, "TOPRIGHT", col.from.right)
+    At(row.each, "TOPRIGHT", col.each.right)
+    At(row.total, "TOPRIGHT", col.total.right)
+    At(row.market, "TOPRIGHT", col.market.right)
     row.hit:ClearAllPoints()
     row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top + 2)
 end
@@ -170,6 +168,17 @@ end
 
 local function Create(page)
     frame = page
+    local samples = Columns.Samples()
+    col, LIST_WIDTH = Columns.Layout(LIST_WIDTH, {
+        { key = "date", heading = L.HISTORY_DATE, samples = samples.date },
+        { key = "item", heading = L.HISTORY_ITEM, fill = true },
+        { key = "from", heading = L.PURCHASES_FROM, samples = { L.HISTORY_VENDOR, L.HISTORY_AUCTION } },
+        { key = "each", heading = L.PURCHASES_EACH, samples = samples.money },
+        { key = "total", heading = L.PURCHASES_TOTAL, samples = samples.total },
+        { key = "market", heading = L.PURCHASES_NOW, samples = samples.money },
+    })
+    WIDTH = LIST_WIDTH + 2 * PADDING + SCROLLBAR_WIDTH
+    pageDef.width = WIDTH
 
     frame.heading = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     frame.heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -32)
@@ -188,12 +197,12 @@ local function Create(page)
         return heading
     end
     frame.headings = {
-        Heading(L.HISTORY_DATE, DATE_WIDTH, "LEFT", "LEFT", 0),
-        Heading(L.HISTORY_ITEM, ITEM_WIDTH, "LEFT", "LEFT", ITEM_LEFT),
-        Heading(L.PURCHASES_FROM, FROM_WIDTH, "LEFT", "RIGHT", FROM_RIGHT),
-        Heading(L.PURCHASES_EACH, MONEY_WIDTH, "RIGHT", "RIGHT", EACH_RIGHT),
-        Heading(L.PURCHASES_TOTAL, MONEY_WIDTH, "RIGHT", "RIGHT", TOTAL_RIGHT),
-        Heading(L.PURCHASES_NOW, MONEY_WIDTH, "RIGHT", "RIGHT", MARKET_RIGHT),
+        Heading(L.HISTORY_DATE, col.date.width, "LEFT", "LEFT", col.date.left),
+        Heading(L.HISTORY_ITEM, col.item.width, "LEFT", "LEFT", col.item.left),
+        Heading(L.PURCHASES_FROM, col.from.width, "LEFT", "RIGHT", col.from.right),
+        Heading(L.PURCHASES_EACH, col.each.width, "RIGHT", "RIGHT", col.each.right),
+        Heading(L.PURCHASES_TOTAL, col.total.width, "RIGHT", "RIGHT", col.total.right),
+        Heading(L.PURCHASES_NOW, col.market.width, "RIGHT", "RIGHT", col.market.right),
     }
 
     frame.scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
@@ -258,13 +267,14 @@ function PurchasePanel.Frame()
     return frame
 end
 
-Panel.AddPage({
+pageDef = {
     name = "purchases",
     icon = "Interface\\Icons\\INV_Misc_Note_01",
     label = L.TAB_PURCHASES,
     width = WIDTH,
     create = Create,
     refresh = function() return Refresh() end,
-})
+}
+Panel.AddPage(pageDef)
 
 History.OnChange(PurchasePanel.Refresh)

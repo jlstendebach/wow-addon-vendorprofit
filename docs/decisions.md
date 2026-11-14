@@ -50,6 +50,18 @@ time" route mode).
   too); saved for the account; `/vprofit minimap` hides or shows it.
 - **Spacing**: the gap between a page's title, its totals line and its table
   is the same everywhere (about 6px between text lines).
+- **Table columns** (Columns.lua) never touch, values or headings. Hand-set
+  widths kept failing: money columns sized before coin icons and "00s" were
+  counted cut "11g 48s 95c" short, and headings got a sort arrow that ran
+  into the next one (patched with wider gaps per column). Now one rule:
+  a column is as wide as its heading with a sort arrow (whether or not it's
+  sorted) and samples of its widest values (money to -999g 99s 99c, totals
+  to -9,999g 99s 99c, ROI 9999%, counts 99,999), measured in the game's own
+  fonts when the tab is built; 12px between columns; the name takes the
+  rest, at least 160, the window widening if needed. Anything wider than
+  its samples is cut with "..." inside its column. Profit History's two
+  views share one width so switching them doesn't resize the window; tabs
+  can differ in width.
 - **Dates** are mm/dd, to save space.
 - **Money**: two-digit silver and copper after a larger coin (5s 07c), and
   a zero silver kept between gold and copper (1g 00s 38c): "1g 38c" was
@@ -94,8 +106,7 @@ time" route mode).
   column (looked offset). Final: a narrow right-aligned "Q" column at the row's
   end, a gray dash for none, sortable. **AH** (your auctions of the item)
   works the same way. Both sort every recipe, priced or not, ties keeping the
-  profit order. The count columns get a 12px gap so a sort arrow doesn't touch
-  the next column.
+  profit order.
 - **Item info not loaded yet** (the first time a profession's list shows):
   each item is asked for once, and the list redraws once per batch, 0.2s
   after items start arriving (`VendorProfit.RedrawWhenLoaded`, used by every
@@ -346,4 +357,5 @@ opens.
   zoom), gold read right after login, and that the game says the world is
   being left before logout reports 0 gold; whether stations are reported for
   professions that aren't open; the owned-auctions counts against the Auctions
-  tab; tooltip placement and the filter menu position feel.
+  tab; tooltip placement and the filter menu position feel; that a hidden
+  font string measures text (Columns.lua) as a shown one does.

@@ -34,6 +34,34 @@ def tooltip_at(owner, region):
             and point[1] == "BOTTOMLEFT" and ev("GameTooltip.point[2] == %s" % owner) and point[3] == "TOPLEFT"
             and point[4] == ev("%s:GetRight() - %s:GetLeft()" % (region, owner)) and point[5] == 0)
 
+# Where a column's text or heading sits across the list, from its anchor:
+# left and right edges, from the list's left edge.
+SPAN = """function __Span(region, page)
+    local p, w = region.__point, region:GetWidth()
+    local left
+    if p[2] == page.list then
+        left = p[1] == "TOPLEFT" and p[4] or page.list:GetWidth() + p[4] - w
+    else
+        left = p[4] - 16 - (p[1] == "TOPRIGHT" and w or 0)
+    end
+    return left, left + w
+end"""
+
+def columns_apart(page, regions):
+    """The regions (left to right) sit inside the list, at least the column
+    gap apart, and their text fits without being cut short."""
+    ev("(function() %s end)()" % SPAN.replace("function __Span", "__Span = function"))
+    spans = [ev("__Span(%s, %s)" % (r, page)) for r in regions]
+    gap = ev("VendorProfit.Columns.GAP")
+    fits = all(ev("__stub.TextWidth(%s:GetText()) <= %s:GetWidth()" % (r, r)) for r in regions)
+    return (gap >= 10 and spans[0][0] >= 0 and spans[-1][1] <= ev(page + ".list:GetWidth()") and fits
+            and all(b[0] - a[1] >= gap for a, b in zip(spans, spans[1:])))
+
+def sorted_headings_fit(headings):
+    """Each heading still fits its column with the sort arrow added."""
+    return all(ev("__stub.TextWidth(VendorProfit.Columns.SortedText(%s.label, %s)) <= %s:GetWidth()" % (h, up, h))
+               for h in headings for up in ("true", "false"))
+
 
 
 
@@ -65,7 +93,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "Auctions.lua", "History.lua", "Gold.lua", "Panel.lua", "MinimapButton.lua", "BestCrafts.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua", "GoldPanel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "Auctions.lua", "History.lua", "Gold.lua", "Panel.lua", "MinimapButton.lua", "Columns.lua", "BestCrafts.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua", "GoldPanel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("the .toc keeps the placeholder; releases and deploys stamp the real version", TOC_VERSION == "@project-version@")
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
@@ -1493,6 +1521,10 @@ run('local r = VendorProfit.HistoryPanel.Row(1); r.hit.__left = 10; r.date.__lef
 check("...moving along as the cursor crosses into another column", tooltip_at("VendorProfit.HistoryPanel.Row(1).hit", "VendorProfit.HistoryPanel.Row(1).item"))
 run('GameTooltip:Hide(); VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnUpdate")(VendorProfit.HistoryPanel.Row(1).hit)')
 check("...and stops following once the tooltip's gone", ev('VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnUpdate")') is None)
+check("Sales columns never touch: values and headings a gap apart, inside the list",
+      columns_apart("VendorProfit.HistoryPanel.Frame()", ["VendorProfit.HistoryPanel.Row(1)." + k for k in ["date", "item", "cost", "sold", "profit"]])
+      and columns_apart("VendorProfit.HistoryPanel.Frame()", ["VendorProfit.HistoryPanel.Frame().headings[%d]" % i for i in range(1, 6)]))
+check("...a big sale's money fits", ev("__stub.TextWidth(VendorProfit.FormatMoney(-99999999)) <= VendorProfit.HistoryPanel.Row(1).profit:GetWidth()"))
 
 # Best Sellers: the three ring sales in one row.
 HF = "VendorProfit.HistoryPanel.Frame()"
@@ -1513,6 +1545,15 @@ check("Best Sellers: one row per item: units sold, average profit each, total, a
       and ev(HF + ".views.items.__lit") and not ev(HF + ".views.sales.__lit"))
 check("...sorted by total profit by default, its heading marked", ev("VendorProfit.HistoryPanel.Sort().key") == "profit"
       and "Arrow-Down" in ev(HF + ".sellerHeadings.profit.text:GetText()") and not ev(HF + ".headings[1]:IsShown()"))
+seller_keys = ["name", "n", "average", "profit", "averageRoi", "roi"]
+check("Best Sellers columns never touch: values and headings a gap apart, inside the list",
+      columns_apart(HF, ["VendorProfit.HistoryPanel.SellerRow(1)." + k for k in ["item"] + seller_keys[1:]])
+      and columns_apart(HF, [HF + ".sellerHeadings." + k for k in seller_keys]))
+check("...headings fit with their sort arrows", sorted_headings_fit([HF + ".sellerHeadings." + k for k in seller_keys]))
+check("...a total in the thousands of gold fits",
+      ev("__stub.TextWidth(VendorProfit.FormatMoney(-99999999)) <= VendorProfit.HistoryPanel.SellerRow(1).profit:GetWidth()"))
+check("...Sales and Best Sellers share the list's width, so the window doesn't jump between them",
+      ev(HF + ".list:GetWidth()") + 2 * 16 + 24 == ev("VendorProfitPanel:GetWidth()"))
 run('VendorProfit.HistoryPanel.SellerRow(1).hit:GetScript("OnEnter")()')
 tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
 check("hover: how many in how many sales, the averages, vendor and auction counts, when it last sold",
@@ -1664,7 +1705,11 @@ check("purchases listed newest first: date, item, from, each, total, now", len(b
       and "|t Copper Bar | Vendor | |cffffffff1s 50c|r | |cffffffff1s 50c|r | " in bought[1]
       and "|t Copper Bar | Auction | |cffffffff1s|r | |cffffffff1s|r | " in bought[2])
 check("...with today's cheapest price to compare", bought[2].endswith(ev('VendorProfit.FormatMoney(math.min(150, %d))' % 120)))
-check("window as wide as the history", ev("VendorProfitPanel:GetWidth()") == 540 and ev("VendorProfitPanel.tabs.purchases.label") == "Purchase History")
+check("window as wide as the columns need", ev("VendorProfitPanel:GetWidth()") >= 540 and ev("VendorProfitPanel.tabs.purchases.label") == "Purchase History")
+PF = "VendorProfit.PurchasePanel.Frame()"
+check("Purchase columns never touch: values and headings a gap apart, inside the list",
+      columns_apart(PF, ["VendorProfit.PurchasePanel.Row(1)." + k for k in ["date", "item", "from", "each", "total", "market"]])
+      and columns_apart(PF, [PF + ".headings[%d]" % i for i in range(1, 7)]))
 run('local r = VendorProfit.PurchasePanel.Row(1); r.hit.__left = 10; r.date.__left = 10; r.item.__left = 80; r.from.__left = 300; '
     'r.each.__left = 340; r.total.__left = 400; r.market.__left = 460; __stub.cursorX = 120')
 run('VendorProfit.PurchasePanel.Row(1).hit:GetScript("OnEnter")()')
@@ -2024,7 +2069,20 @@ check("the sort is saved", ev("VendorProfitCharDB.bestSort.key") == "roi")
 run(B + ".profitHeading:Click()")
 check("no investment where a reagent has no price; shown where only the sale price is missing",
       ev("VendorProfit.BestPanel.Row(4).investment:GetText()") == "" and ev("VendorProfit.BestPanel.Row(5).investment:GetText()") != "")
-check("Best Crafts is wider than the Shopping List, for the columns", ev("VendorProfitPanel:GetWidth()") == 520)
+check("Best Crafts is wider than the Shopping List, for the columns", ev("VendorProfitPanel:GetWidth()") >= 520
+      and ev("VendorProfitPanel:GetWidth()") == ev("VendorProfit.BestPanel.Frame().list:GetWidth()") + 2 * 16 + 24)
+BF = "VendorProfit.BestPanel.Frame()"
+best_keys = ["name", "investment", "profit", "roi", "auctions", "queued"]
+check("Best Crafts columns never touch: values and headings a gap apart, inside the list",
+      columns_apart(BF, ["VendorProfit.BestPanel.Row(1)." + k for k in ["left", "investment", "right", "roi", "auctions", "queued"]])
+      and columns_apart(BF, [BF + ".%sHeading" % k for k in best_keys]))
+check("...headings fit with their sort arrows", sorted_headings_fit([BF + ".%sHeading" % k for k in best_keys]))
+check("...the widest money, ROI and counts fit their columns",
+      ev("__stub.TextWidth(VendorProfit.FormatMoney(-9999999)) <= VendorProfit.BestPanel.Row(1).investment:GetWidth()")
+      and ev("__stub.TextWidth(VendorProfit.FormatROI(99.99)) <= VendorProfit.BestPanel.Row(1).roi:GetWidth()")
+      and ev("__stub.TextWidth('999') <= VendorProfit.BestPanel.Row(1).auctions:GetWidth()"))
+check("...the + and - buttons right of Q, a gap away",
+      ev("VendorProfit.BestPanel.Row(1).queued.__point[4]") <= -(2 * 22 + 4 + ev("VendorProfit.Columns.GAP")))
 # Search: filters by name as you type, keeping each recipe's place.
 run(B + '.search:Type("bronze")')
 check("typing filters the list at once: only names containing it", [l.split(" | ")[0] for l in best()]
