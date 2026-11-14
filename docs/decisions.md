@@ -79,6 +79,20 @@ time" route mode).
 
 ## Best Crafts
 
+- **Professions button** (left of Scan): made to be clicked again and
+  again, opening each of your professions in turn and closing the window
+  with the last click, so every profession's recipes and skill-up colors
+  are saved. Opening goes through the same secure cover as the Shopping
+  List's Open button (an addon can only open a profession by casting its
+  spell from a secure button); closing is C_TradeSkillUI.CloseTradeSkill,
+  which needs no secure button (TradeSkillMaster closes it the same way on
+  Forever). After each click it waits until that profession is open *and
+  saved* before the next click counts, so fast clicking can't skip one
+  (3s, then the same one can be tried again). The open profession is
+  skipped (its spell would close it). Professions come from GetProfessions,
+  without the skill lines that have no window (Herbalism, Skinning,
+  Fishing, Archaeology). A 1s rest after closing, so the click after Close
+  doesn't open the first profession again.
 - **Every profession, window closed**: Best Crafts lists the saved recipes of
   every profession you've opened (each is saved when its window opens), ranked
   together: gold is gold whichever profession made it, and the cross-profession

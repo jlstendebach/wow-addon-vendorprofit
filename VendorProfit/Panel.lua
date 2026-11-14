@@ -988,8 +988,10 @@ local function Refresh()
         pages[def.name]:SetShown(active)
         frame.tabs[def.name]:SetChecked(active)
     end
-    if activeTab ~= "shopping" then
-        OpenButton.Hide()
+    -- Off the Shopping List: not over its Craft button. (Best Crafts has its
+    -- own button the cover goes over.)
+    if activeTab ~= "shopping" and craftCover then
+        OpenButton.Uncover(craftCover.button)
     end
     for _, def in ipairs(pageDefs) do
         if def.name == activeTab then

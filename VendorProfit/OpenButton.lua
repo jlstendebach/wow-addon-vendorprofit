@@ -58,7 +58,7 @@ local function Create()
     button:SetHighlightTexture("Interface\\Buttons\\UI-Panel-Button-Highlight", "ADD")
     button:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetText(string.format(L.OPEN_PROFESSION_HELP, self.profession or ""), 1, 1, 1, 1, true)
+        GameTooltip:SetText(self.tooltip or string.format(L.OPEN_PROFESSION_HELP, self.profession or ""), 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
     button:SetScript("OnLeave", function(self)
@@ -72,6 +72,9 @@ local function Create()
     -- (or a few seconds pass), and the panel checks back as it loads.
     button:SetScript("PostClick", function(self)
         opening = { profession = self.profession, expires = GetTime() + OPENING_TIMEOUT }
+        if self.onClick then
+            self.onClick()
+        end
         if not InCombatLockdown() then
             self:Hide()
         end
@@ -124,9 +127,10 @@ local function Place(over)
     return true
 end
 
--- Lays the secure button over a button so clicking it opens profession.
+-- Lays the secure button over a button so clicking it opens profession,
+-- then calls onClick (if given). tooltip replaces its usual "Opens ...".
 -- Does nothing in combat. Returns true if it's in place.
-function OpenButton.Cover(over, profession)
+function OpenButton.Cover(over, profession, onClick, tooltip)
     if InCombatLockdown() then
         return false
     end
@@ -140,7 +144,7 @@ function OpenButton.Cover(over, profession)
     end
     button:SetAttribute("type", "spell")
     button:SetAttribute("spell", spell)
-    button.profession = profession
+    button.profession, button.onClick, button.tooltip = profession, onClick, tooltip
     button:Show()
     return true
 end
@@ -159,6 +163,13 @@ end
 function OpenButton.Hide()
     if button and not InCombatLockdown() then
         button:Hide()
+    end
+end
+
+-- Hides it if it's over over (and leaves it alone over another button).
+function OpenButton.Uncover(over)
+    if target == over then
+        OpenButton.Hide()
     end
 end
 

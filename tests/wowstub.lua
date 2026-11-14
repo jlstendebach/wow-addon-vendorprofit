@@ -478,6 +478,20 @@ C_TradeSkillUI = {
     IsNPCCrafting = function() return stub.tradeSkill.npc end,
 }
 
+C_TradeSkillUI.CloseTradeSkill = function() stub.CloseProfession() end
+
+-- The character's professions, by the game's slots (1 and 2 the main ones,
+-- 4 Fishing, 5 Cooking): { name, skillLine }.
+stub.playerProfessions = {}
+function GetProfessions()
+    local p = stub.playerProfessions
+    return p[1] and 1, p[2] and 2, p[3] and 3, p[4] and 4, p[5] and 5
+end
+function GetProfessionInfo(index)
+    local p = stub.playerProfessions[index]
+    return p.name, "icon", 1, 300, 0, 0, p.skillLine
+end
+
 -- Opens a profession window with these recipes and lets the addon save them.
 function stub.OpenProfession(id, name, recipes)
     stub.profession = { professionID = id, professionName = name }

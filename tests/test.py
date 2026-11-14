@@ -93,7 +93,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "Auctions.lua", "History.lua", "Gold.lua", "Panel.lua", "MinimapButton.lua", "Columns.lua", "BestCrafts.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua", "GoldPanel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "Auctions.lua", "History.lua", "Gold.lua", "Panel.lua", "MinimapButton.lua", "Columns.lua", "BestCrafts.lua", "ProfessionCycle.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua", "GoldPanel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("the .toc keeps the placeholder; releases and deploys stamp the real version", TOC_VERSION == "@project-version@")
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
@@ -2452,6 +2452,77 @@ run('VendorProfit.Panel.Show("best")')
 check("no profession opened yet: says to open each once", "Open each of your professions once"
       in ev("VendorProfit.BestPanel.Frame().status:GetText()"))
 check("no errors listing saved professions", ev("#__stub.errors") == 0)
+
+# --- Best Crafts' Professions button: opens each profession in turn ---------------
+run, ev = route_client()
+run('__stub.playerProfessions = { { name = "Blacksmithing", skillLine = 164 }, { name = "Mining", skillLine = 186 }, '
+    '[4] = { name = "Fishing", skillLine = 356 }, [5] = { name = "Cooking", skillLine = 185 } }')
+run('VendorProfit.Panel.Show("best")')
+PB = "VendorProfit.BestPanel.Frame().professions"
+OPEN = "VendorProfitOpenProfessionButton"
+COVERED = OPEN + " ~= nil and " + OPEN + ":IsShown()"
+PHOVER = '__stub.mouseFocus = %s; __stub.mouseFocus.__scripts.OnEnter(__stub.mouseFocus)' % PB
+check("your professions with a window, in the game's order: no Fishing (or Herbalism, Skinning)",
+      [p.name for p in ev("VendorProfit.Recipes.PlayerProfessions()").values()] == ["Blacksmithing", "Mining", "Cooking"])
+check("a Professions button left of Scan, in the page's style",
+      ev(PB + ".__text") == "Professions" and ev(PB + ":IsEnabled()")
+      and ev(PB + ".__point[1]") == "RIGHT" and ev(PB + ".__point[2] == VendorProfit.BestPanel.Frame().scan")
+      and ev(PB + ".__point[3]") == "LEFT" and ev(PB + ".__point[4]") == -4)
+check("...saying what it does: Blacksmithing first", "Opens Blacksmithing (1 of 3)" in ev(PB + ".tooltip") and not ev(COVERED))
+run(PHOVER)
+check("mouse on it: the secure cover over it casts Blacksmithing, with the button's tooltip",
+      ev(COVERED) and ev(OPEN + ':GetAttribute("spell")') == "Blacksmithing" and ev(OPEN + ".tooltip") == ev(PB + ".tooltip"))
+run(OPEN + ':Click()')
+check("clicked: waits for it to open, the cover gone", ev(PB + ".__text") == "Opening..." and not ev(PB + ":IsEnabled()")
+      and not ev(COVERED) and ev(PB + ".tooltip") == "Waiting for Blacksmithing to open.")
+run(PHOVER)
+run(PB + ':Click()')
+check("clicking on while it opens does nothing: nothing skipped", not ev(COVERED) and ev(PB + ".__text") == "Opening...")
+run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
+check("Blacksmithing open and saved: the next click opens Mining (with Smelting), the mouse still on it",
+      ev(PB + ".__text") == "Next 2/3" and ev(COVERED) and ev(OPEN + ':GetAttribute("spell")') == "Smelting"
+      and ev("VendorProfitCharDB.professions[164] ~= nil"))
+run(OPEN + ':Click()')
+run('__stub.OpenProfession(186, "Mining", %s)' % MINING)
+check("...then Cooking", ev(PB + ".__text") == "Next 3/3" and ev(OPEN + ':GetAttribute("spell")') == "Cooking")
+run(OPEN + ':Click()')
+run('__stub.OpenProfession(185, "Cooking", {})')
+check("all open and saved: the last click closes the window, no cover",
+      ev(PB + ".__text") == "Close" and ev(PB + ":IsEnabled()") and not ev(COVERED) and ev("ProfessionsFrame:IsShown()"))
+run(PB + ':Click()')
+check("closed, and the button rests a second, so a click too many doesn't start again",
+      not ev("ProfessionsFrame:IsShown()") and ev(PB + ".__text") == "Professions" and not ev(PB + ":IsEnabled()")
+      and ev(PB + ".tooltip") == "All saved. Ready again in a moment.")
+run(PB + ':Click()'); run(PHOVER)
+check("...clicks then do nothing", not ev("ProfessionsFrame:IsShown()") and not ev(COVERED))
+run('__stub.Advance(1.1)')
+check("...then it's ready again, from the first", ev(PB + ":IsEnabled()") and "Opens Blacksmithing (1 of 3)" in ev(PB + ".tooltip"))
+# Started with a profession already open: it's saved already, so skipped.
+run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
+check("a profession already open is skipped: casting it again would close it",
+      "Opens Mining (1 of 2)" in ev(PB + ".tooltip") and ev(OPEN + ':GetAttribute("spell")') == "Smelting")
+run(OPEN + ':Click()')
+run('__stub.Advance(3.2)')
+check("didn't open within a few seconds: the same click again", ev(PB + ".__text") == "Next 1/2" and ev(PB + ":IsEnabled()")
+      and "Opens Mining (1 of 2)" in ev(PB + ".tooltip"))
+run('__stub.CloseProfession()')
+check("the window closed by hand part way through: it starts over", ev(PB + ".__text") == "Professions"
+      and "Opens Blacksmithing (1 of 3)" in ev(PB + ".tooltip"))
+run('__stub.mouseFocus = nil; ' + OPEN + '.__scripts.OnLeave(' + OPEN + ')')
+run('__stub.inCombat = true; __stub.Fire("PLAYER_REGEN_DISABLED"); VendorProfit.Panel.Refresh()')
+run(PHOVER)
+check("in combat: off, saying so, no cover", not ev(PB + ":IsEnabled()") and ev(PB + ".tooltip") == "Open your professions after combat."
+      and not ev(COVERED))
+run('__stub.inCombat = false; __stub.Fire("PLAYER_REGEN_ENABLED")')
+check("after combat: back on, covered with the mouse on it", ev(PB + ":IsEnabled()") and ev(COVERED))
+run('VendorProfit.Panel.Show("shopping")')
+check("off Best Crafts: the cover over its button goes once out of view",
+      run('VendorProfit.OpenButton.Follow()') is None and not ev(COVERED))
+run('__stub.playerProfessions = { [4] = { name = "Fishing", skillLine = 356 } }; VendorProfit.Panel.Show("best")')
+check("no profession with a window: off, saying so", not ev(PB + ":IsEnabled()")
+      and ev(PB + ".tooltip") == "None of your professions has a window to open.")
+check("no errors from the Professions button", ev("#__stub.errors") == 0)
+
 
 # --- Items the game hasn't sent yet: asked for once, redrawn once per batch ---------
 # Each arrival used to redraw Best Crafts, and each redraw asked again for every

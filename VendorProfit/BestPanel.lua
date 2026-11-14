@@ -20,6 +20,8 @@ local ADDON_NAME, ns = ...
 local VendorProfit = ns.VendorProfit
 local BestCrafts = VendorProfit.BestCrafts
 local Recipes = VendorProfit.Recipes
+local OpenButton = VendorProfit.OpenButton
+local ProfessionCycle = VendorProfit.ProfessionCycle
 local Order = VendorProfit.Order
 local Auctions = VendorProfit.Auctions
 local L = VendorProfit.L
@@ -535,6 +537,29 @@ local function Create(page)
     end)
     frame.scan:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
+    -- Professions: click it again and again to open each of your
+    -- professions in turn, saving their recipes, then close the window
+    -- (ProfessionCycle.lua). Opening goes through the secure cover, laid
+    -- over it while the mouse is on it (OpenButton.lua).
+    frame.professions = SmallButton(frame, L.PROFESSIONS_BUTTON, 90)
+    frame.professions:SetPoint("RIGHT", frame.scan, "LEFT", -4, 0)
+    frame.professions:SetMotionScriptsWhileDisabled(true)
+    frame.professions:SetScript("OnClick", function()
+        if ProfessionCycle.State().action == "close" then
+            ProfessionCycle.Close()
+        end
+    end)
+    frame.professions:SetScript("OnEnter", function(self)
+        local state = ProfessionCycle.State()
+        if state.action == "open" and not InCombatLockdown() then
+            OpenButton.Cover(self, state.entry.name, function() ProfessionCycle.Opened(state.entry) end, self.tooltip)
+        end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(self.tooltip or "", 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    frame.professions:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
     -- Search: filters the list by name as you type. The game's own search
     -- box (magnifying glass, "Search" placeholder, clear button) where it
     -- exists, a plain input box otherwise.
@@ -713,6 +738,36 @@ local function Refresh()
         scan:SetText(L.SCAN)
         scan:SetEnabled(#keys > 0 and BestCrafts.CanScan())
         scan.tooltip = BestCrafts.CanScan() and L.BEST_SCAN_HELP or L.BEST_SCAN_OPEN_AH
+    end
+
+    -- Professions button: what the next click does.
+    local professions, state = frame.professions, ProfessionCycle.State()
+    local text, enabled, tooltip = L.PROFESSIONS_BUTTON, false, nil
+    if state.action == "open" then
+        if state.started then
+            text = string.format(L.PROFESSIONS_NEXT, state.index, state.count)
+        end
+        enabled = not InCombatLockdown()
+        tooltip = enabled and string.format(L.PROFESSIONS_OPEN_HELP, state.entry.name, state.index, state.count)
+            or L.PROFESSIONS_COMBAT
+    elseif state.action == "wait" then
+        text, tooltip = L.OPENING_LABEL, string.format(L.OPENING_HELP, state.entry.name)
+    elseif state.action == "close" then
+        text, enabled, tooltip = L.PROFESSIONS_CLOSE, true, L.PROFESSIONS_CLOSE_HELP
+    elseif state.action == "rest" then
+        tooltip = L.PROFESSIONS_REST
+    else
+        tooltip = L.PROFESSIONS_NONE
+    end
+    professions:SetText(text)
+    professions:SetEnabled(enabled)
+    professions.tooltip = tooltip
+    -- The mouse on it as it becomes ready to open the next one: cover it
+    -- now, as its OnEnter would.
+    if state.action == "open" and enabled and OpenButton.HasMouse(professions) then
+        OpenButton.Cover(professions, state.entry.name, function() ProfessionCycle.Opened(state.entry) end, tooltip)
+    else
+        OpenButton.Uncover(professions)
     end
 
     -- Headings: the sorted one in white, with an arrow for its direction.

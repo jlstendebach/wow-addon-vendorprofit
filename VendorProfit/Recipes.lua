@@ -33,6 +33,7 @@ Recipes.SCAN_DELAY = 0.5
 local db                -- VendorProfitCharDB, once loaded
 local byItem = {}       -- itemID -> { recipe, ... }: saved fields plus recipeID, profession
 local byRecipe = {}     -- recipeID -> the same entry
+local lastScan          -- { key, name, time } of the last profession saved
 local NONE = {}
 
 local function RebuildIndex()
@@ -313,6 +314,7 @@ function Recipes.Scan()
         name = info.professionName or tostring(key),
         recipes = recipes,
     }
+    lastScan = { key = key, name = db.professions[key].name, time = GetTime() }
     RebuildIndex()
     VendorProfit.Refresh()
     -- Best Crafts lists every saved recipe (BestPanel.lua loads later).
@@ -320,6 +322,37 @@ function Recipes.Scan()
         VendorProfit.BestPanel.Refresh()
     end
     return true
+end
+
+-- The last profession saved: its key, name, and when (GetTime), or nil.
+function Recipes.LastScan()
+    return lastScan
+end
+
+-- Skill lines with no profession window to open: Herbalism, Skinning,
+-- Fishing, Archaeology.
+local NO_WINDOW = { [182] = true, [393] = true, [356] = true, [794] = true }
+
+-- This character's professions that open a window (so their recipes can be
+-- saved), in the game's order: the two main ones, then the secondary ones.
+-- { key (skill line, as the window reports it), name }.
+function Recipes.PlayerProfessions()
+    local list = {}
+    if GetProfessions == nil or GetProfessionInfo == nil then
+        return list
+    end
+    -- Holes for professions not learned, so not ipairs.
+    local slots = { GetProfessions() }
+    for slot = 1, 5 do
+        local index = slots[slot]
+        if index then
+            local name, _, _, _, _, _, skillLine = GetProfessionInfo(index)
+            if name and not NO_WINDOW[skillLine] then
+                list[#list + 1] = { key = skillLine or name, name = name }
+            end
+        end
+    end
+    return list
 end
 
 local scanQueued = false
