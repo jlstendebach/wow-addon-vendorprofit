@@ -882,6 +882,11 @@ local Place   -- puts the window where it belongs (below)
 
 local function Create()
     frame = CreateFrame("Frame", "VendorProfitPanel", UIParent, "ButtonFrameTemplate")
+    -- Escape closes it along with the game's other windows, as they do. The
+    -- game hides it directly, which works in combat (it isn't protected).
+    if UISpecialFrames then
+        table.insert(UISpecialFrames, "VendorProfitPanel")
+    end
     -- Above the professions window, auction house, bank and vendor it sits
     -- beside, and brought to the front when clicked. (The secure Open button
     -- over Craft is a strata higher still.)

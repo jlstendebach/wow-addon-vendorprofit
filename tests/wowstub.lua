@@ -30,6 +30,14 @@ function CreateFrame(_, name, parent, template)
     end
     return f
 end
+-- Windows Escape closes: the game hides each one listed (CloseSpecialWindows).
+UISpecialFrames = {}
+function stub.PressEscape()
+    for _, name in ipairs(UISpecialFrames) do
+        local f = _G[name]
+        if f and f:IsShown() then f:Hide() end
+    end
+end
 -- Like the modern client: HideUIPanel does nothing in combat.
 function HideUIPanel(f)
     if not stub.inCombat then f:Hide() end

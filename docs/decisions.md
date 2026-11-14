@@ -20,7 +20,9 @@ time" route mode).
   the professions window and auction house. A minimum height keeps every side
   tab on the window.
 - **Opens and closes only when you do**: `/vprofit` (and its tab commands),
-  the title-bar button, its close button. It used to open by itself at the
+  the title-bar button, its close button, Escape (it's in UISpecialFrames,
+  so Escape closes it along with the game's other windows, as they close;
+  in combat too). It used to open by itself at the
   auction house, bank and a vendor with an order, and on Queue (switching to
   the Shopping List); now Queue just says so in chat.
 - **Closes in combat**: the window template's close button closes through

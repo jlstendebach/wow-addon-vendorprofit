@@ -2585,6 +2585,14 @@ run, ev = client(CLOCK + '__stub.money = 200000; VendorProfitDB = { gold = { ["J
 run('VendorProfit.Panel.Show("gold")')
 check("the zero line reads 0g on a gold axis", list(ev(GP + ".YLabels()").values())[0] == "0g")
 
+# Escape closes it, as the game's own windows close, in combat too.
+run('VendorProfit.Panel.Show("gold")')
+check("Escape closes the window", ev("VendorProfit.Panel.IsShown()") and run('__stub.PressEscape()') is None
+      and not ev("VendorProfit.Panel.IsShown()"))
+run('VendorProfit.Panel.Show("gold"); __stub.inCombat = true; __stub.PressEscape(); __stub.inCombat = false')
+check("...in combat too", not ev("VendorProfit.Panel.IsShown()"))
+check("...registered once, however often it opens", ev("#UISpecialFrames") == 1)
+run('VendorProfit.Panel.Show("gold")')
 # Closing the window in combat: the template's close button can't, ours can.
 run('__stub.inCombat = true; VendorProfitPanel.CloseButton:Click()')
 check("the close button closes the window in combat", not ev("VendorProfit.Panel.IsShown()"))
