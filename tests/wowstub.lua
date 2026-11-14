@@ -38,6 +38,8 @@ function stub.PressEscape()
         if f and f:IsShown() then f:Hide() end
     end
 end
+-- The frame under the mouse: tests set stub.mouseFocus.
+function GetMouseFoci() return { stub.mouseFocus } end
 -- Like the modern client: HideUIPanel does nothing in combat.
 function HideUIPanel(f)
     if not stub.inCombat then f:Hide() end

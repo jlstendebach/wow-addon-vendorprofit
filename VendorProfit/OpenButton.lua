@@ -9,6 +9,15 @@
 -- moving it in combat. Instead this is a separate, invisible secure button
 -- laid exactly over the Craft button. It's only placed out of combat, and
 -- hidden as combat starts, so the panel itself stays unprotected.
+--
+-- It's only there while the mouse is on the Craft button (the button's
+-- OnEnter puts it there, and it goes when the mouse leaves it), in a strata
+-- above every window. Sat in the panel's own strata, just above the button,
+-- it ended up under it once the panel was raised to the front, and clicks
+-- hit the plain Craft button instead. Above everything but only under the
+-- mouse, it's always on top, and still can't open a profession through
+-- another window over the panel: the mouse never reaches the Craft button
+-- there, so it never appears.
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -44,6 +53,7 @@ end
 
 local function Create()
     button = CreateFrame("Button", "VendorProfitOpenProfessionButton", UIParent, "SecureActionButtonTemplate")
+    button:SetFrameStrata("DIALOG")
     button:RegisterForClicks(GetCVarBool("ActionButtonUseKeyDown") and "LeftButtonDown" or "LeftButtonUp")
     button:SetHighlightTexture("Interface\\Buttons\\UI-Panel-Button-Highlight", "ADD")
     button:SetScript("OnEnter", function(self)
@@ -51,7 +61,12 @@ local function Create()
         GameTooltip:SetText(string.format(L.OPEN_PROFESSION_HELP, self.profession or ""), 1, 1, 1, 1, true)
         GameTooltip:Show()
     end)
-    button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    button:SetScript("OnLeave", function(self)
+        GameTooltip:Hide()
+        if not InCombatLockdown() then
+            self:Hide()
+        end
+    end)
     -- Clicked: the profession is on its way. Casting its spell again would
     -- close the window it's opening, so the button goes away until it's open
     -- (or a few seconds pass), and the panel checks back as it loads.
@@ -96,12 +111,6 @@ local function Place(over)
     if left == nil or bottom == nil then
         return false
     end
-    -- Just above the button, in the panel's strata, not on top of
-    -- everything: another window brought in front of the panel covers it
-    -- too, so a click there can't open a profession through that window.
-    -- Kept in step as windows are clicked to the front (Follow).
-    button:SetFrameStrata(over:GetFrameStrata())
-    button:SetFrameLevel(over:GetFrameLevel() + 2)
     local scale = over:GetEffectiveScale() / UIParent:GetEffectiveScale()
     local width, height = over:GetWidth() * scale, over:GetHeight() * scale
     left, bottom = left * scale, bottom * scale
@@ -134,6 +143,17 @@ function OpenButton.Cover(over, profession)
     button.profession = profession
     button:Show()
     return true
+end
+
+-- Whether the mouse is on over: on it, or on the cover laid over it.
+function OpenButton.HasMouse(over)
+    local focus
+    if GetMouseFoci then
+        focus = GetMouseFoci()[1]
+    elseif GetMouseFocus then
+        focus = GetMouseFocus()
+    end
+    return focus ~= nil and (focus == over or (focus == button and target == over and button:IsShown()))
 end
 
 function OpenButton.Hide()

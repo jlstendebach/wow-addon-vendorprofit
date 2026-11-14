@@ -22,8 +22,7 @@ time" route mode).
   most addons') and toplevel, raised when it opens. Clicking it brings it to
   the front; clicking another window (bags, the auction house) brings that
   one in front of it. It used to be HIGH strata, above everything however
-  you clicked. The secure Open button over Craft follows: same strata, just
-  above the Craft button, so a window in front of the panel covers it too.
+  you clicked. (The secure Open button over Craft: see Crafting.)
 - **Opens and closes only when you do**: `/vprofit` (and its tab commands),
   the title-bar button, its close button, Escape (it's in UISpecialFrames,
   so Escape closes it along with the game's other windows, as they close;
@@ -207,10 +206,17 @@ opens.
 
 - **Opening another profession** needs a secure button. It's a separate
   invisible overlay laid over the Craft button at screen coordinates, never
-  anchored to the panel (that would make the panel protected in combat), in
-  the panel's strata just above the Craft button (kept in step as windows
-  are clicked to the front). It hides in combat and after a click (until the
-  profession opens or 3s pass).
+  anchored to the panel (that would make the panel protected in combat). It's
+  there only while the mouse is on the Craft button, in DIALOG strata above
+  every window. It used to sit in the panel's strata, just above the Craft
+  button by frame level, so a window in front of the panel would cover it:
+  but once the panel was raised to the front (on opening, or a click), it
+  ended up under the Craft button, and clicks hit the plain button and
+  opened nothing. Above everything but only under the mouse, it's on top
+  however the window was raised, and it can't open a profession through
+  another window over the panel, since the mouse never reaches the Craft
+  button there. It hides in combat and after a click (until the profession
+  opens or 3s pass).
 - **It used to get left behind** when the window moved without redrawing
   (a docked window moving, back when it docked; height change while
   centered; alt-tab display
