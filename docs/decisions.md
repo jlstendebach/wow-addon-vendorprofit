@@ -50,6 +50,23 @@ time" route mode).
 
 ## Best Crafts
 
+- **Every profession, window closed**: Best Crafts lists the saved recipes of
+  every profession you've opened (each is saved when its window opens), ranked
+  together: gold is gold whichever profession made it, and the cross-profession
+  view is the useful one. A one-profession picker was considered and dropped
+  for that. The Filter menu has a Professions section (all ticked at first,
+  unticked ones count as filters, the red X ticks them all again); the title
+  names the profession when only one is shown. Opening it from a profession's
+  title-bar button leaves the ticks alone: the window doesn't change things by
+  itself. Live prices are per item; a scan "covers" the professions it looked
+  up, for the "Live prices from" line. Ranking 450 recipes takes about 11 ms
+  in the test harness, so the ranking isn't cached.
+- **Skill-up colors** are only reported for the open profession, so each
+  recipe's color is saved when its window is open, and shown for the others
+  as of their last opening (possibly out of date). Josh wanted that said: a
+  note in the Filter menu under the colors, and a line in a recipe's tooltip
+  when its color is a saved one.
+
 - **Columns**: Recipe, Investment, Profit, ROI, AH, Q, then **-** and **+**.
   No rank numbers (they took space and meant little once you sort and
   filter). Clicking a recipe's name shows it in the professions window (only

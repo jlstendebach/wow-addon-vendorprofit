@@ -1937,6 +1937,9 @@ check("Vendor Profit button in the professions title bar, left of the close butt
       ev(TITLEBTN + ".__text") == "Vendor Profit" and ev(TITLEBTN + ".__point[2] == ProfessionsFrame")
       and ev(TITLEBTN + ".__point[1]") == "TOPRIGHT" and ev(TITLEBTN + ".__point[4]") == -111)
 check("...above the window's border art", ev(TITLEBTN + ":GetFrameLevel()") >= 502)
+# Mining is saved too (routes smelt bars with it), so every profession shows
+# at first; Blacksmithing alone, from here, is Mining unticked in Filter.
+run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
 run(TITLEBTN + ":Click()")
 check("opens the Vendor Profit window on its Best Crafts tab",
       ev("VendorProfit.Panel.IsShown()") and ev("VendorProfit.Panel.ActiveTab()") == "best"
@@ -2041,14 +2044,19 @@ def menu():
     items = [(i.text, i.title or False) for i in ev("__stub.Menu(nil)").values()]
     run('__stub.menu:Hide(); __stub.Advance(1)')
     return items
-check("a Filter button in the page's style (not the game's dropdown) opens the menu: profitable only, then skill-up colors",
-      ev(F + ".__text") == "Filter" and [t for t, _ in menu()] ==
-      ["Profitable only", "Skill up", "|cffff8040Guaranteed|r", "|cffffff00Likely|r", "|cff40bf40Unlikely|r"])
+check("a Filter button in the page's style (not the game's dropdown) opens the menu: profitable only, skill-up colors, professions",
+      ev(F + ".__text") == "Filter (1)" and [t for t, _ in menu()] ==
+      ["Profitable only", "Skill up", "|cffff8040Guaranteed|r", "|cffffff00Likely|r", "|cff40bf40Unlikely|r",
+       "|cff808080Colors are live for the open profession, and as of the last opening for the others.|r",
+       "Professions", "Blacksmithing", "Mining"])
+run(F + ':Click()')
+check("...the shown professions ticked: Mining was unticked", [i.checked() for i in ev("__stub.Menu(nil)").values() if i.checked][-2:] == [True, False])
+run('__stub.menu:Hide(); __stub.Advance(1)')
 check("names in their skill-up color, as the professions window shows them",
       "|cffff8040Rough Bronze Cuirass|r" in best()[0] and "|cffffff00Rough Bronze Shoulders|r" in best()[1])
 check("no skill up: left white, not gray", "|Ticon2902:0|t Plain Ring |" in best()[4])
-check("the reset X stays, grayed out, while no filter is on", ev(B + ".filterReset:IsShown()")
-      and not ev(B + ".filterReset:IsEnabled()") and ev(B + ".filterReset.icon.__desaturated"))
+check("an unticked profession counts as a filter: the reset X is on", ev(B + ".filterReset:IsShown()")
+      and ev(B + ".filterReset:IsEnabled()") and not ev(B + ".filterReset.icon.__desaturated"))
 run(F + ':Click()')
 check("the menu opens under the button, not at the mouse", ev("__stub.menu.__point[1]") == "TOPLEFT"
       and ev("__stub.menu.__point[2] == " + F) and ev("__stub.menu.__point[3]") == "BOTTOMLEFT")
@@ -2068,25 +2076,31 @@ check("profitable only: the losing vest and the unpriced ones go, places kept",
 run(F + ':Click()')
 check("the checkbox shows it's on, and it's saved", ev("__stub.Menu(nil)[1].checked()") and ev("VendorProfitCharDB.bestFilters.profitable"))
 run('__stub.menu:Hide(); __stub.Advance(1)')
-check("the button says how many are on, and the reset X is on", ev(F + ".__text") == "Filter (1)" and ev(B + ".filterReset:IsEnabled()"))
+check("the button says how many are on, and the reset X is on", ev(F + ".__text") == "Filter (2)" and ev(B + ".filterReset:IsEnabled()"))
 toggle(1)
 toggle(3)
 check("guaranteed only: just the orange recipe", len(best()) == 1 and "Rough Bronze Cuirass" in best()[0])
 toggle(5)
 check("guaranteed or unlikely: orange and green", [("Cuirass" in l, "Vest" in l) for l in best()] == [(True, False), (False, True)])
 run(B + '.filterReset:Click()')
-check("the red X resets them all, and grays out", len(best()) == 5 and ev("VendorProfitCharDB.bestFilters") is None
+check("the red X resets them all, every profession ticked again, and grays out", len(best()) == 5 + 3
+      and ev("VendorProfitCharDB.bestFilters") is None
       and not ev(B + ".filterReset:IsEnabled()") and ev(F + ".__text") == "Filter")
+check("...two professions shown: a plain title", ev(B + ".heading:GetText()") == "Best Crafts")
+def reset_filters():
+    run(B + '.filterReset:Click()')
+    run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
+run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
 toggle(1); toggle(5); run(B + '.search:Type("cuirass")')
 check("nothing passes: says so", best() == [] and 'No recipes match "cuirass".' in ev(B + ".status:GetText()"))
 run(B + '.search:Type("")')
 check("...and with no search text, that it's the filters", best() == [] and "No recipes pass the filters." in ev(B + ".status:GetText()"))
-run(B + '.filterReset:Click()')
-run('__stub.recipes[3328].difficulty = nil; VendorProfit.BestPanel.Refresh()')
+reset_filters()
+run('__stub.recipes[3328].difficulty = nil; VendorProfitCharDB.professions[164].recipes[3328].skillUp = nil; VendorProfit.BestPanel.Refresh()')
 toggle(4)
-check("a recipe whose color isn't known can't pass a skill-up filter, and it says why",
-      best() == [] and "only known for the profession whose window is open" in ev(B + ".status:GetText()"))
-run(B + '.filterReset:Click()')
+check("a recipe whose color isn't known (live or saved) can't pass a skill-up filter, and it says why",
+      best() == [] and "no skill-up color yet: open their profession once" in ev(B + ".status:GetText()"))
+reset_filters()
 run('for _, id in ipairs({ 2670, 3328, 2671, 9102 }) do if __stub.recipes[id] then __stub.recipes[id].difficulty = nil end end')
 run('if __stub.recipe then __stub.recipe.difficulty = nil end; VendorProfit.BestPanel.Refresh()')
 check("unpriced ones can still be queued and shown", ev("VendorProfit.BestPanel.Row(4).queue:IsShown()") and ev("VendorProfit.BestPanel.Row(4).hit:IsShown()"))
@@ -2244,8 +2258,7 @@ check("/vprofit best closes it", not ev("VendorProfit.Panel.IsShown()"))
 run('SlashCmdList.VENDORPROFIT("best")')
 check("...and opens it", ev("VendorProfit.BestPanel.IsShown()"))
 run('__stub.tradeSkill.linked = true; VendorProfit.BestPanel.Refresh()')
-check("no profession of yours open: says to open one", best() == []
-      and "Open one of your professions" in ev("" + B + ".status:GetText()"))
+check("someone else's profession open: still your own saved crafts", len(best()) == 3)
 run('__stub.tradeSkill.linked = false')
 # Hovering a recipe: what you've made selling its item, all time.
 run('''
@@ -2265,8 +2278,8 @@ R = best_row(2866)
 run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
 tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
 check("hovering a recipe: its sales, all time, with profit and ROIs",
-      ev("GameTooltip.shown") and "Rough Bronze Cuirass" in tip[0][0] and tip[1][0] == "Your sales, all time"
-      and tip[2][0] == "3 sold in 2 sales" and ("Avg profit", ev("VendorProfit.FormatMoney(700)")) in tip
+      ev("GameTooltip.shown") and "Rough Bronze Cuirass" in tip[0][0] and tip[1][0] == "Blacksmithing"
+      and tip[2][0] == "Your sales, all time" and tip[3][0] == "3 sold in 2 sales" and ("Avg profit", ev("VendorProfit.FormatMoney(700)")) in tip
       and ("Profit", ev("VendorProfit.FormatMoney(2100)")) in tip
       and ("Avg ROI", "150%") in tip and ("ROI", "175%") in tip  # (200% x 2 + 50%) / 3; 2100 / 1200
       and ("Sold to vendors", "1") in tip and ("Sold at auction", "2") in tip and tip[-1][0].startswith("Last sold "))
@@ -2276,9 +2289,64 @@ run(R + '.hit:GetScript("OnLeave")(' + R + '.hit)')
 check("...gone when the mouse leaves", not ev("GameTooltip.shown"))
 R = best_row(2865)
 run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
-check("a recipe whose item hasn't sold: says so", [l.left for l in ev("GameTooltip.lines").values()][1] == "No sales of it recorded yet.")
+check("a recipe whose item hasn't sold: says so", [l.left for l in ev("GameTooltip.lines").values()][2] == "No sales of it recorded yet.")
 run("GameTooltip:Hide()")
 check("no errors from Best Crafts", ev("#__stub.errors") == 0)
+
+# --- Best Crafts with the professions window closed: every saved profession ------
+DUMP_DB = '''
+    local function dump(v)
+        if type(v) == "table" then
+            local parts = {}
+            for k, x in pairs(v) do
+                local key = type(k) == "number" and ("[" .. k .. "]") or ("[" .. string.format("%q", k) .. "]")
+                parts[#parts + 1] = key .. "=" .. dump(x)
+            end
+            return "{" .. table.concat(parts, ",") .. "}"
+        elseif type(v) == "string" then
+            return string.format("%q", v)
+        end
+        return tostring(v)
+    end
+    return dump(VendorProfitCharDB)
+'''
+run, ev = route_client()
+run('__stub.OpenProfession(186, "Mining", %s)' % MINING)
+run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS.replace("quantityMin = 1,", "quantityMin = 1, difficulty = 0,"))
+check("a profession's skill-up colors are saved when its window is open",
+      ev("VendorProfitCharDB.professions[164].recipes[2670].skillUp") == "optimal")
+saved = run(DUMP_DB)
+# A new session: no professions window opened at all.
+run, ev = route_client("VendorProfitCharDB = " + saved)
+run('VendorProfit.Panel.Show("best")')
+B2 = "VendorProfit.BestPanel.Frame()"
+names = lambda: [l.split(" | ")[0].split("|t ")[-1] for l in ev("VendorProfit.BestPanel.Lines()").values()]
+check("no professions window open: every saved profession's recipes, ranked together", ev("VendorProfit.Recipes.OpenProfession()") is None
+      and "|cffff8040Rough Bronze Cuirass|r" in names() and "Copper Bar" in names() and "Bronze Bar" in names()
+      and ev(B2 + ".heading:GetText()") == "Best Crafts")
+check("...the saved skill-up color shown", "|cffff8040Rough Bronze Cuirass|r" in names())
+row = next(i for i in range(1, 10) if "Cuirass" in ev("VendorProfit.BestPanel.Row(%d).left:GetText()" % i))
+R2 = "VendorProfit.BestPanel.Row(%d)" % row
+run(R2 + '.hit:GetScript("OnEnter")(' + R2 + '.hit)')
+tip = [l.left for l in ev("GameTooltip.lines").values()]
+check("hover: its profession, and that the color is as of the last opening",
+      tip[1] == "Blacksmithing" and tip[2] == "Skill-up color as of when you last opened Blacksmithing.")
+run("GameTooltip:Hide()")
+run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
+check("Mining unticked: Blacksmithing alone, named in the title", names() == ["|cffff8040Rough Bronze Cuirass|r"]
+      and ev(B2 + ".heading:GetText()") == "Best Crafts: Blacksmithing")
+run('VendorProfit.BestPanel.Row(1).queue:Click()')
+check("+ queues it with its profession closed", ev("VendorProfit.Order.Entries()[1].recipeID") == 2670
+      and ev("VendorProfit.Order.Entries()[1].profession") == "Blacksmithing")
+run('VendorProfit.BestPanel.SetFilter("prof:164", true)')
+check("nothing ticked: says it's the filters", names() == [] and "No recipes pass the filters." in ev(B2 + ".status:GetText()")
+      and ev(B2 + ".heading:GetText()") == "Best Crafts" and not ev(B2 + ".scan:IsEnabled()"))
+check("live prices: a scan covers the professions it looked up", ev("VendorProfit.BestCrafts.LiveTime({ 164 })") is None)
+run, ev = client()
+run('VendorProfit.Panel.Show("best")')
+check("no profession opened yet: says to open each once", "Open each of your professions once"
+      in ev("VendorProfit.BestPanel.Frame().status:GetText()"))
+check("no errors listing saved professions", ev("#__stub.errors") == 0)
 
 # --- Items the game hasn't sent yet: asked for once, redrawn once per batch ---------
 # Each arrival used to redraw Best Crafts, and each redraw asked again for every

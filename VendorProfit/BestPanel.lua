@@ -1,11 +1,17 @@
--- The Best Crafts tab of the Vendor Profit window: every saved recipe of the
--- open profession, ranked by profit per craft (BestCrafts.lua), losses
--- included, then the ones with no price to rank by, in a scrolling list with
--- Auction and Vendor tabs and Investment, Profit and ROI columns, sortable
--- by clicking a column's heading, filtered by name with the search box as
--- you type, and by profit and skill-up color with the Filter dropdown. Each has a magnifying glass (selects it in
--- the professions window) and + (adds one craft to the shopping order). Live
--- prices come from Scan.
+-- The Best Crafts tab of the Vendor Profit window: every saved recipe of
+-- every profession you've opened, ranked together by profit per craft
+-- (BestCrafts.lua), losses included, then the ones with no price to rank by,
+-- in a scrolling list with Auction and Vendor tabs and Investment, Profit and
+-- ROI columns, sortable by clicking a column's heading, filtered by name with
+-- the search box as you type, and by profit, skill-up color and profession
+-- with the Filter menu (every profession ticked to start with). It works with
+-- the professions window closed. Each row has - and + (one craft fewer or
+-- more in the shopping order); clicking a name selects it in the professions
+-- window while that profession's window is open. Live prices come from Scan.
+--
+-- Skill-up colors are live for the profession whose window is open; for the
+-- others they're as of when their window was last open (Recipes.SkillUp),
+-- which the Filter menu and each row's tooltip say.
 --
 -- Opened by the Vendor Profit button in the professions window's title bar,
 -- or /vprofit best.
@@ -184,7 +190,7 @@ local function GetRow(index)
         end)
         row.hit:SetScript("OnEnter", function(self)
             if self.recipe then
-                BestPanel.ShowSalesTooltip(self, row.left, self.recipe.item)
+                BestPanel.ShowSalesTooltip(self, row.left, self.recipe.item, self.recipe)
             end
         end)
         row.hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -304,9 +310,19 @@ local FormatROI = VendorProfit.FormatROI
 -- What you've made selling an item, over all time: its Best Sellers figures
 -- (Profit History), with the profit and ROIs. Placed like an item's
 -- tooltip: above the row, past the end of its name.
-function BestPanel.ShowSalesTooltip(owner, nameText, itemID)
+-- With a recipe (a row's), it also names the recipe's profession and says
+-- when its skill-up color is saved rather than live.
+function BestPanel.ShowSalesTooltip(owner, nameText, itemID, recipe)
     VendorProfit.SetNameTooltipOwner(owner, nameText)
     GameTooltip:SetText(ItemLabel(itemID))
+    if recipe then
+        GameTooltip:AddLine(recipe.profession, 1, 1, 1)
+        local skillUp, saved = Recipes.SkillUp(recipe)
+        if skillUp and saved then
+            GameTooltip:AddLine(string.format(L.BEST_SKILL_SAVED, recipe.profession),
+                GRAY_FONT_COLOR.r, GRAY_FONT_COLOR.g, GRAY_FONT_COLOR.b, true)
+        end
+    end
     local HistoryPanel = VendorProfit.HistoryPanel
     local item = HistoryPanel and HistoryPanel.AllTime(itemID)
     if item and item.n > 0 then
@@ -331,22 +347,32 @@ SKILL_UP = {
 
 -- A recipe's skill-up color key, if the game says (it only knows for the
 -- profession whose window is open).
-local function SkillUp(recipeID)
-    local info = C_TradeSkillUI.GetRecipeInfo(recipeID)
-    local difficulty = info and info.relativeDifficulty
-    if difficulty == nil then
-        return nil
+-- (Recipes.SkillUp: "trivial", no skill up, is left white here, as gray in
+-- the professions window would be hard to read.)
+
+-- Professions are filtered out by key: "prof:<key>" in the filters.
+local function ProfessionFilterKey(key)
+    return "prof:" .. tostring(key)
+end
+
+-- The saved professions the Filter menu leaves in: { key, name } by name.
+local function ShownProfessions()
+    local filters = Filters()
+    local shown = {}
+    for _, profession in ipairs(Recipes.Professions()) do
+        if not filters[ProfessionFilterKey(profession.key)] then
+            shown[#shown + 1] = profession
+        end
     end
-    local enum = Enum.TradeskillRelativeDifficulty or {}
-    if difficulty == (enum.Optimal or 0) then
-        return "optimal"
-    elseif difficulty == (enum.Medium or 1) then
-        return "medium"
-    elseif difficulty == (enum.Easy or 2) then
-        return "easy"
+    return shown
+end
+
+local function Keys(professions)
+    local keys = {}
+    for index, profession in ipairs(professions) do
+        keys[index] = profession.key
     end
-    -- No skill up (gray in the professions window): left white here.
-    return "trivial"
+    return keys
 end
 
 -- The filters, saved per character: { profitable, optimal, medium, easy }.
@@ -356,8 +382,7 @@ Filters = function()
 end
 
 FiltersActive = function()
-    local filters = Filters()
-    return filters.profitable or filters.optimal or filters.medium or filters.easy or false
+    return next(Filters()) ~= nil
 end
 
 local function SkillFilterActive()
@@ -392,7 +417,9 @@ local function PassesFilters(entry)
     return true
 end
 
--- The Filter menu: profitable only, then the skill-up colors.
+-- The Filter menu: profitable only, the skill-up colors (with a note that
+-- they're as of each profession's last opening), then the professions, each
+-- ticked while it's shown.
 FilterMenu = function(_, root)
     root:CreateCheckbox(L.BEST_FILTER_PROFITABLE,
         function() return Filters().profitable == true end,
@@ -403,6 +430,17 @@ FilterMenu = function(_, root)
         root:CreateCheckbox(skill.color:WrapTextInColorCode(skill.label),
             function() return Filters()[key] == true end,
             function() SetFilter(key, not Filters()[key]) end)
+    end
+    root:CreateTitle(GRAY_FONT_COLOR:WrapTextInColorCode(L.BEST_SKILL_SAVED_NOTE))
+    local professions = Recipes.Professions()
+    if #professions > 0 then
+        root:CreateTitle(L.BEST_FILTER_PROFESSIONS)
+        for _, profession in ipairs(professions) do
+            local filterKey = ProfessionFilterKey(profession.key)
+            root:CreateCheckbox(profession.name,
+                function() return not Filters()[filterKey] end,
+                function() SetFilter(filterKey, not Filters()[filterKey]) end)
+        end
     end
 end
 
@@ -470,7 +508,7 @@ local function Create(page)
     frame.scan:SetPoint("RIGHT", frame, "TOPRIGHT", -PADDING, -38)
     frame.scan:SetMotionScriptsWhileDisabled(true)
     frame.scan:SetScript("OnClick", function()
-        BestCrafts.Scan(Recipes.OpenProfession())
+        BestCrafts.Scan(Keys(ShownProfessions()))
     end)
     frame.scan:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -577,8 +615,16 @@ local function Create(page)
 end
 
 local function Refresh()
-    local profession, name = Recipes.OpenProfession()
-    frame.heading:SetText(string.format(L.BEST_TITLE, name or ""))
+    local saved = Recipes.Professions()
+    local shown = ShownProfessions()
+    local keys = Keys(shown)
+    local openKey = Recipes.OpenProfession()
+    -- One profession shown: its name in the title.
+    if #shown == 1 then
+        frame.heading:SetText(string.format(L.BEST_TITLE, shown[1].name))
+    else
+        frame.heading:SetText(L.BEST_TITLE_ALL)
+    end
 
     -- Filter: how many are on, and the reset X while any are.
     if frame.filter then
@@ -611,7 +657,7 @@ local function Refresh()
         scan.tooltip = batch and string.format(L.BEST_SCANNING, batch, batches) or L.BUY_SCANNING
     else
         scan:SetText(L.SCAN)
-        scan:SetEnabled(profession ~= nil and BestCrafts.CanScan())
+        scan:SetEnabled(#keys > 0 and BestCrafts.CanScan())
         scan.tooltip = BestCrafts.CanScan() and L.BEST_SCAN_HELP or L.BEST_SCAN_OPEN_AH
     end
 
@@ -627,12 +673,12 @@ local function Refresh()
     end
 
     local all = {}
-    if profession then
-        all = SortEntries(BestCrafts.Rank(profession, tab, BestPanel.Refresh))
+    if #keys > 0 then
+        all = SortEntries(BestCrafts.Rank(keys, tab, BestPanel.Refresh))
     end
     local ranked, unknownSkillUp = {}, false
     for _, entry in ipairs(all) do
-        entry.skillUp = SkillUp(entry.recipe.recipeID)
+        entry.skillUp, entry.skillUpSaved = Recipes.SkillUp(entry.recipe, openKey)
         if entry.skillUp == nil then
             unknownSkillUp = true
         end
@@ -710,7 +756,7 @@ local function Refresh()
     frame.list:SetHeight(math.max(#ranked, 1) * ROW_HEIGHT)
     frame.scroll:SetSize(LIST_WIDTH, listHeight)
     frame.scroll:SetShown(#ranked > 0)
-    local listKey = tostring(profession) .. "/" .. tab .. "/" .. filter
+    local listKey = table.concat(keys, ",") .. "/" .. tab .. "/" .. filter
     if listKey ~= shownList then
         shownList = listKey
         frame.scroll:SetVerticalScroll(0)
@@ -719,8 +765,10 @@ local function Refresh()
 
     -- Status: why the list is empty, where prices are from, and messages.
     local lines = {}
-    if profession == nil then
+    if #saved == 0 then
         lines[#lines + 1] = L.BEST_OPEN_PROFESSION
+    elseif #keys == 0 then
+        lines[#lines + 1] = L.BEST_NO_MATCH_FILTERS
     elseif #all == 0 then
         lines[#lines + 1] = L.BEST_NONE
     elseif #ranked == 0 and filter ~= "" then
@@ -731,10 +779,10 @@ local function Refresh()
     if SkillFilterActive() and unknownSkillUp then
         lines[#lines + 1] = L.BEST_SKILL_UNKNOWN
     end
-    local liveTime = profession and BestCrafts.LiveTime(profession)
+    local liveTime = #keys > 0 and BestCrafts.LiveTime(keys)
     if liveTime then
         lines[#lines + 1] = string.format(L.BEST_LIVE_PRICES, date("%H:%M", liveTime))
-    elseif profession then
+    elseif #keys > 0 then
         lines[#lines + 1] = L.BEST_AUCTIONATOR_PRICES
     end
     local text, isError = BestCrafts.Message()
