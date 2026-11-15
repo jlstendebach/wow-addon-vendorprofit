@@ -2202,6 +2202,37 @@ run(B + '.search:Type("zzz")')
 check("nothing matches: says so", best() == [] and 'No recipes match "zzz".' in ev(B + ".status:GetText()"))
 run(B + '.search:Type("")')
 check("cleared: everything again", len(best()) == 5)
+# Minimum profit and ROI: exact amounts, typed into boxes on their own row.
+shown = lambda: [l.split(" | ")[0].split("|t ")[-1] for l in best()]
+check("minimums on a row of their own under the search: the game's gold/silver/copper input, and a percentage box",
+      ev(B + ".minProfit.GoldBox ~= nil") and ev(B + ".minProfit.CopperBox ~= nil") and ev(B + ".minRoi.__numeric")
+      and ev(B + ".minProfit:GetAmount()") == 0 and ev(B + ".minRoi:GetText()") == ""
+      and ev(B + ".headings.name.__point[5]") < ev(B + ".minProfit.__point[2].__point[5]"))
+run(B + '.minProfit.CopperBox:Type("88")')
+check("min. profit 88c: only recipes making at least that per craft; unpriced ones can't meet it", shown() == ["Rough Bronze Cuirass"]
+      and ev("VendorProfitCharDB.bestMinimums.profit") == 88 and ev(B + ".filterReset:IsEnabled()"))
+run(B + '.minProfit.CopperBox:Type("87")')
+check("...87c: exactly 87c passes", shown() == ["Rough Bronze Cuirass", "Rough Bronze Shoulders"])
+run(B + '.minProfit.SilverBox:Type("1")')
+check("...1s 87c, silver and copper together: none", shown() == [])
+run(B + '.minProfit:Clear(); ' + B + '.minProfit.CopperBox:Type("")')
+check("...empty: no minimum", len(best()) == 5 and ev("VendorProfitCharDB.bestMinimums") is None)
+run(B + '.minRoi:Type("37")')
+check("min. ROI 37%: compared as shown, a whole percentage (162 / 438 shows 37%)", shown() == ["Rough Bronze Cuirass"]
+      and ev("VendorProfitCharDB.bestMinimums.roi") == 37)
+run(B + '.minRoi:Type("38")')
+check("...38%: none", shown() == [])
+run(B + '.minProfit.CopperBox:Type("50"); ' + B + '.minRoi:Type("30")')
+check("both at once", shown() == ["Rough Bronze Cuirass"])
+run(B + '.filterReset:Click()')
+check("the red X clears the minimums too, boxes and all (with the other filters: Mining ticked again)",
+      len(best()) == 8 and ev("VendorProfitCharDB.bestMinimums") is None
+      and ev(B + ".minProfit:GetAmount()") == 0 and ev(B + ".minRoi:GetText()") == "" and not ev(B + ".filterReset:IsEnabled()"))
+run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
+run_m, ev_m = route_client("VendorProfitCharDB = { bestMinimums = { profit = 12345, roi = 25 } }")
+run_m('VendorProfit.Panel.Show("best")')
+check("minimums are saved per character, shown in their boxes next time",
+      ev_m("VendorProfit.BestPanel.Frame().minProfit:GetAmount()") == 12345 and ev_m("VendorProfit.BestPanel.Frame().minRoi:GetText()") == "25")
 # Filters: profitable only, and skill-up colors, from the game's filter dropdown.
 run('__stub.recipes[2670].difficulty = 0; __stub.recipes[3328].difficulty = 1; __stub.recipes[2671].difficulty = 2; __stub.recipes[9102].difficulty = 3')
 run('if __stub.recipe and __stub.recipe.recipeID == 2670 then __stub.recipe.difficulty = 0 end')

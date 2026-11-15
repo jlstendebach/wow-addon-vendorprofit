@@ -37,7 +37,10 @@ local Columns = VendorProfit.Columns
 local WIDTH = 520
 local PADDING = 16
 local ROW_HEIGHT = 22
-local LIST_TOP = -94
+-- Title at -38, the tabs and search row at -52, the minimums row 6 below it
+-- (20 tall), then the column headings 6 below that and 16 above the list.
+local MINIMUMS_TOP = -78
+local LIST_TOP = -120
 local VISIBLE_ROWS = 14
 local SCROLLBAR_WIDTH = 24
 local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
@@ -413,18 +416,62 @@ SetFilter = function(key, value)
     BestPanel.Refresh()
 end
 
-ResetFilters = function()
-    if VendorProfitCharDB then
-        VendorProfitCharDB.bestFilters = nil
+-- The minimum profit per craft (copper) and ROI (a whole percentage) typed
+-- into the boxes above the list, saved per character; 0 for none. They're
+-- boxes rather than Filter menu entries because they take exact amounts.
+local function Minimums()
+    local db = VendorProfitCharDB
+    local saved = db and type(db.bestMinimums) == "table" and db.bestMinimums or {}
+    return saved.profit or 0, saved.roi or 0
+end
+
+local function SetMinimums(profit, roi)
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    if profit > 0 or roi > 0 then
+        VendorProfitCharDB.bestMinimums = { profit = profit > 0 and profit or nil, roi = roi > 0 and roi or nil }
+    else
+        VendorProfitCharDB.bestMinimums = nil
     end
     BestPanel.Refresh()
 end
 
+-- Shows the saved minimums in the boxes (empty for none).
+local function ShowMinimums()
+    if frame == nil or frame.minProfit == nil then
+        return
+    end
+    local profit, roi = Minimums()
+    if profit > 0 then
+        frame.minProfit:SetAmount(profit)
+    else
+        frame.minProfit:Clear()
+    end
+    frame.minRoi:SetText(roi > 0 and tostring(roi) or "")
+end
+
+ResetFilters = function()
+    if VendorProfitCharDB then
+        VendorProfitCharDB.bestFilters = nil
+        VendorProfitCharDB.bestMinimums = nil
+    end
+    ShowMinimums()
+    BestPanel.Refresh()
+end
+
 -- Whether an entry passes the filters. Skill-up filters show recipes of the
--- checked colors; a recipe whose color isn't known can't pass them.
+-- checked colors; a recipe whose color isn't known can't pass them. A
+-- recipe with no profit to rank can't meet a minimum. ROI is compared as
+-- shown, a whole percentage.
 local function PassesFilters(entry)
     local filters = Filters()
     if filters.profitable and not (entry.profit and entry.profit > 0) then
+        return false
+    end
+    local minProfit, minRoi = Minimums()
+    if minProfit > 0 and not (entry.profit and entry.profit >= minProfit) then
+        return false
+    end
+    if minRoi > 0 and not (entry.profit and entry.roi and math.floor(entry.roi * 100 + 0.5) >= minRoi) then
         return false
     end
     if SkillFilterActive() then
@@ -584,6 +631,57 @@ local function Create(page)
     search:HookScript("OnEnterPressed", function(self) self:ClearFocus() end)
     frame.search = search
 
+    -- Minimums, on a row of their own: the game's own money input (the
+    -- auction house's gold, silver and copper boxes) for profit, and a
+    -- box for ROI. Empty: no minimum. Changes apply as you type.
+    local function Changed(_, userInput)
+        if userInput then
+            local roi = tonumber(frame.minRoi:GetText() or "") or 0
+            SetMinimums(frame.minProfit:GetAmount() or 0, math.floor(roi))
+        end
+    end
+    local function Finished(self)
+        self:ClearFocus()
+    end
+    local function Help(region, text)
+        region:HookScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(text, 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        region:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+    local profitLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    profitLabel:SetPoint("LEFT", frame, "TOPLEFT", PADDING, MINIMUMS_TOP - 10)
+    profitLabel:SetText(L.BEST_MIN_PROFIT)
+    frame.minProfit = CreateFrame("Frame", nil, frame, "LargeMoneyInputFrameTemplate")
+    frame.minProfit:SetSize(150, 20)
+    frame.minProfit:SetPoint("LEFT", profitLabel, "RIGHT", 8, 0)
+    for _, key in ipairs({ "GoldBox", "SilverBox", "CopperBox" }) do
+        local box = frame.minProfit[key]
+        box:HookScript("OnTextChanged", Changed)
+        box:HookScript("OnEnterPressed", Finished)
+        box:HookScript("OnEscapePressed", Finished)
+        Help(box, L.BEST_MIN_PROFIT_HELP)
+    end
+    local roiLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    roiLabel:SetPoint("LEFT", frame.minProfit, "RIGHT", 20, 0)
+    roiLabel:SetText(L.BEST_MIN_ROI)
+    frame.minRoi = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
+    frame.minRoi:SetSize(44, 20)
+    frame.minRoi:SetPoint("LEFT", roiLabel, "RIGHT", 10, 0)
+    frame.minRoi:SetAutoFocus(false)
+    frame.minRoi:SetNumeric(true)
+    frame.minRoi:SetMaxLetters(5)
+    frame.minRoi:HookScript("OnTextChanged", Changed)
+    frame.minRoi:HookScript("OnEnterPressed", Finished)
+    frame.minRoi:HookScript("OnEscapePressed", Finished)
+    Help(frame.minRoi, L.BEST_MIN_ROI_HELP)
+    local percent = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    percent:SetPoint("LEFT", frame.minRoi, "RIGHT", 2, 0)
+    percent:SetText("%")
+    ShowMinimums()
+
     -- Filter: a button in the page's own style that opens the game's menu
     -- of checkboxes under it (clicking it again closes it), and a small red
     -- X at the row's end that clears the filters, grayed out while none are
@@ -714,8 +812,11 @@ local function Refresh()
             end
         end
         frame.filter:SetText(on > 0 and string.format(L.BEST_FILTER_ON, on) or L.BEST_FILTER)
-        frame.filterReset:SetEnabled(on > 0)
-        frame.filterReset.icon:SetDesaturated(on == 0)
+        -- The X clears the minimums too.
+        local minProfit, minRoi = Minimums()
+        local any = on > 0 or minProfit > 0 or minRoi > 0
+        frame.filterReset:SetEnabled(any)
+        frame.filterReset.icon:SetDesaturated(not any)
     end
 
     -- Tabs: the selected one stays lit.

@@ -96,6 +96,15 @@ time" route mode).
   spellbook entry; "Fishing" (7731) casts a line. Seen in game with a /run
   of Fishing's spellbook entries. A 1s rest after closing, so the click after Close
   doesn't open the first profession again.
+- **Minimum profit and ROI** are boxes on their own row under the search,
+  not Filter menu entries: they take exact amounts, and typing in the
+  game's menus is fiddly (they close when they lose focus). Presets plus a
+  "Custom..." popup in the menu were offered and turned down for that
+  reason. Profit uses the game's own money input (LargeMoneyInputFrame,
+  the auction house's gold/silver/copper boxes; Auctionator uses it on
+  Forever too), ROI a numeric box. Applied as you type; empty is no
+  minimum; ROI compared as shown (whole percent); unpriced recipes hidden
+  while either is set; the red X clears them with the filters.
 - **Every profession, window closed**: Best Crafts lists the saved recipes of
   every profession you've opened (each is saved when its window opens), ranked
   together: gold is gold whichever profession made it, and the cross-profession
