@@ -163,7 +163,16 @@ time" route mode).
   the item's cost and both profits. A profit box was tried and removed.
 - **Buy anyway** only appears when neither selling to a vendor nor at
   auction makes money.
-- **"Already in your bags"** folds away (remembered per character).
+- **Every section folds away**: Queued, Profit, To do and Already in your
+  bags are all dividers (title between lines, a plus or minus sign) that
+  fold on a click, remembered per character, a folded one saying how many
+  rows it holds. (Queued and Profit used to be plain headings; only the
+  bags folded, saved as bagsCollapsed, carried over.) Scan, which sat on
+  the Profit heading, moved to the page's title line ("Shopping List"),
+  where Best Crafts has its Scan: it's for the whole order, and stays
+  reachable with every section folded. With To do folded there's no Craft
+  button, so the open-profession cover goes too (it's only ever over a
+  Craft button that's shown).
 - **Buy before a scan scans first**: a grayed-out Buy pointing at Scan was
   friction. Buy with items queued since the last scan scans just those.
 

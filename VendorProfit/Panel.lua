@@ -1,7 +1,8 @@
 -- The Vendor Profit window, with a tab per page down its right side: the
--- Shopping List (here: the queued order, its profit, the To do checklist and
--- what's already in your bags; buying, crafting and taking from the bank are
--- buttons on their sections' headings) and Best Crafts (BestPanel.lua).
+-- Shopping List (here: its title with Scan, then sections for the queued
+-- order, its profit, the To do checklist and what's already in your bags,
+-- each folding away; buying, crafting and taking from the bank are buttons
+-- on To do's steps) and Best Crafts (BestPanel.lua).
 --
 -- It's a window of its own, not docked to the auction house or any other
 -- window, and only opens or closes when you open or close it. It opens
@@ -586,7 +587,9 @@ function Panel.BankButton(fromBank)
     }
 end
 
--- The Profit heading's button: scans the auction house for live prices.
+-- The title's button: scans the auction house for live prices. On the
+-- page's title line, where Best Crafts has its Scan: it's for the whole
+-- order, not one section.
 local function ScanButton()
     local status = Shopper.Status()
     local button = { text = L.SCAN, width = HEADING_BUTTON_WIDTH, enabled = false, onClick = Shopper.Scan }
@@ -608,7 +611,6 @@ local function AddProfit(s)
     local function OrNoPrice(copper)
         return copper and Money(copper) or Gray(L.NO_AUCTION_PRICE)
     end
-    AddRow("heading", L.HEAD_PROFIT, nil, ScanButton())
     -- Three groups, set apart by a gap: what it sells for, what it costs,
     -- what it makes. Each pair is vendor, then auction.
     AddRow("row", L.VENDOR_PRICE, Money(s.revenue))
@@ -631,20 +633,66 @@ local function AddProfit(s)
     end
 end
 
+-- Sections fold away when their divider is clicked (a plus or minus sign
+-- on it says which), remembered per character. A folded section says how
+-- many rows it holds, where that's useful.
+local function Collapsed(key)
+    local db = VendorProfitCharDB
+    if db == nil then
+        return false
+    end
+    -- Saved before every section folded: only the bags one did.
+    if db.bagsCollapsed then
+        db.collapsed = type(db.collapsed) == "table" and db.collapsed or {}
+        db.collapsed.bags, db.bagsCollapsed = true, nil
+    end
+    return type(db.collapsed) == "table" and db.collapsed[key] == true
+end
+
+local function SetCollapsed(key, collapsed)
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    VendorProfitCharDB.collapsed = VendorProfitCharDB.collapsed or {}
+    VendorProfitCharDB.collapsed[key] = collapsed or nil
+    Panel.Refresh()
+end
+
+-- A section's divider. Returns whether the section is open (its rows to be
+-- added).
+local function Section(key, title, count)
+    local collapsed = Collapsed(key)
+    local sign = collapsed and "Interface\\Buttons\\UI-PlusButton-Up" or "Interface\\Buttons\\UI-MinusButton-Up"
+    title = "|T" .. sign .. ":12:12|t " .. title
+    if collapsed and count then
+        title = title .. " (" .. count .. ")"
+    end
+    AddRow("divider", title, nil, nil, {
+        onClick = function() SetCollapsed(key, not collapsed) end,
+    })
+    return not collapsed
+end
+
 -- The To do checklist, in the order you'd do it: buy (prices can change, so
 -- first), collect purchases from the mailbox, take things from the bank, then
 -- craft. Each step shows only while it has something left in it, numbered in
 -- order. Returns the bags list for the information section below it.
+-- Folded away, there's no Craft button, so nothing for the open-profession
+-- cover to go over: it goes (FinishLayout).
 local function AddToDo(plan)
-    AddRow("divider", L.HEAD_TODO)
+    local buying = Shopper.Status()
+    local hasBuy = #plan.buyOrder > 0 or buying == "quoting" or buying == "confirm" or buying == "buying"
+    local fromBags, fromMail, fromBank = Panel.SplitUses(plan.uses)
+    local steps = 1 + (hasBuy and 1 or 0) + (#fromMail > 0 and 1 or 0) + (#fromBank > 0 and 1 or 0)
+    if not Section("todo", L.HEAD_TODO, steps) then
+        shownCraft = nil
+        return fromBags
+    end
     local number = 0
     local function Step(title, button)
         number = number + 1
         return AddRow("heading", number .. ". " .. title, nil, button)
     end
 
-    local buying = Shopper.Status()
-    if #plan.buyOrder > 0 or buying == "quoting" or buying == "confirm" or buying == "buying" then
+    if hasBuy then
         Step(L.STEP_BUY, BuyButton(plan))
         -- The price to confirm, where it can't be missed.
         if buying == "confirm" then
@@ -658,7 +706,6 @@ local function AddToDo(plan)
         end
     end
 
-    local fromBags, fromMail, fromBank = Panel.SplitUses(plan.uses)
     if #fromMail > 0 then
         Step(L.STEP_MAIL)
         for _, use in ipairs(fromMail) do
@@ -690,18 +737,6 @@ local function AddToDo(plan)
     return fromBags
 end
 
--- Queued crafts, the order's profit, the To do checklist, then what's
--- already in your bags, for information.
--- Whether "Already in your bags" is folded away, saved per character.
-local function BagsCollapsed()
-    return VendorProfitCharDB ~= nil and VendorProfitCharDB.bagsCollapsed == true
-end
-
-local function SetBagsCollapsed(collapsed)
-    VendorProfitCharDB = VendorProfitCharDB or {}
-    VendorProfitCharDB.bagsCollapsed = collapsed or nil
-    Panel.Refresh()
-end
 
 -- What one queued entry makes, on its own, at today's prices, along its
 -- cheapest route (or as it is, for an exact one): { cost, vendor, auction }
@@ -768,38 +803,32 @@ local function AddQueued(index, entry)
     })
 end
 
+-- The title (with Scan), then the queued crafts, the order's profit, the To
+-- do checklist, and what's already in your bags, for information.
 local function AddContent()
     local s = Shopper.Summary()
     local plan = s.plan
 
     local entries = Order.Entries()
-    AddRow("heading", L.HEAD_QUEUED)
+    AddRow("heading", L.TAB_SHOPPING, nil, #entries > 0 and ScanButton() or nil)
     if #entries == 0 then
         AddRow("note", L.NOTHING_QUEUED)
         return
     end
-    for index, entry in ipairs(entries) do
-        AddQueued(index, entry)
+    if Section("queued", L.HEAD_QUEUED, #entries) then
+        for index, entry in ipairs(entries) do
+            AddQueued(index, entry)
+        end
     end
 
-    AddProfit(s)
+    if Section("profit", L.HEAD_PROFIT) then
+        AddProfit(s)
+    end
     local fromBags = AddToDo(plan)
 
-    if #fromBags > 0 then
-        -- Click the divider to fold it away (remembered per character).
-        local collapsed = BagsCollapsed()
-        local sign = collapsed and "Interface\\Buttons\\UI-PlusButton-Up" or "Interface\\Buttons\\UI-MinusButton-Up"
-        local title = "|T" .. sign .. ":12:12|t " .. L.HEAD_BAGS
-        if collapsed then
-            title = title .. " (" .. #fromBags .. ")"
-        end
-        AddRow("divider", title, nil, nil, {
-            onClick = function() SetBagsCollapsed(not collapsed) end,
-        })
-        if not collapsed then
-            for _, use in ipairs(fromBags) do
-                AddRow("row", ItemLabel(use.itemID, use.quantity))
-            end
+    if #fromBags > 0 and Section("bags", L.HEAD_BAGS, #fromBags) then
+        for _, use in ipairs(fromBags) do
+            AddRow("row", ItemLabel(use.itemID, use.quantity))
         end
     end
 end

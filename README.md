@@ -155,9 +155,10 @@ Prices from Auctionator's last scan.
 The panel is laid out as:
 
 ```
-Queued
+Shopping List                                [ Scan ]
+─────────────── [-] Queued ───────────────
     Rough Bronze Cuirass x10                 [-] [+] [x]
-Profit                                       [ Scan ]
+─────────────── [-] Profit ───────────────
     Vendor price                             60s
     Auction price                            1g 23s 50c
 
@@ -166,7 +167,7 @@ Profit                                       [ Scan ]
 
     Vendor profit                            16s 25c
     Auction profit                           79s 75c
-──────────────── To do ────────────────
+─────────────── [-] To do ───────────────
 1. Buy                                       [ Buy ]
     Copper Ore x24             auction       12s 70c
     Tin Bar x29                auction       21s 75c
@@ -181,7 +182,7 @@ Profit                                       [ Scan ]
     Copper Bar x3
 ```
 
-**To do** is a checklist in the order you'd do it: **Buy** first (prices are what can change, so you find out at the auction house before fetching or crafting anything), **Collect from mailbox** (purchases not collected yet), **Take from bank**, then **Craft**. Each step shows only while it has something left in it and they're numbered in order, so the list gets shorter as you go. Every button sits on its section's heading, with a short label; hover one for the details. There's no button bar at the bottom. Your items are used from your bags first, then the mailbox, then the bank, so **Take from bank** lists exactly what to fetch. Bags include the reagent bank, since crafting uses it directly. **Already in your bags** is just for information; click its divider to fold it away (it then shows how many items it holds) or open it again. That's remembered per character. Several queued recipes share your items, so nothing is counted twice.
+**To do** is a checklist in the order you'd do it: **Buy** first (prices are what can change, so you find out at the auction house before fetching or crafting anything), **Collect from mailbox** (purchases not collected yet), **Take from bank**, then **Craft**. Each step shows only while it has something left in it and they're numbered in order, so the list gets shorter as you go. Every button sits on its section's heading, with a short label; hover one for the details. There's no button bar at the bottom. Your items are used from your bags first, then the mailbox, then the bank, so **Take from bank** lists exactly what to fetch. Bags include the reagent bank, since crafting uses it directly. **Already in your bags** is just for information. Every section folds away: click its divider (the line with its name and a minus sign) to fold it, and again to open it. A folded section says how many rows it holds (*Queued (2)*, *To do (3)*), and which ones are folded is remembered per character. With **To do** folded its buttons go with it, so open it to buy or craft. **Scan** is on the page's title line, as on Best Crafts, since it's for the whole order. Several queued recipes share your items, so nothing is counted twice.
 
 **Take from bank.** At the bank, **Take** on the **Take from bank** step moves exactly those amounts into your bags: it splits them off the bank's stacks (smallest stacks first) into empty bag slots, one move at a time, waiting for each to finish. If something isn't in the bank after all, or your bags fill up, or the bank closes, it stops and says so.
 
@@ -191,7 +192,7 @@ Profit                                       [ Scan ]
 
 The buttons for each part sit on their section's heading, with short labels; hover one for the details.
 
-**3. Scan.** At the auction house, open the window (`/vprofit`). **Scan** on the **Profit** heading first looks up every item in the order's crafting trees in one batch request (the same lookup as Best Crafts' Scan), so the order is planned with live prices straight away and items with nothing listed are skipped, not searched. Then it reads every listing of each item the order buys there, so buying 24 is priced by walking up the cheapest listings, not at the lowest single price, and your own listings are left out. Those listings are what purchases are priced and checked against. With them the order is planned again: if crafting something has become cheaper than buying it, or the other way round, the plan changes and the new items are scanned too.
+**3. Scan.** At the auction house, open the window (`/vprofit`). **Scan**, at the top right by the page's title, first looks up every item in the order's crafting trees in one batch request (the same lookup as Best Crafts' Scan), so the order is planned with live prices straight away and items with nothing listed are skipped, not searched. Then it reads every listing of each item the order buys there, so buying 24 is priced by walking up the cheapest listings, not at the lowest single price, and your own listings are left out. Those listings are what purchases are priced and checked against. With them the order is planned again: if crafting something has become cheaper than buying it, or the other way round, the plan changes and the new items are scanned too.
 
 The auction house is shared with its own Browse tab and other addons (Auctionator, TradeSkillMaster), which send requests too, especially as it opens. So the scan recovers rather than waits: when another addon's results replace the batch lookup's, it's sent again a second later; when the game reports a request dropped by its throttle, a search is sent again straight away. Price quotes are different: the game only gives one for a request made as part of a click, so a quote is never asked for by itself. And just after a purchase the game is briefly busy and drops requests, so **Buy** and **Confirm** are held for that moment (hover: *Waiting a moment for the auction house to be ready...*) and your click always counts. If a quote request is dropped anyway, it says so straight away; if one simply never comes, it says so after 10 seconds. Either way, **Buy** is ready to click again. The server answers at most 100 item searches a minute from all addons together, and drops the rest without a word, so searches wait for room (the Buy button's tooltip says so) instead of timing out. If the game ever blocks an action ("Interface action failed because of an AddOn"), Vendor Profit prints which one in chat.
 

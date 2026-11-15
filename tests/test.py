@@ -480,13 +480,14 @@ def lines(ev):
             for l in ev("VendorProfit.Panel.Lines()").values()]
 
 
-DIVIDERS = {"To do", "Already in your bags"}
-HEADINGS = {"Queued", "Profit"} | DIVIDERS
+DIVIDERS = {"Queued", "Profit", "To do", "Already in your bags"}
+HEADINGS = {"Shopping List"} | DIVIDERS
 STEP = re.compile(r"^\d+\. (.*)$")
 
 
 def is_heading(line):
-    return line in HEADINGS or STEP.match(line) is not None
+    # A folded section's divider says how many rows it holds: "Queued (2)".
+    return re.sub(r" \(\d+\)$", "", line) in HEADINGS or STEP.match(line) is not None
 
 
 def section(ev, heading):
@@ -513,12 +514,12 @@ def has_line(ev, *parts):
 
 
 BUY = 'VendorProfit.Panel.RowButton("Buy")'
-SCAN = 'VendorProfit.Panel.RowButton("Profit")'
+SCAN = 'VendorProfit.Panel.RowButton("Shopping List")'
 CRAFT = 'VendorProfit.Panel.RowButton("Craft")'
 
 
 def click(run, name):
-    """Clicks a panel button: Buy, Scan (on Profit), Clear (on Queued), Cancel (by the price to confirm)."""
+    """Clicks a panel button: Buy, Scan (on the title), Cancel (by the price to confirm)."""
     if name == "buy":
         run(BUY + ":Click()")
     elif name == "scan":
@@ -563,7 +564,7 @@ check("from your bags: 12 bronze bars, 3 copper bars",
 check("from your bank: the other 2 copper bars, to fetch", section(ev, "Take from bank") == ["|Ticon2840:0|t Copper Bar x2"])
 check("no mailbox step with nothing in the mail", section(ev, "Collect from mailbox") is None)
 check("layout: queued, profit, then the To do steps in order, then what's in your bags",
-      headings(ev) == ["Queued", "Profit", "To do", "1. Buy", "2. Take from bank", "3. Craft", "Already in your bags"])
+      headings(ev) == ["Shopping List", "Queued", "Profit", "To do", "1. Buy", "2. Take from bank", "3. Craft", "Already in your bags"])
 check("profit rows: sell prices (auction after the AH cut), expenses, profits", section(ev, "Profit")[:6] == [
     "Vendor price | |cffffffff60s|r", "Auction price | |cffffffff1g 23s 50c|r",
     "Items you have | |cffff2020-10s|r", "Items to buy | |cffff2020-33s 75c|r",
@@ -593,7 +594,7 @@ run('VendorProfit.Panel.Show("shopping")')
 check("opened at the auction house: centered, not docked to it", ev("VendorProfit.Panel.IsShown()") and ev("VendorProfitPanel.__point[1]") == "TOPLEFT" and ev("VendorProfitPanel.__point[2] == UIParent") and ev("VendorProfitPanel.__point[3]") == "TOP")
 check("Buy on before a scan: it scans first", ev("VendorProfit.Shopper.Status()") == "idle" and ev(BUY + ".__text") == "Buy"
       and ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip") == "Scans prices first. Then click Buy for each purchase, and confirm it.")
-check("Scan is on the Profit heading", ev(SCAN + ".__text") == "Scan" and ev(SCAN + ":IsEnabled()"))
+check("Scan is on the page's title line, as on Best Crafts", ev(SCAN + ".__text") == "Scan" and ev(SCAN + ":IsEnabled()"))
 click(run, "scan")
 check("scanning", ev("VendorProfit.Shopper.Status()") == "scanning")
 run('__stub.Advance(2)')
@@ -637,7 +638,7 @@ check("tin bars bought", ev("__stub.bags[3576]") == 29 and ev("VendorProfitCharD
 check("spent is shown but not taken off the profit", has_line(ev, "Spent on this order so far")
       and ev("VendorProfit.Shopper.Summary().profit") == ev("VendorProfit.Shopper.Summary().revenue") - ev("VendorProfit.Shopper.Summary().ownedValue"))
 check("nothing left to buy: the Buy step is gone", ev(BUY) is None and section(ev, "Buy") is None
-      and headings(ev)[2:4] == ["To do", "1. Take from bank"])
+      and headings(ev)[3:5] == ["To do", "1. Take from bank"])
 check("crafts still listed", has_line(ev, "Bronze Bar x58", "29 crafts"))
 check("no errors while shopping", ev("#__stub.errors") == 0)
 
@@ -728,9 +729,31 @@ check("expanded to start, with a minus sign", section(ev, "Already in your bags"
 run(BAGS + '.hit:GetScript("OnMouseUp")(' + BAGS + '.hit, "LeftButton")')
 check("click the divider: collapsed, a plus sign and how many items", not has_line(ev, "Bronze Bar x12")
       and "UI-PlusButton-Up" in ev(BAGS + ".left:GetText()") and ev(BAGS + ".left:GetText()").endswith("Already in your bags (2)"))
-check("remembered per character", ev("VendorProfitCharDB.bagsCollapsed") == True)
+check("remembered per character", ev("VendorProfitCharDB.collapsed.bags") == True)
 run(BAGS + '.hit:GetScript("OnMouseUp")(' + BAGS + '.hit, "LeftButton")')
-check("click again: back open", has_line(ev, "Bronze Bar x12") and ev("VendorProfitCharDB.bagsCollapsed") is None)
+check("click again: back open", has_line(ev, "Bronze Bar x12") and ev("VendorProfitCharDB.collapsed.bags") is None)
+
+# Every section folds the same way.
+def fold(name):
+    row = 'VendorProfit.Panel.FindRow("%s")' % name
+    run(row + '.hit:GetScript("OnMouseUp")(' + row + '.hit, "LeftButton")')
+fold("Queued")
+check("Queued folds away, saying how many are queued", section(ev, "Queued (1)") == []
+      and ev("VendorProfitCharDB.collapsed.queued") == True)
+fold("Profit")
+check("Profit folds away", not has_line(ev, "Vendor profit") and "Profit" in headings(ev))
+fold("To do")
+check("To do folds away, saying how many steps, its buttons with it",
+      section(ev, "To do (3)") == [] and ev(BUY) is None and ev(CRAFT) is None
+      and headings(ev) == ["Shopping List", "Queued (1)", "Profit", "To do (3)", "Already in your bags"])
+check("Scan stays on the title line with everything folded", ev(SCAN + ".__text") == "Scan")
+for name in ["Queued", "Profit", "To do"]:
+    fold(name)
+check("all open again", headings(ev) == ["Shopping List", "Queued", "Profit", "To do", "1. Buy", "2. Take from bank", "3. Craft", "Already in your bags"])
+run2, ev2 = shop_client(before_load="VendorProfitCharDB = { bagsCollapsed = true }")
+run2('__stub.createCount = 10'); run2(QUEUE + ':Click()')
+check("saved before every section folded: the bags fold carries over", ev2("VendorProfitCharDB.collapsed.bags") == True
+      and ev2("VendorProfitCharDB.bagsCollapsed") is None and not has_line(ev2, "Bronze Bar x12"))
 
 # --- Not profitable at live prices --------------------------------------------
 run, ev = shop_client(sell=450)
@@ -1099,6 +1122,12 @@ check("back on another profession: Open Mining again", ev(CRAFT + ".__text") == 
 run(OPEN + ':Click()')
 run('__stub.Advance(4)')
 check("nothing opened after a few seconds: the cover is back", ev(CRAFT + ".__text") == "Open Mining" and ev(COVERED))
+fold("To do")
+check("To do folded: no Craft button, so the cover goes too", ev(CRAFT) is None and not ev(COVERED)
+      and not ev(OPEN + ":IsShown()"))
+fold("To do")
+run(HOVER)
+check("...open again: the mouse on Open Mining covers it", ev(CRAFT + ".__text") == "Open Mining" and ev(COVERED))
 check("no errors", ev("#__stub.errors") == 0)
 
 
@@ -1966,7 +1995,7 @@ check("says it's done", any("Took everything from the bank" in l for l in lines(
 run('__stub.Fire("BAG_UPDATE_DELAYED")')
 check("bank section gone, items now from bags", section(ev, "Take from bank") is None
       and section(ev, "Already in your bags")[:2] == ["|Ticon2840:0|t Copper Bar x7", "|Ticon3576:0|t Tin Bar x7"]
-      and headings(ev)[2:4] == ["To do", "1. Craft"])
+      and headings(ev)[3:5] == ["To do", "1. Craft"])
 run('__stub.CloseBank()')
 check("stays open when the bank closes", ev("VendorProfit.Panel.IsShown()"))
 check("no errors from the bank", ev("#__stub.errors") == 0)
