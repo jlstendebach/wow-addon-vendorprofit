@@ -229,6 +229,17 @@ opens.
 
 ## Crafting
 
+- **Only professions you still have**: a dropped profession (Mining
+  unlearned) kept its saved recipes and routes went on smelting bars you
+  could no longer make, so the "cheapest" route wasn't one you could
+  follow. Now routes, Best Crafts and the route tooltip use only saved
+  professions the game lists for you (GetProfessions, by skill line or
+  name), re-checked on login and when skills change (SKILL_LINES_CHANGED).
+  The saved recipes are kept, not deleted: they count again if it's learned
+  again. Just after logging in the game lists no professions yet, so while
+  it lists none every saved one counts (a character with no professions at
+  all is the one case this can't tell apart).
+
 - **Opening another profession** needs a secure button. It's a separate
   invisible overlay laid over the Craft button at screen coordinates, never
   anchored to the panel (that would make the panel protected in combat). It's

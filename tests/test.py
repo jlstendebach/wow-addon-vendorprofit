@@ -281,6 +281,28 @@ check("copper bars crafted (50c beats 70c)", kids[COPPER_BAR].source == "craft")
 check("tin bars bought (75c beats 80c)", kids[TIN_BAR].source == "auction")
 check("half a copper bar per bronze bar", abs(bronze.children[1].perUnit - 0.5) < 1e-9)
 
+# --- A profession dropped: its recipes stop counting ---------------------------
+run2, ev2 = route_client()
+run2('__stub.playerProfessions = { { name = "Blacksmithing", skillLine = 164 }, { name = "Mining", skillLine = 186 } }')
+run2('__stub.Fire("SKILL_LINES_CHANGED")')
+run2('__stub.OpenProfession(186, "Mining", %s)' % MINING)
+run2('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
+run2('__stub.SetRecipe(%s)' % CUIRASS)
+CALC = "VendorProfit.RouteSection.Calculate(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm))"
+check("with Mining: bronze bars smelted", ev2(CALC).cost == 438)
+run2('__stub.playerProfessions = { { name = "Blacksmithing", skillLine = 164 } }; __stub.Fire("SKILL_LINES_CHANGED")')
+check("Mining dropped: its recipes don't count, so bronze bars are bought (same as never saved)",
+      ev2(CALC).cost == 1239 and ev2(SECTION + ".toCraft:GetText()") == "To Craft: |cffffffff12s 39c|r"
+      and ev2("#VendorProfit.Recipes.ForItem(2841)") == 0
+      and list(ev2("VendorProfit.Recipes.ProfessionNames()").values()) == ["Blacksmithing"]
+      and [p.name for p in ev2("VendorProfit.Recipes.Professions()").values()] == ["Blacksmithing"])
+check("...its saved recipes are kept", ev2("VendorProfitCharDB.professions[186].recipes[2659]") is not None)
+run2('__stub.playerProfessions = { { name = "Blacksmithing", skillLine = 164 }, { name = "Mining", skillLine = 186 } }; __stub.Fire("SKILL_LINES_CHANGED")')
+check("...and count again if it's learned again", ev2(CALC).cost == 438)
+run2('__stub.playerProfessions = {}; __stub.Fire("PLAYER_ENTERING_WORLD")')
+check("the game not listing professions yet (just after logging in): every saved one counts", ev2(CALC).cost == 438)
+check("no errors from dropped professions", ev2("#__stub.errors") == 0)
+
 # --- Tooltip -----------------------------------------------------------------
 tip = ev("__stub.HoverRoute()")
 check("tooltip titled", tip.startswith("Cheapest Route"))

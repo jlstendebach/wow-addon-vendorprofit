@@ -19,6 +19,11 @@
 --     } },
 -- }
 -- A reagent slot lists every item that can fill it.
+--
+-- Only professions the character still has count: one dropped since (Mining
+-- unlearned, say) keeps its saved recipes, but routes don't craft with them
+-- and Best Crafts doesn't list them, since they can't be crafted any more.
+-- They come back if it's learned again (and are saved afresh on opening).
 
 local ADDON_NAME, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -36,26 +41,70 @@ local byRecipe = {}     -- recipeID -> the same entry
 local lastScan          -- { key, name, time } of the last profession saved
 local NONE = {}
 
+-- The character's professions now, by skill line and by name, or nil when
+-- the game hasn't said yet (just after logging in it lists none).
+local function CurrentProfessions()
+    if GetProfessions == nil or GetProfessionInfo == nil then
+        return nil
+    end
+    -- Holes for professions not learned, so not ipairs.
+    local slots = { GetProfessions() }
+    local current, any = {}, false
+    for slot = 1, 5 do
+        local index = slots[slot]
+        if index then
+            local name, _, _, _, _, _, skillLine = GetProfessionInfo(index)
+            if name == nil then
+                return nil
+            end
+            current[name] = true
+            if skillLine then
+                current[skillLine] = true
+            end
+            any = true
+        end
+    end
+    return any and current or nil
+end
+
+local current           -- CurrentProfessions() as of the last index rebuild
+local currentKey        -- the same as a string, to notice changes
+
+-- Whether a saved profession is one the character has (all of them while
+-- the game hasn't said).
+local function Has(key, profession)
+    return current == nil or current[key] == true or current[profession.name] == true
+end
+
 local function RebuildIndex()
+    current = CurrentProfessions()
+    local keys = {}
+    for key in pairs(current or NONE) do
+        keys[#keys + 1] = tostring(key)
+    end
+    table.sort(keys)
+    currentKey = table.concat(keys, ",")
     byItem = {}
     byRecipe = {}
-    for _, profession in pairs(db.professions) do
-        for recipeID, saved in pairs(profession.recipes) do
-            local list = byItem[saved.item]
-            if list == nil then
-                list = {}
-                byItem[saved.item] = list
+    for key, profession in pairs(db.professions) do
+        if Has(key, profession) then
+            for recipeID, saved in pairs(profession.recipes) do
+                local list = byItem[saved.item]
+                if list == nil then
+                    list = {}
+                    byItem[saved.item] = list
+                end
+                local entry = {
+                    recipeID = recipeID,
+                    profession = profession.name,
+                    item = saved.item,
+                    count = saved.count,
+                    reagents = saved.reagents,
+                    stations = saved.stations,
+                }
+                list[#list + 1] = entry
+                byRecipe[recipeID] = entry
             end
-            local entry = {
-                recipeID = recipeID,
-                profession = profession.name,
-                item = saved.item,
-                count = saved.count,
-                reagents = saved.reagents,
-                stations = saved.stations,
-            }
-            list[#list + 1] = entry
-            byRecipe[recipeID] = entry
         end
     end
     -- A fixed order, so ties between recipes always pick the same one.
@@ -130,12 +179,15 @@ function Recipes.ForItem(itemID)
     return byItem[itemID] or NONE
 end
 
--- The professions saved for this character, by name: { key, name }.
+-- The professions saved for this character that it still has, by name:
+-- { key, name }.
 function Recipes.Professions()
     local list = {}
     if db then
         for key, profession in pairs(db.professions) do
-            list[#list + 1] = { key = key, name = profession.name }
+            if Has(key, profession) then
+                list[#list + 1] = { key = key, name = profession.name }
+            end
         end
     end
     table.sort(list, function(a, b) return a.name < b.name end)
@@ -181,8 +233,10 @@ end
 function Recipes.ProfessionNames()
     local names = {}
     if db then
-        for _, profession in pairs(db.professions) do
-            names[#names + 1] = profession.name
+        for key, profession in pairs(db.professions) do
+            if Has(key, profession) then
+                names[#names + 1] = profession.name
+            end
         end
     end
     table.sort(names)
@@ -258,7 +312,7 @@ end
 function Recipes.ForProfession(key)
     local list = {}
     local saved = db and db.professions[key]
-    if saved then
+    if saved and Has(key, saved) then
         for recipeID, recipe in pairs(saved.recipes) do
             list[#list + 1] = {
                 recipeID = recipeID, item = recipe.item, count = recipe.count,
@@ -355,6 +409,20 @@ function Recipes.PlayerProfessions()
     return list
 end
 
+-- A profession learned or dropped (or the game listing them at last after
+-- logging in): routes and Best Crafts use only the ones the character has.
+local function ProfessionsChanged()
+    local before = currentKey
+    RebuildIndex()
+    if currentKey == before then
+        return
+    end
+    VendorProfit.Refresh()
+    if VendorProfit.BestPanel then
+        VendorProfit.BestPanel.Refresh()
+    end
+end
+
 local scanQueued = false
 local function QueueScan()
     if scanQueued then
@@ -379,9 +447,12 @@ events:SetScript("OnEvent", function(self, event, arg)
         db.professions = db.professions or {}
         RebuildIndex()
         self:UnregisterEvent("ADDON_LOADED")
-        for _, name in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED" }) do
+        for _, name in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED",
+            "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "SKILL_LINES_CHANGED" }) do
             pcall(self.RegisterEvent, self, name)
         end
+    elseif event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" or event == "SKILL_LINES_CHANGED" then
+        ProfessionsChanged()
     else
         QueueScan()
     end
