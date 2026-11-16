@@ -96,6 +96,24 @@ time" route mode).
   spellbook entry; "Fishing" (7731) casts a line. Seen in game with a /run
   of Fishing's spellbook entries. A 1s rest after closing, so the click after Close
   doesn't open the first profession again.
+- **Minimum profit and ROI** are boxes on their own row under the search,
+  not Filter menu entries: they take exact amounts, and typing in the
+  game's menus is fiddly (they close when they lose focus). Presets plus a
+  "Custom..." popup in the menu were offered and turned down for that
+  reason. First tried on a row under the search with the game's own money
+  input (the auction house's gold/silver/copper boxes, coins inside): it
+  didn't look good; then plain boxes with units after them, cramped. Now a
+  row under the list, above the notes: number boxes made like the search
+  box (same template, height, font, text from the left, the same 14px gap
+  as the search box beside the Vendor tab), each unit inside at the right
+  (a small coin icon or %) with the text inset short of it, showing 0,
+  which is no minimum (a box left empty goes back to 0). Boxes only as
+  wide as their digits need (gold and ROI up to 4 digits), nearly
+  touching; the row is the window's bottom line with the notes just above
+  it (swapped from notes-last), both held at the bottom, so
+  they stay there when the window is taller than the list needs. Applied as you type; ROI compared as shown (whole
+  percent); unpriced recipes hidden while either is set; the red X clears
+  them with the filters.
 - **Every profession, window closed**: Best Crafts lists the saved recipes of
   every profession you've opened (each is saved when its window opens), ranked
   together: gold is gold whichever profession made it, and the cross-profession
@@ -163,7 +181,16 @@ time" route mode).
   the item's cost and both profits. A profit box was tried and removed.
 - **Buy anyway** only appears when neither selling to a vendor nor at
   auction makes money.
-- **"Already in your bags"** folds away (remembered per character).
+- **Every section folds away**: Queued, Profit, To do and Already in your
+  bags are all dividers (title between lines, a plus or minus sign) that
+  fold on a click, remembered per character, a folded one saying how many
+  rows it holds. (Queued and Profit used to be plain headings; only the
+  bags folded, saved as bagsCollapsed, carried over.) Scan, which sat on
+  the Profit heading, moved to the page's title line ("Shopping List"),
+  where Best Crafts has its Scan: it's for the whole order, and stays
+  reachable with every section folded. With To do folded there's no Craft
+  button, so the open-profession cover goes too (it's only ever over a
+  Craft button that's shown).
 - **Buy before a scan scans first**: a grayed-out Buy pointing at Scan was
   friction. Buy with items queued since the last scan scans just those.
 
@@ -194,6 +221,14 @@ time" route mode).
   found" (someone else bought it first) drops that auction and Buy goes on
   to the next cheapest without a new scan; any other error scans the item
   again; no reply in 15s says so, and a late win is still recorded.
+- **Only from the latest search**: the first try said "not found" for every
+  auction and bought nothing. The auction house only sells an auction from
+  the latest item search, anyone's, and the scan had searched other items
+  since (TradeSkillMaster searches the item again before every buy for
+  this reason). Every search is watched (a hook on SendSearchQuery); when
+  the latest isn't the item's, Buy searches it again first and says so,
+  and the next click buys. Buying several of one item in a row needs no
+  new search.
   Unconfirmed in game: the notification and error events for a buyout on
   Forever (taken from TSM's handling), and whether a search finds suffixed
   versions of an item ("of the Monkey").
@@ -220,6 +255,17 @@ opens.
   Auctionator's own CancelAuction, not ours.)
 
 ## Crafting
+
+- **Only professions you still have**: a dropped profession (Mining
+  unlearned) kept its saved recipes and routes went on smelting bars you
+  could no longer make, so the "cheapest" route wasn't one you could
+  follow. Now routes, Best Crafts and the route tooltip use only saved
+  professions the game lists for you (GetProfessions, by skill line or
+  name), re-checked on login and when skills change (SKILL_LINES_CHANGED).
+  The saved recipes are kept, not deleted: they count again if it's learned
+  again. Just after logging in the game lists no professions yet, so while
+  it lists none every saved one counts (a character with no professions at
+  all is the one case this can't tell apart).
 
 - **Opening another profession** needs a secure button. It's a separate
   invisible overlay laid over the Craft button at screen coordinates, never

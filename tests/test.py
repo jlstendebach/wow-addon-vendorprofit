@@ -281,6 +281,28 @@ check("copper bars crafted (50c beats 70c)", kids[COPPER_BAR].source == "craft")
 check("tin bars bought (75c beats 80c)", kids[TIN_BAR].source == "auction")
 check("half a copper bar per bronze bar", abs(bronze.children[1].perUnit - 0.5) < 1e-9)
 
+# --- A profession dropped: its recipes stop counting ---------------------------
+run2, ev2 = route_client()
+run2('__stub.playerProfessions = { { name = "Blacksmithing", skillLine = 164 }, { name = "Mining", skillLine = 186 } }')
+run2('__stub.Fire("SKILL_LINES_CHANGED")')
+run2('__stub.OpenProfession(186, "Mining", %s)' % MINING)
+run2('__stub.OpenProfession(164, "Blacksmithing", { %s })' % CUIRASS)
+run2('__stub.SetRecipe(%s)' % CUIRASS)
+CALC = "VendorProfit.RouteSection.Calculate(VendorProfit.Calculate(ProfessionsFrame.CraftingPage.SchematicForm))"
+check("with Mining: bronze bars smelted", ev2(CALC).cost == 438)
+run2('__stub.playerProfessions = { { name = "Blacksmithing", skillLine = 164 } }; __stub.Fire("SKILL_LINES_CHANGED")')
+check("Mining dropped: its recipes don't count, so bronze bars are bought (same as never saved)",
+      ev2(CALC).cost == 1239 and ev2(SECTION + ".toCraft:GetText()") == "To Craft: |cffffffff12s 39c|r"
+      and ev2("#VendorProfit.Recipes.ForItem(2841)") == 0
+      and list(ev2("VendorProfit.Recipes.ProfessionNames()").values()) == ["Blacksmithing"]
+      and [p.name for p in ev2("VendorProfit.Recipes.Professions()").values()] == ["Blacksmithing"])
+check("...its saved recipes are kept", ev2("VendorProfitCharDB.professions[186].recipes[2659]") is not None)
+run2('__stub.playerProfessions = { { name = "Blacksmithing", skillLine = 164 }, { name = "Mining", skillLine = 186 } }; __stub.Fire("SKILL_LINES_CHANGED")')
+check("...and count again if it's learned again", ev2(CALC).cost == 438)
+run2('__stub.playerProfessions = {}; __stub.Fire("PLAYER_ENTERING_WORLD")')
+check("the game not listing professions yet (just after logging in): every saved one counts", ev2(CALC).cost == 438)
+check("no errors from dropped professions", ev2("#__stub.errors") == 0)
+
 # --- Tooltip -----------------------------------------------------------------
 tip = ev("__stub.HoverRoute()")
 check("tooltip titled", tip.startswith("Cheapest Route"))
@@ -458,13 +480,14 @@ def lines(ev):
             for l in ev("VendorProfit.Panel.Lines()").values()]
 
 
-DIVIDERS = {"To do", "Already in your bags"}
-HEADINGS = {"Queued", "Profit"} | DIVIDERS
+DIVIDERS = {"Queued", "Profit", "To do", "Already in your bags"}
+HEADINGS = {"Shopping List"} | DIVIDERS
 STEP = re.compile(r"^\d+\. (.*)$")
 
 
 def is_heading(line):
-    return line in HEADINGS or STEP.match(line) is not None
+    # A folded section's divider says how many rows it holds: "Queued (2)".
+    return re.sub(r" \(\d+\)$", "", line) in HEADINGS or STEP.match(line) is not None
 
 
 def section(ev, heading):
@@ -491,12 +514,12 @@ def has_line(ev, *parts):
 
 
 BUY = 'VendorProfit.Panel.RowButton("Buy")'
-SCAN = 'VendorProfit.Panel.RowButton("Profit")'
+SCAN = 'VendorProfit.Panel.RowButton("Shopping List")'
 CRAFT = 'VendorProfit.Panel.RowButton("Craft")'
 
 
 def click(run, name):
-    """Clicks a panel button: Buy, Scan (on Profit), Clear (on Queued), Cancel (by the price to confirm)."""
+    """Clicks a panel button: Buy, Scan (on the title), Cancel (by the price to confirm)."""
     if name == "buy":
         run(BUY + ":Click()")
     elif name == "scan":
@@ -541,7 +564,7 @@ check("from your bags: 12 bronze bars, 3 copper bars",
 check("from your bank: the other 2 copper bars, to fetch", section(ev, "Take from bank") == ["|Ticon2840:0|t Copper Bar x2"])
 check("no mailbox step with nothing in the mail", section(ev, "Collect from mailbox") is None)
 check("layout: queued, profit, then the To do steps in order, then what's in your bags",
-      headings(ev) == ["Queued", "Profit", "To do", "1. Buy", "2. Take from bank", "3. Craft", "Already in your bags"])
+      headings(ev) == ["Shopping List", "Queued", "Profit", "To do", "1. Buy", "2. Take from bank", "3. Craft", "Already in your bags"])
 check("profit rows: sell prices (auction after the AH cut), expenses, profits", section(ev, "Profit")[:6] == [
     "Vendor price | |cffffffff60s|r", "Auction price | |cffffffff1g 23s 50c|r",
     "Items you have | |cffff2020-10s|r", "Items to buy | |cffff2020-33s 75c|r",
@@ -571,7 +594,7 @@ run('VendorProfit.Panel.Show("shopping")')
 check("opened at the auction house: centered, not docked to it", ev("VendorProfit.Panel.IsShown()") and ev("VendorProfitPanel.__point[1]") == "TOPLEFT" and ev("VendorProfitPanel.__point[2] == UIParent") and ev("VendorProfitPanel.__point[3]") == "TOP")
 check("Buy on before a scan: it scans first", ev("VendorProfit.Shopper.Status()") == "idle" and ev(BUY + ".__text") == "Buy"
       and ev(BUY + ":IsEnabled()") and ev(BUY + ".tooltip") == "Scans prices first. Then click Buy for each purchase, and confirm it.")
-check("Scan is on the Profit heading", ev(SCAN + ".__text") == "Scan" and ev(SCAN + ":IsEnabled()"))
+check("Scan is on the page's title line, as on Best Crafts", ev(SCAN + ".__text") == "Scan" and ev(SCAN + ":IsEnabled()"))
 click(run, "scan")
 check("scanning", ev("VendorProfit.Shopper.Status()") == "scanning")
 run('__stub.Advance(2)')
@@ -615,7 +638,7 @@ check("tin bars bought", ev("__stub.bags[3576]") == 29 and ev("VendorProfitCharD
 check("spent is shown but not taken off the profit", has_line(ev, "Spent on this order so far")
       and ev("VendorProfit.Shopper.Summary().profit") == ev("VendorProfit.Shopper.Summary().revenue") - ev("VendorProfit.Shopper.Summary().ownedValue"))
 check("nothing left to buy: the Buy step is gone", ev(BUY) is None and section(ev, "Buy") is None
-      and headings(ev)[2:4] == ["To do", "1. Take from bank"])
+      and headings(ev)[3:5] == ["To do", "1. Take from bank"])
 check("crafts still listed", has_line(ev, "Bronze Bar x58", "29 crafts"))
 check("no errors while shopping", ev("#__stub.errors") == 0)
 
@@ -706,9 +729,31 @@ check("expanded to start, with a minus sign", section(ev, "Already in your bags"
 run(BAGS + '.hit:GetScript("OnMouseUp")(' + BAGS + '.hit, "LeftButton")')
 check("click the divider: collapsed, a plus sign and how many items", not has_line(ev, "Bronze Bar x12")
       and "UI-PlusButton-Up" in ev(BAGS + ".left:GetText()") and ev(BAGS + ".left:GetText()").endswith("Already in your bags (2)"))
-check("remembered per character", ev("VendorProfitCharDB.bagsCollapsed") == True)
+check("remembered per character", ev("VendorProfitCharDB.collapsed.bags") == True)
 run(BAGS + '.hit:GetScript("OnMouseUp")(' + BAGS + '.hit, "LeftButton")')
-check("click again: back open", has_line(ev, "Bronze Bar x12") and ev("VendorProfitCharDB.bagsCollapsed") is None)
+check("click again: back open", has_line(ev, "Bronze Bar x12") and ev("VendorProfitCharDB.collapsed.bags") is None)
+
+# Every section folds the same way.
+def fold(name):
+    row = 'VendorProfit.Panel.FindRow("%s")' % name
+    run(row + '.hit:GetScript("OnMouseUp")(' + row + '.hit, "LeftButton")')
+fold("Queued")
+check("Queued folds away, saying how many are queued", section(ev, "Queued (1)") == []
+      and ev("VendorProfitCharDB.collapsed.queued") == True)
+fold("Profit")
+check("Profit folds away", not has_line(ev, "Vendor profit") and "Profit" in headings(ev))
+fold("To do")
+check("To do folds away, saying how many steps, its buttons with it",
+      section(ev, "To do (3)") == [] and ev(BUY) is None and ev(CRAFT) is None
+      and headings(ev) == ["Shopping List", "Queued (1)", "Profit", "To do (3)", "Already in your bags"])
+check("Scan stays on the title line with everything folded", ev(SCAN + ".__text") == "Scan")
+for name in ["Queued", "Profit", "To do"]:
+    fold(name)
+check("all open again", headings(ev) == ["Shopping List", "Queued", "Profit", "To do", "1. Buy", "2. Take from bank", "3. Craft", "Already in your bags"])
+run2, ev2 = shop_client(before_load="VendorProfitCharDB = { bagsCollapsed = true }")
+run2('__stub.createCount = 10'); run2(QUEUE + ':Click()')
+check("saved before every section folded: the bags fold carries over", ev2("VendorProfitCharDB.collapsed.bags") == True
+      and ev2("VendorProfitCharDB.bagsCollapsed") is None and not has_line(ev2, "Bronze Bar x12"))
 
 # --- Not profitable at live prices --------------------------------------------
 run, ev = shop_client(sell=450)
@@ -872,6 +917,18 @@ check("scanned as single auctions: priced at the cheapest buyouts (%d needed)" %
 check("bid-only and your own auctions left out", [r.auctionID for r in ev("VendorProfit.Shopper.Listing(3576).rows").values()]
       == [101, 102, 103, 104, 105, 106, 107, 108])
 check("Buy offers the cheapest auction", ev(BUY + ".__text") == "Buy"
+      and ev(BUY + ".tooltip") == "Buy 1 Tin Bar for |cffffffff70c|r")
+# Another item searched since (the scan's next item, Auctionator, the game's
+# window): the game only sells from the latest search.
+run('C_AuctionHouse.SendSearchQuery(C_AuctionHouse.MakeItemKey(2770), {}, false)'); run('__stub.Advance(0.5)')
+searches = ev("#__stub.ah.searches")
+click(run, "buy")
+check("another item searched since: Buy searches Tin Bar again first, no bid (it would be 'not found')",
+      ev("#__stub.ah.bids") == 0 and ev("__stub.ah.searches[%d]" % (searches + 1)) == 3576
+      and "Finding Tin Bar's auctions again" in ev("(VendorProfit.Shopper.Message())"))
+run('__stub.Advance(1)')
+check("...then the next click buys", ev("VendorProfit.Shopper.Status()") == "ready"
+      and ev("(VendorProfit.Shopper.Message())") == "Prices are in. Click Buy for Tin Bar."
       and ev(BUY + ".tooltip") == "Buy 1 Tin Bar for |cffffffff70c|r")
 money = ev("__stub.money")
 click(run, "buy")
@@ -1065,6 +1122,12 @@ check("back on another profession: Open Mining again", ev(CRAFT + ".__text") == 
 run(OPEN + ':Click()')
 run('__stub.Advance(4)')
 check("nothing opened after a few seconds: the cover is back", ev(CRAFT + ".__text") == "Open Mining" and ev(COVERED))
+fold("To do")
+check("To do folded: no Craft button, so the cover goes too", ev(CRAFT) is None and not ev(COVERED)
+      and not ev(OPEN + ":IsShown()"))
+fold("To do")
+run(HOVER)
+check("...open again: the mouse on Open Mining covers it", ev(CRAFT + ".__text") == "Open Mining" and ev(COVERED))
 check("no errors", ev("#__stub.errors") == 0)
 
 
@@ -1932,7 +1995,7 @@ check("says it's done", any("Took everything from the bank" in l for l in lines(
 run('__stub.Fire("BAG_UPDATE_DELAYED")')
 check("bank section gone, items now from bags", section(ev, "Take from bank") is None
       and section(ev, "Already in your bags")[:2] == ["|Ticon2840:0|t Copper Bar x7", "|Ticon3576:0|t Tin Bar x7"]
-      and headings(ev)[2:4] == ["To do", "1. Craft"])
+      and headings(ev)[3:5] == ["To do", "1. Craft"])
 run('__stub.CloseBank()')
 check("stays open when the bank closes", ev("VendorProfit.Panel.IsShown()"))
 check("no errors from the bank", ev("#__stub.errors") == 0)
@@ -2139,6 +2202,48 @@ run(B + '.search:Type("zzz")')
 check("nothing matches: says so", best() == [] and 'No recipes match "zzz".' in ev(B + ".status:GetText()"))
 run(B + '.search:Type("")')
 check("cleared: everything again", len(best()) == 5)
+# Minimum profit and ROI: exact amounts, typed into plain boxes on a row under
+# the list, above the notes.
+M = B + ".minimums"
+shown = lambda: [l.split(" | ")[0].split("|t ")[-1] for l in best()]
+check("minimums on the window's bottom row, the notes just above it: gold (up to 9999), silver, copper and ROI boxes, 0 to start",
+      [ev(M + "." + k + ":GetText()") for k in ["gold", "silver", "copper", "roi"]] == ["0", "0", "0", "0"]
+      and ev(M + ".roi.__numeric") and ev(M + ".silver.__maxLetters") == 2
+      and ev(M + ".gold.__maxLetters") == 4
+      and ev(M + ".__point[1]") == "BOTTOMLEFT" and ev(M + ".__point[2] == " + B)
+      and ev(B + ".status.__point[2] == " + M) and ev(B + ".status.__point[3]") == "TOPLEFT")
+check("...each with its unit inside at the right (coin icons, %), the text stopping short of it, like the search box",
+      all(ev(M + "." + k + ".unit.__point[2] == " + M + "." + k) and ev(M + "." + k + ".__insets[2]") >= 15
+          for k in ["gold", "silver", "copper", "roi"])
+      and "GoldIcon" in ev(M + ".gold.unit.__texture") and ev(M + ".roi.unit:GetText()") == "%")
+run(M + '.copper:Type("88")')
+check("min. profit 88c: only recipes making at least that per craft; unpriced ones can't meet it", shown() == ["Rough Bronze Cuirass"]
+      and ev("VendorProfitCharDB.bestMinimums.profit") == 88 and ev(B + ".filterReset:IsEnabled()"))
+run(M + '.copper:Type("87")')
+check("...87c: exactly 87c passes", shown() == ["Rough Bronze Cuirass", "Rough Bronze Shoulders"])
+run(M + '.silver:Type("1")')
+check("...1s 87c, silver and copper together: none", shown() == [])
+run(M + '.silver:Type(""); ' + M + '.copper:Type("0")')
+check("...an empty box counts as 0, and 0 is no minimum", len(best()) == 5 and ev("VendorProfitCharDB.bestMinimums") is None)
+run(M + '.silver.__scripts.OnEditFocusLost(' + M + '.silver)')
+check("...left empty, a box goes back to 0", ev(M + ".silver:GetText()") == "0")
+run(M + '.roi:Type("37")')
+check("min. ROI 37%: compared as shown, a whole percentage (162 / 438 shows 37%)", shown() == ["Rough Bronze Cuirass"]
+      and ev("VendorProfitCharDB.bestMinimums.roi") == 37)
+run(M + '.roi:Type("38")')
+check("...38%: none", shown() == [])
+run(M + '.copper:Type("50"); ' + M + '.roi:Type("30")')
+check("both at once", shown() == ["Rough Bronze Cuirass"])
+run(B + '.filterReset:Click()')
+check("the red X clears the minimums too, boxes back to 0 (with the other filters: Mining ticked again)",
+      len(best()) == 8 and ev("VendorProfitCharDB.bestMinimums") is None
+      and [ev(M + "." + k + ":GetText()") for k in ["gold", "silver", "copper", "roi"]] == ["0", "0", "0", "0"]
+      and not ev(B + ".filterReset:IsEnabled()"))
+run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
+run_m, ev_m = route_client("VendorProfitCharDB = { bestMinimums = { profit = 12345, roi = 25 } }")
+run_m('VendorProfit.Panel.Show("best")')
+check("minimums are saved per character, shown in their boxes next time",
+      [ev_m("VendorProfit.BestPanel.Frame().minimums." + k + ":GetText()") for k in ["gold", "silver", "copper", "roi"]] == ["1", "23", "45", "25"])
 # Filters: profitable only, and skill-up colors, from the game's filter dropdown.
 run('__stub.recipes[2670].difficulty = 0; __stub.recipes[3328].difficulty = 1; __stub.recipes[2671].difficulty = 2; __stub.recipes[9102].difficulty = 3')
 run('if __stub.recipe and __stub.recipe.recipeID == 2670 then __stub.recipe.difficulty = 0 end')

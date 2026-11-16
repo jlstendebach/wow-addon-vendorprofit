@@ -92,7 +92,7 @@ VendorProfit.L = {
     BEST_NO_MATCH_FILTERS = "No recipes pass the filters.",
     BEST_FILTER = "Filter",
     BEST_FILTER_ON = "Filter (%d)",
-    BEST_FILTER_RESET = "Clear the filters.",
+    BEST_FILTER_RESET = "Clear the filters and minimums.",
     BEST_FILTER_PROFITABLE = "Profitable only",
     BEST_FILTER_SKILL_UP = "Skill up",
     BEST_SKILL_OPTIMAL = "Guaranteed",
@@ -102,6 +102,10 @@ VendorProfit.L = {
     BEST_SKILL_SAVED = "Skill-up color as of when you last opened %s.",
     -- Two short lines: the menu is as wide as its widest line.
     BEST_SKILL_SAVED_NOTE = "Closed professions:\ncolors as last seen.",
+    BEST_MIN_PROFIT = "Min profit:",
+    BEST_MIN_PROFIT_HELP = "Hides recipes that make less than this per craft (on the Auction or Vendor tab you're on). 0: no minimum.",
+    BEST_MIN_ROI = "Min ROI:",
+    BEST_MIN_ROI_HELP = "Hides recipes whose return on investment is below this percentage. 0: no minimum.",
     BEST_FILTER_PROFESSIONS = "Professions",
     BEST_NO_PRICE_FOR = "no price: %s",
     BEST_NO_VENDOR_PRICE = "no vendor price",
@@ -297,6 +301,7 @@ VendorProfit.L = {
     PRICE_UNAVAILABLE = "%s isn't available at that price any more. Scanning it again.",
     BOUGHT = "Bought %d %s for %s.",
     PURCHASE_FAILED = "Buying %s failed. Scanning it again.",
+    AUCTION_SEARCH_AGAIN = "Finding %s's auctions again: the auction house only sells from the latest search.",
     AUCTION_GONE = "%s was bought by someone else first. Buy goes on to the next cheapest.",
 }
 

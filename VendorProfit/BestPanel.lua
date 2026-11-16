@@ -38,6 +38,8 @@ local WIDTH = 520
 local PADDING = 16
 local ROW_HEIGHT = 22
 local LIST_TOP = -94
+-- The minimums row, at the bottom of the window, under the notes.
+local MINIMUMS_HEIGHT = 20
 local VISIBLE_ROWS = 14
 local SCROLLBAR_WIDTH = 24
 local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
@@ -413,18 +415,61 @@ SetFilter = function(key, value)
     BestPanel.Refresh()
 end
 
-ResetFilters = function()
-    if VendorProfitCharDB then
-        VendorProfitCharDB.bestFilters = nil
+-- The minimum profit per craft (copper) and ROI (a whole percentage) typed
+-- into the boxes above the list, saved per character; 0 for none. They're
+-- boxes rather than Filter menu entries because they take exact amounts.
+local function Minimums()
+    local db = VendorProfitCharDB
+    local saved = db and type(db.bestMinimums) == "table" and db.bestMinimums or {}
+    return saved.profit or 0, saved.roi or 0
+end
+
+local function SetMinimums(profit, roi)
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    if profit > 0 or roi > 0 then
+        VendorProfitCharDB.bestMinimums = { profit = profit > 0 and profit or nil, roi = roi > 0 and roi or nil }
+    else
+        VendorProfitCharDB.bestMinimums = nil
     end
     BestPanel.Refresh()
 end
 
+-- Shows the saved minimums in the boxes (0 for none).
+local function ShowMinimums()
+    if frame == nil or frame.minimums == nil then
+        return
+    end
+    local profit, roi = Minimums()
+    local boxes = frame.minimums
+    boxes.gold:SetText(tostring(math.floor(profit / 10000)))
+    boxes.silver:SetText(tostring(math.floor(profit / 100) % 100))
+    boxes.copper:SetText(tostring(profit % 100))
+    boxes.roi:SetText(tostring(roi))
+end
+
+ResetFilters = function()
+    if VendorProfitCharDB then
+        VendorProfitCharDB.bestFilters = nil
+        VendorProfitCharDB.bestMinimums = nil
+    end
+    ShowMinimums()
+    BestPanel.Refresh()
+end
+
 -- Whether an entry passes the filters. Skill-up filters show recipes of the
--- checked colors; a recipe whose color isn't known can't pass them.
+-- checked colors; a recipe whose color isn't known can't pass them. A
+-- recipe with no profit to rank can't meet a minimum. ROI is compared as
+-- shown, a whole percentage.
 local function PassesFilters(entry)
     local filters = Filters()
     if filters.profitable and not (entry.profit and entry.profit > 0) then
+        return false
+    end
+    local minProfit, minRoi = Minimums()
+    if minProfit > 0 and not (entry.profit and entry.profit >= minProfit) then
+        return false
+    end
+    if minRoi > 0 and not (entry.profit and entry.roi and math.floor(entry.roi * 100 + 0.5) >= minRoi) then
         return false
     end
     if SkillFilterActive() then
@@ -584,6 +629,89 @@ local function Create(page)
     search:HookScript("OnEnterPressed", function(self) self:ClearFocus() end)
     frame.search = search
 
+    -- Minimums, on a row under the list (placed in Refresh): profit in
+    -- gold, silver and copper boxes, and ROI, each a number box like the
+    -- search box with its unit inside. 0 is no minimum. Changes apply as you
+    -- type.
+    local row = CreateFrame("Frame", nil, frame)
+    row:SetSize(WIDTH - 2 * PADDING, MINIMUMS_HEIGHT)
+    frame.minimums = row
+    local function Changed(_, userInput)
+        if userInput then
+            local function Number(box)
+                return math.floor(tonumber(row[box]:GetText() or "") or 0)
+            end
+            local profit = Number("gold") * 10000 + Number("silver") * 100 + Number("copper")
+            SetMinimums(profit, Number("roi"))
+        end
+    end
+    local function Help(region, text)
+        region:HookScript("OnEnter", function(self)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(text, 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        region:HookScript("OnLeave", function() GameTooltip:Hide() end)
+    end
+    -- A label, after the previous box (or first in the row).
+    local function Text(after, text, gap)
+        local label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        if after then
+            label:SetPoint("LEFT", after, "RIGHT", gap, 0)
+        else
+            label:SetPoint("LEFT", row, "LEFT", 0, 0)
+        end
+        label:SetText(text)
+        return label
+    end
+    -- A number box like the search box (the same template underneath, the
+    -- same height and font, text from the left), with its unit inside at
+    -- the right (a coin icon, or %), the text stopping short of it.
+    local UNIT_SPACE = 17
+    local function Box(key, after, gap, width, letters, unit, help)
+        local box = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
+        box:SetSize(width, MINIMUMS_HEIGHT)
+        -- The template's border reaches a few pixels left of the box, so the
+        -- gap is measured as for the search box beside the Vendor tab.
+        box:SetPoint("LEFT", after, "RIGHT", gap, 0)
+        box:SetAutoFocus(false)
+        box:SetNumeric(true)
+        box:SetMaxLetters(letters)
+        box:SetTextInsets(0, UNIT_SPACE, 0, 0)
+        local mark
+        if unit.texture then
+            mark = box:CreateTexture(nil, "OVERLAY")
+            mark:SetTexture(unit.texture)
+            mark:SetSize(11, 11)
+        else
+            mark = box:CreateFontString(nil, "OVERLAY", "ChatFontNormal")
+            mark:SetText(unit.text)
+            mark:SetTextColor(0.6, 0.6, 0.6)
+        end
+        mark:SetPoint("RIGHT", box, "RIGHT", -4, 0)
+        box.unit = mark
+        box:HookScript("OnTextChanged", Changed)
+        box:HookScript("OnEnterPressed", function(self) self:ClearFocus() end)
+        box:HookScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        -- Left empty: back to 0.
+        box:HookScript("OnEditFocusLost", function(self)
+            if (self:GetText() or "") == "" then
+                self:SetText("0")
+            end
+        end)
+        Help(box, help)
+        row[key] = box
+        return box
+    end
+    local COIN = "Interface\\MoneyFrame\\UI-%sIcon"
+    -- Up to 9,999 gold and 9,999%. Boxes are as wide as their digits and
+    -- unit need, and nearly touching (each border reaches 5px outside it).
+    local gold = Box("gold", Text(nil, L.BEST_MIN_PROFIT), 10, 52, 4, { texture = COIN:format("Gold") }, L.BEST_MIN_PROFIT_HELP)
+    local silver = Box("silver", gold, 9, 36, 2, { texture = COIN:format("Silver") }, L.BEST_MIN_PROFIT_HELP)
+    local copper = Box("copper", silver, 9, 36, 2, { texture = COIN:format("Copper") }, L.BEST_MIN_PROFIT_HELP)
+    Box("roi", Text(copper, L.BEST_MIN_ROI, 24), 10, 52, 4, { text = "%" }, L.BEST_MIN_ROI_HELP)
+    ShowMinimums()
+
     -- Filter: a button in the page's own style that opens the game's menu
     -- of checkboxes under it (clicking it again closes it), and a small red
     -- X at the row's end that clears the filters, grayed out while none are
@@ -714,8 +842,11 @@ local function Refresh()
             end
         end
         frame.filter:SetText(on > 0 and string.format(L.BEST_FILTER_ON, on) or L.BEST_FILTER)
-        frame.filterReset:SetEnabled(on > 0)
-        frame.filterReset.icon:SetDesaturated(on == 0)
+        -- The X clears the minimums too.
+        local minProfit, minRoi = Minimums()
+        local any = on > 0 or minProfit > 0 or minRoi > 0
+        frame.filterReset:SetEnabled(any)
+        frame.filterReset.icon:SetDesaturated(not any)
     end
 
     -- Tabs: the selected one stays lit.
@@ -898,10 +1029,16 @@ local function Refresh()
     if text then
         lines[#lines + 1] = isError and RED_FONT_COLOR:WrapTextInColorCode(text) or text
     end
-    frame.status:ClearAllPoints()
-    frame.status:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y - 8)
+    -- The minimums row at the bottom of the window and the notes just above
+    -- it, held there when the window is taller than the list needs (it's
+    -- at least tall enough for the side tabs). The height leaves room for
+    -- both under the list.
     frame.status:SetText(table.concat(lines, "\n"))
-    return -y + 8 + (frame.status:GetStringHeight() or 12) + PADDING
+    frame.minimums:ClearAllPoints()
+    frame.minimums:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PADDING, PADDING)
+    frame.status:ClearAllPoints()
+    frame.status:SetPoint("BOTTOMLEFT", frame.minimums, "TOPLEFT", 0, 8)
+    return -y + 8 + MINIMUMS_HEIGHT + 8 + (frame.status:GetStringHeight() or 12) + PADDING
 end
 
 function BestPanel.Refresh()

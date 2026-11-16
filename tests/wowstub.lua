@@ -23,6 +23,24 @@ function CreateFrame(_, name, parent, template)
     local f = setmetatable({ __shown = true, __parent = parent, __events = {}, __scripts = {} }, FrameMethods)
     if name then _G[name] = f end
     eventFrames[#eventFrames + 1] = f
+    -- The auction house's money input: gold, silver and copper boxes.
+    if template == "LargeMoneyInputFrameTemplate" then
+        for _, key in ipairs({ "GoldBox", "SilverBox", "CopperBox" }) do
+            f[key] = CreateFrame("EditBox", nil, f)
+        end
+        function f:GetAmount()
+            local function n(box) return tonumber(box:GetText() or "") or 0 end
+            return n(self.GoldBox) * 10000 + n(self.SilverBox) * 100 + n(self.CopperBox)
+        end
+        function f:SetAmount(copper)
+            self.GoldBox:SetText(copper >= 10000 and tostring(math.floor(copper / 10000)) or "")
+            self.SilverBox:SetText(copper >= 100 and tostring(math.floor(copper / 100) % 100) or "")
+            self.CopperBox:SetText(tostring(copper % 100))
+        end
+        function f:Clear()
+            for _, key in ipairs({ "GoldBox", "SilverBox", "CopperBox" }) do self[key]:SetText("") end
+        end
+    end
     -- The window template's close button, which closes through HideUIPanel.
     if template == "ButtonFrameTemplate" then
         f.CloseButton = CreateFrame("Button", nil, f)
@@ -132,6 +150,10 @@ function FrameMethods:SetTitle(t) self.__title = t end
 function FrameMethods:SetMultiLine(m) self.__multiLine = m end
 function FrameMethods:SetFontObject() end
 function FrameMethods:SetAutoFocus(f) end
+function FrameMethods:SetNumeric(n) self.__numeric = n end
+function FrameMethods:SetJustifyH(j) self.__justifyH = j end
+function FrameMethods:SetTextInsets(l, r, t, b) self.__insets = { l, r, t, b } end
+function FrameMethods:SetMaxLetters(n) self.__maxLetters = n end
 function FrameMethods:SetFocus() self.__focused = true end
 function FrameMethods:HighlightText() self.__highlighted = true end
 function FrameMethods:SetMovable(m) self.__movable = m end
@@ -221,6 +243,7 @@ function FontMethods:SetText(t) self.__text = t or "" end
 function FontMethods:GetText() return self.__text end
 function FontMethods:SetJustifyH() end
 function FontMethods:SetFontObject() end
+function FontMethods:SetTextColor(r, g, b) self.__color = { r, g, b } end
 function FontMethods:SetWordWrap() end
 function FontMethods:SetAllPoints(target) self.__point = { "ALL", target } end
 function FontMethods:SetDesaturated(d) self.__desaturated = d end
@@ -649,6 +672,7 @@ C_AuctionHouse = {
     SendSearchQuery = function(itemKey)
         local id = itemKey.itemID
         ah.searches[#ah.searches + 1] = id
+        ah.lastSearch = id
         if ah.dropSearches > 0 then ah.dropSearches = ah.dropSearches - 1 return end
         ah.loaded[id] = math.min(ah.pageSize, ah.nonCommodity[id] and #Auctions(id) or #Rows(id))
         local empty = false
@@ -688,6 +712,8 @@ C_AuctionHouse = {
         Later(function() stub.Fire("ITEM_SEARCH_RESULTS_ADDED", key) end)
     end,
     -- Buying a single auction at its buyout: "won", or an error message.
+    -- Like the game, only an auction of the item searched last can be
+    -- bought; any other is "not found".
     PlaceBid = function(auctionID, amount)
         ah.bids[#ah.bids + 1] = { auctionID, amount }
         if ah.noBidReply then return end
@@ -697,6 +723,10 @@ C_AuctionHouse = {
                 for i, a in ipairs(list) do
                     if a.auctionID == auctionID then foundIn, foundAt = id, i end
                 end
+            end
+            if foundIn ~= nil and foundIn ~= ah.lastSearch then
+                stub.Fire("UI_ERROR_MESSAGE", 0, ERR_ITEM_NOT_FOUND)
+                return
             end
             if ah.goneNext or foundIn == nil then
                 ah.goneNext = false
