@@ -37,10 +37,9 @@ local Columns = VendorProfit.Columns
 local WIDTH = 520
 local PADDING = 16
 local ROW_HEIGHT = 22
--- Title at -38, the tabs and search row at -52, the minimums row 6 below it
--- (20 tall), then the column headings 6 below that and 16 above the list.
-local MINIMUMS_TOP = -78
-local LIST_TOP = -120
+local LIST_TOP = -94
+-- The minimums row, under the list, above the notes.
+local MINIMUMS_HEIGHT = 20
 local VISIBLE_ROWS = 14
 local SCROLLBAR_WIDTH = 24
 local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
@@ -435,18 +434,17 @@ local function SetMinimums(profit, roi)
     BestPanel.Refresh()
 end
 
--- Shows the saved minimums in the boxes (empty for none).
+-- Shows the saved minimums in the boxes (0 for none).
 local function ShowMinimums()
-    if frame == nil or frame.minProfit == nil then
+    if frame == nil or frame.minimums == nil then
         return
     end
     local profit, roi = Minimums()
-    if profit > 0 then
-        frame.minProfit:SetAmount(profit)
-    else
-        frame.minProfit:Clear()
-    end
-    frame.minRoi:SetText(roi > 0 and tostring(roi) or "")
+    local boxes = frame.minimums
+    boxes.gold:SetText(tostring(math.floor(profit / 10000)))
+    boxes.silver:SetText(tostring(math.floor(profit / 100) % 100))
+    boxes.copper:SetText(tostring(profit % 100))
+    boxes.roi:SetText(tostring(roi))
 end
 
 ResetFilters = function()
@@ -631,17 +629,21 @@ local function Create(page)
     search:HookScript("OnEnterPressed", function(self) self:ClearFocus() end)
     frame.search = search
 
-    -- Minimums, on a row of their own: the game's own money input (the
-    -- auction house's gold, silver and copper boxes) for profit, and a
-    -- box for ROI. Empty: no minimum. Changes apply as you type.
+    -- Minimums, on a row under the list (placed in Refresh): profit in
+    -- gold, silver and copper boxes, and ROI, each a plain number box with
+    -- its unit after it (the coin icons money is shown with, and %). 0 is no
+    -- minimum. Changes apply as you type.
+    local row = CreateFrame("Frame", nil, frame)
+    row:SetSize(WIDTH - 2 * PADDING, MINIMUMS_HEIGHT)
+    frame.minimums = row
     local function Changed(_, userInput)
         if userInput then
-            local roi = tonumber(frame.minRoi:GetText() or "") or 0
-            SetMinimums(frame.minProfit:GetAmount() or 0, math.floor(roi))
+            local function Number(box)
+                return math.floor(tonumber(row[box]:GetText() or "") or 0)
+            end
+            local profit = Number("gold") * 10000 + Number("silver") * 100 + Number("copper")
+            SetMinimums(profit, Number("roi"))
         end
-    end
-    local function Finished(self)
-        self:ClearFocus()
     end
     local function Help(region, text)
         region:HookScript("OnEnter", function(self)
@@ -651,35 +653,46 @@ local function Create(page)
         end)
         region:HookScript("OnLeave", function() GameTooltip:Hide() end)
     end
-    local profitLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    profitLabel:SetPoint("LEFT", frame, "TOPLEFT", PADDING, MINIMUMS_TOP - 10)
-    profitLabel:SetText(L.BEST_MIN_PROFIT)
-    frame.minProfit = CreateFrame("Frame", nil, frame, "LargeMoneyInputFrameTemplate")
-    frame.minProfit:SetSize(150, 20)
-    frame.minProfit:SetPoint("LEFT", profitLabel, "RIGHT", 8, 0)
-    for _, key in ipairs({ "GoldBox", "SilverBox", "CopperBox" }) do
-        local box = frame.minProfit[key]
-        box:HookScript("OnTextChanged", Changed)
-        box:HookScript("OnEnterPressed", Finished)
-        box:HookScript("OnEscapePressed", Finished)
-        Help(box, L.BEST_MIN_PROFIT_HELP)
+    -- A label or unit after the previous region.
+    local function Text(after, text, gap, font)
+        local label = row:CreateFontString(nil, "OVERLAY", font or "GameFontNormalSmall")
+        if after then
+            label:SetPoint("LEFT", after, "RIGHT", gap, 0)
+        else
+            label:SetPoint("LEFT", row, "LEFT", 0, 0)
+        end
+        label:SetText(text)
+        return label
     end
-    local roiLabel = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    roiLabel:SetPoint("LEFT", frame.minProfit, "RIGHT", 20, 0)
-    roiLabel:SetText(L.BEST_MIN_ROI)
-    frame.minRoi = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
-    frame.minRoi:SetSize(44, 20)
-    frame.minRoi:SetPoint("LEFT", roiLabel, "RIGHT", 10, 0)
-    frame.minRoi:SetAutoFocus(false)
-    frame.minRoi:SetNumeric(true)
-    frame.minRoi:SetMaxLetters(5)
-    frame.minRoi:HookScript("OnTextChanged", Changed)
-    frame.minRoi:HookScript("OnEnterPressed", Finished)
-    frame.minRoi:HookScript("OnEscapePressed", Finished)
-    Help(frame.minRoi, L.BEST_MIN_ROI_HELP)
-    local percent = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    percent:SetPoint("LEFT", frame.minRoi, "RIGHT", 2, 0)
-    percent:SetText("%")
+    local function Box(key, after, width, letters, help)
+        local box = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
+        box:SetSize(width, MINIMUMS_HEIGHT)
+        -- The template's border sits a few pixels left of the text.
+        box:SetPoint("LEFT", after, "RIGHT", 10, 0)
+        box:SetAutoFocus(false)
+        box:SetNumeric(true)
+        box:SetMaxLetters(letters)
+        box:SetJustifyH("RIGHT")
+        box:HookScript("OnTextChanged", Changed)
+        box:HookScript("OnEnterPressed", function(self) self:ClearFocus() end)
+        box:HookScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        -- Left empty: back to 0.
+        box:HookScript("OnEditFocusLost", function(self)
+            if (self:GetText() or "") == "" then
+                self:SetText("0")
+            end
+        end)
+        Help(box, help)
+        row[key] = box
+        return box
+    end
+    local label = Text(nil, L.BEST_MIN_PROFIT)
+    local gold = Box("gold", label, 48, 6, L.BEST_MIN_PROFIT_HELP)
+    local silver = Box("silver", Text(gold, VendorProfit.COINS.gold, 3, "GameFontHighlightSmall"), 24, 2, L.BEST_MIN_PROFIT_HELP)
+    local copper = Box("copper", Text(silver, VendorProfit.COINS.silver, 3, "GameFontHighlightSmall"), 24, 2, L.BEST_MIN_PROFIT_HELP)
+    local roiLabel = Text(Text(copper, VendorProfit.COINS.copper, 3, "GameFontHighlightSmall"), L.BEST_MIN_ROI, 24)
+    local roi = Box("roi", roiLabel, 40, 5, L.BEST_MIN_ROI_HELP)
+    Text(roi, "%", 3, "GameFontHighlightSmall")
     ShowMinimums()
 
     -- Filter: a button in the page's own style that opens the game's menu
@@ -999,6 +1012,10 @@ local function Refresh()
     if text then
         lines[#lines + 1] = isError and RED_FONT_COLOR:WrapTextInColorCode(text) or text
     end
+    -- The minimums row, then the notes.
+    frame.minimums:ClearAllPoints()
+    frame.minimums:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y - 8)
+    y = y - 8 - MINIMUMS_HEIGHT
     frame.status:ClearAllPoints()
     frame.status:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y - 8)
     frame.status:SetText(table.concat(lines, "\n"))

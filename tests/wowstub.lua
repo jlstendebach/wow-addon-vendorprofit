@@ -151,6 +151,7 @@ function FrameMethods:SetMultiLine(m) self.__multiLine = m end
 function FrameMethods:SetFontObject() end
 function FrameMethods:SetAutoFocus(f) end
 function FrameMethods:SetNumeric(n) self.__numeric = n end
+function FrameMethods:SetJustifyH(j) self.__justifyH = j end
 function FrameMethods:SetMaxLetters(n) self.__maxLetters = n end
 function FrameMethods:SetFocus() self.__focused = true end
 function FrameMethods:HighlightText() self.__highlighted = true end

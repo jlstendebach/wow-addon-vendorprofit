@@ -103,9 +103,9 @@ VendorProfit.L = {
     -- Two short lines: the menu is as wide as its widest line.
     BEST_SKILL_SAVED_NOTE = "Closed professions:\ncolors as last seen.",
     BEST_MIN_PROFIT = "Min. profit",
-    BEST_MIN_PROFIT_HELP = "Hides recipes that make less than this per craft (on the Auction or Vendor tab you're on). Empty: no minimum.",
+    BEST_MIN_PROFIT_HELP = "Hides recipes that make less than this per craft (on the Auction or Vendor tab you're on). 0: no minimum.",
     BEST_MIN_ROI = "Min. ROI",
-    BEST_MIN_ROI_HELP = "Hides recipes whose return on investment is below this percentage. Empty: no minimum.",
+    BEST_MIN_ROI_HELP = "Hides recipes whose return on investment is below this percentage. 0: no minimum.",
     BEST_FILTER_PROFESSIONS = "Professions",
     BEST_NO_PRICE_FOR = "no price: %s",
     BEST_NO_VENDOR_PRICE = "no vendor price",
