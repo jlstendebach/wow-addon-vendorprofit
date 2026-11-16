@@ -2000,7 +2000,12 @@ run('__stub.OpenMerchant({ { itemID = 3576, price = 60 }, { itemID = 2770, price
 check("vendor sells tin bars cheaper than the auction house: bought here; copper ore dearer: left for the AH",
       ev(BUY + ".tooltip").startswith("Buy from this vendor: 29 Tin Bar,") and "Tin Bar" in ev(BUY + ".tooltip")
       and "Copper Ore" not in ev(BUY + ".tooltip"))
+check("...and the list says so: tin bars from the vendor at its price here, the plan's cost with it",
+      has_line(ev, "Tin Bar x29", "vendor") and not has_line(ev, "Tin Bar x29", "auction")
+      and ev("VendorProfit.Shopper.Summary().plan.buy[3576].source") == "vendor")
 run('__stub.CloseMerchant()')
+check("...away from it, back to the usual prices: tin bars from the auction house",
+      ev("VendorProfit.Shopper.Summary().plan.buy[3576].source") == "auction" and has_line(ev, "Tin Bar x29", "auction"))
 check("no errors at the vendor", ev("#__stub.errors") == 0)
 
 

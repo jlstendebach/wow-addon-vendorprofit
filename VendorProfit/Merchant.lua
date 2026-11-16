@@ -3,6 +3,11 @@
 -- would get from a vendor (or has no price for), and anything planned from
 -- the auction house that this merchant sells for no more.
 --
+-- While a merchant is open, the Shopping List plans with its prices too
+-- (PriceHere): a vendor can charge less than the usual price (reputation
+-- discounts), so an item a little cheaper at auction than the usual price
+-- can still be cheapest here, and is listed as bought from the vendor.
+--
 -- Vendor purchases land in your bags a moment later, and the plan picks them
 -- up from there; only the gold spent is recorded on the order. Until they
 -- land, Buy is off, so clicking twice can't buy twice.
@@ -16,6 +21,7 @@ local Merchant = {}
 VendorProfit.Merchant = Merchant
 
 local open = false
+local catalogCache       -- Catalog() while the merchant is open, until it changes
 
 -- Purchases the vendor hasn't delivered yet: [itemID] = { target (bag count
 -- once they arrive), expires }. Until they arrive, Buy is off and they don't
@@ -67,6 +73,20 @@ local function Catalog()
         end
     end
     return catalog
+end
+
+-- The open merchant's price for one of an item it sells for gold without
+-- limit, or nil (no merchant open, not sold here, or limited stock).
+function Merchant.PriceHere(itemID)
+    if not open then
+        return nil
+    end
+    catalogCache = catalogCache or Catalog()
+    local item = catalogCache[itemID]
+    if item == nil or item.numAvailable ~= -1 then
+        return nil
+    end
+    return item.price / item.stackCount
 end
 
 local function Bags(itemID)
@@ -303,6 +323,14 @@ events:SetScript("OnEvent", function(_, event)
         -- Purchases that have arrived stop being pending.
         Merchant.IsBuying()
         return
+    end
+    catalogCache = nil
+    -- Planned again with (or without) this merchant's prices, unless the
+    -- auction house is in the middle of something.
+    local Shopper = VendorProfit.Shopper
+    local status = Shopper.Status()
+    if status == "closed" or status == "idle" or status == "ready" then
+        Shopper.Recompute()
     end
     Changed()
 end)
