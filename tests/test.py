@@ -581,6 +581,9 @@ check("the box is darker than the window, a little bigger than its items all rou
       ev("VendorProfit.Panel.TodoScroll().back.__color[4]") > 0 and ev("VendorProfit.Panel.TodoScroll().back:IsShown()")
       and ev("VendorProfit.Panel.TodoScroll().back:GetHeight()") == ev("VendorProfit.Panel.TodoScroll():GetHeight()") + 12
       and ev("VendorProfit.Panel.TodoScroll().__point[4]") - ev("VendorProfit.Panel.TodoScroll().back.__point[4]") == 6)
+check("...its scroll bar the same 6 in from the box's right edge as the items are from its left",
+      ev("VendorProfit.Panel.TodoScroll().ScrollBar.__points.TOPRIGHT[2] == VendorProfit.Panel.TodoScroll().back")
+      and ev("VendorProfit.Panel.TodoScroll().ScrollBar.__points.TOPRIGHT[4]") == -6)
 check("profit rows: sell prices (auction after the AH cut), expenses, profits", section(ev, "Profit")[:6] == [
     "Vendor price | |cffffffff60s|r", "Auction price | |cffffffff1g 23s 50c|r",
     "Items you have | |cffff2020-10s|r", "Items to buy | |cffff2020-33s 75c|r",

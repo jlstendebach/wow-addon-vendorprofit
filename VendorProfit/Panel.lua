@@ -34,9 +34,11 @@ local HEADING_HEIGHT = 20
 local HEADING_BUTTON_WIDTH = 120
 -- To do's details scroll in a box at most this many rows tall.
 Panel.TODO_ROWS = 12
-local SCROLLBAR_WIDTH = 24
--- The box is a little darker than the window, its items inset by this much.
+-- The box is a little darker than the window, its items and scroll bar
+-- inset by TODO_PADDING; the bar is SCROLLBAR_WIDTH wide, TODO_PADDING
+-- from the items.
 local TODO_PADDING = 6
+local SCROLLBAR_WIDTH = 16
 -- A step that has just moved into a button's place (the one before it
 -- finished) ignores clicks on it for this long, so a click meant for the
 -- old step doesn't land on the new one.
@@ -729,7 +731,7 @@ local function AddTodoDetails(groups)
         todoScroll.back = content:CreateTexture(nil, "BACKGROUND")
         todoScroll.back:SetColorTexture(0, 0, 0, 0.35)
     end
-    local listWidth = WIDTH - 2 * PADDING - 2 * TODO_PADDING - SCROLLBAR_WIDTH
+    local listWidth = WIDTH - 2 * PADDING - 3 * TODO_PADDING - SCROLLBAR_WIDTH
     todoList:SetWidth(listWidth)
     todoUsed = 0
     local function Line(left, right, isTitle)
@@ -768,6 +770,15 @@ local function AddTodoDetails(groups)
     todoScroll:ClearAllPoints()
     todoScroll:SetPoint("TOPLEFT", content, "TOPLEFT", PADDING + TODO_PADDING, y - TODO_PADDING)
     todoScroll:SetSize(listWidth, shown * ROW_HEIGHT)
+    -- The template puts the bar a little right of the list; here it's held
+    -- the same padding from the box's right edge as the items are from its
+    -- left, its arrows inside the box.
+    local bar = todoScroll.ScrollBar
+    if bar then
+        bar:ClearAllPoints()
+        bar:SetPoint("TOPRIGHT", back, "TOPRIGHT", -TODO_PADDING, -TODO_PADDING - 16)
+        bar:SetPoint("BOTTOMRIGHT", back, "BOTTOMRIGHT", -TODO_PADDING, TODO_PADDING + 16)
+    end
     -- Shorter than before: don't leave it scrolled past its end.
     local maxScroll = math.max(todoUsed - Panel.TODO_ROWS, 0) * ROW_HEIGHT
     if (todoScroll:GetVerticalScroll() or 0) > maxScroll then
