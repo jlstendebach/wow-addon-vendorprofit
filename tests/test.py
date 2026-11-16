@@ -577,6 +577,10 @@ check("a long To do list scrolls: the box stays at its most rows tall, the list 
       ev("VendorProfit.Panel.TodoScroll():GetHeight()") == 4 * 15 and ev("VendorProfit.Panel.TodoScroll():GetScrollChild():GetHeight()") > 4 * 15)
 run('VendorProfit.Panel.TODO_ROWS = 12; VendorProfit.Panel.Refresh()')
 check("...a short one is only as tall as its rows", ev("VendorProfit.Panel.TodoScroll():GetHeight()") == ev("VendorProfit.Panel.TodoScroll():GetScrollChild():GetHeight()"))
+check("the box is darker than the window, a little bigger than its items all round",
+      ev("VendorProfit.Panel.TodoScroll().back.__color[4]") > 0 and ev("VendorProfit.Panel.TodoScroll().back:IsShown()")
+      and ev("VendorProfit.Panel.TodoScroll().back:GetHeight()") == ev("VendorProfit.Panel.TodoScroll():GetHeight()") + 12
+      and ev("VendorProfit.Panel.TodoScroll().__point[4]") - ev("VendorProfit.Panel.TodoScroll().back.__point[4]") == 6)
 check("profit rows: sell prices (auction after the AH cut), expenses, profits", section(ev, "Profit")[:6] == [
     "Vendor price | |cffffffff60s|r", "Auction price | |cffffffff1g 23s 50c|r",
     "Items you have | |cffff2020-10s|r", "Items to buy | |cffff2020-33s 75c|r",

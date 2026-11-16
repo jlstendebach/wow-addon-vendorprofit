@@ -35,6 +35,8 @@ local HEADING_BUTTON_WIDTH = 120
 -- To do's details scroll in a box at most this many rows tall.
 Panel.TODO_ROWS = 12
 local SCROLLBAR_WIDTH = 24
+-- The box is a little darker than the window, its items inset by this much.
+local TODO_PADDING = 6
 -- A step that has just moved into a button's place (the one before it
 -- finished) ignores clicks on it for this long, so a click meant for the
 -- old step doesn't land on the new one.
@@ -723,8 +725,11 @@ local function AddTodoDetails(groups)
         todoScroll = CreateFrame("ScrollFrame", nil, content, "UIPanelScrollFrameTemplate")
         todoList = CreateFrame("Frame", nil, todoScroll)
         todoScroll:SetScrollChild(todoList)
+        -- Behind the items and the scroll bar, to the page's edges.
+        todoScroll.back = content:CreateTexture(nil, "BACKGROUND")
+        todoScroll.back:SetColorTexture(0, 0, 0, 0.35)
     end
-    local listWidth = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
+    local listWidth = WIDTH - 2 * PADDING - 2 * TODO_PADDING - SCROLLBAR_WIDTH
     todoList:SetWidth(listWidth)
     todoUsed = 0
     local function Line(left, right, isTitle)
@@ -755,8 +760,13 @@ local function AddTodoDetails(groups)
     local shown = math.min(todoUsed, Panel.TODO_ROWS)
     todoList:SetHeight(math.max(todoUsed, 1) * ROW_HEIGHT)
     y = y - 4
+    local back = todoScroll.back
+    back:ClearAllPoints()
+    back:SetPoint("TOPLEFT", content, "TOPLEFT", PADDING, y)
+    back:SetSize(WIDTH - 2 * PADDING, shown * ROW_HEIGHT + 2 * TODO_PADDING)
+    back:Show()
     todoScroll:ClearAllPoints()
-    todoScroll:SetPoint("TOPLEFT", content, "TOPLEFT", PADDING, y)
+    todoScroll:SetPoint("TOPLEFT", content, "TOPLEFT", PADDING + TODO_PADDING, y - TODO_PADDING)
     todoScroll:SetSize(listWidth, shown * ROW_HEIGHT)
     -- Shorter than before: don't leave it scrolled past its end.
     local maxScroll = math.max(todoUsed - Panel.TODO_ROWS, 0) * ROW_HEIGHT
@@ -765,7 +775,7 @@ local function AddTodoDetails(groups)
     end
     todoScroll:Show()
     todoAfter, todoPlaced = usedRows, true
-    y = y - shown * ROW_HEIGHT - 4
+    y = y - shown * ROW_HEIGHT - 2 * TODO_PADDING - 4
 end
 
 -- Where each To do step was last drawn (its top, by step), and when a step
@@ -1163,6 +1173,7 @@ local function RefreshShopping()
     HideUnusedRows()
     if todoScroll and not todoPlaced then
         todoScroll:Hide()
+        todoScroll.back:Hide()
     end
     return height
 end

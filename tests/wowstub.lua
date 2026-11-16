@@ -218,8 +218,9 @@ function FrameMethods:GetFrameLevel() return self.__level or 1 end
 function FrameMethods:CreateTexture()
     local t = setmetatable({ __shown = true, __parent = self, __text = "" }, FontMethods)
     t.SetColorTexture = function(tex, ...) tex.__color = { ... } end
-    t.SetHeight = function() end
-    t.SetSize = function() end
+    t.SetHeight = function(tex, h) tex.__h = h end
+    t.SetSize = function(tex, w, h) tex.__w, tex.__h = w, h end
+    t.GetHeight = function(tex) return tex.__h or 0 end
     t.SetTexture = function(tex, path) tex.__texture = path end
     t.SetBlendMode = function(tex, mode) tex.__blend = mode end
     t.SetVertexColor = function(tex, ...) tex.__vertexColor = { ... } end

@@ -184,7 +184,8 @@ time" route mode).
   auction makes money.
 - **To do's items scroll**: a big order made the window run off the
   screen. The steps (with counts and buttons) and the next craft stay at
-  the top; their items scroll in a box under them, at most 12 rows. The
+  the top; their items scroll in a box under them, at most 12 rows, on a
+  darker background with 6px of padding. The
   buttons stay out of the box so they never scroll: the secure Open
   Profession cover has to sit exactly on its button, which a scrolled-
   away button would break. A single "next step" button instead was
