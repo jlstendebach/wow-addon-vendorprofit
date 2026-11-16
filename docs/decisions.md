@@ -109,7 +109,8 @@ time" route mode).
   (a small coin icon or %) with the text inset short of it, showing 0,
   which is no minimum (a box left empty goes back to 0). Boxes only as
   wide as their digits need (gold and ROI up to 4 digits), nearly
-  touching; the row and the notes are held at the window's bottom, so
+  touching; the row is the window's bottom line with the notes just above
+  it (swapped from notes-last), both held at the bottom, so
   they stay there when the window is taller than the list needs. Applied as you type; ROI compared as shown (whole
   percent); unpriced recipes hidden while either is set; the red X clears
   them with the filters.

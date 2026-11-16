@@ -38,7 +38,7 @@ local WIDTH = 520
 local PADDING = 16
 local ROW_HEIGHT = 22
 local LIST_TOP = -94
--- The minimums row, under the list, above the notes.
+-- The minimums row, at the bottom of the window, under the notes.
 local MINIMUMS_HEIGHT = 20
 local VISIBLE_ROWS = 14
 local SCROLLBAR_WIDTH = 24
@@ -1029,15 +1029,15 @@ local function Refresh()
     if text then
         lines[#lines + 1] = isError and RED_FONT_COLOR:WrapTextInColorCode(text) or text
     end
-    -- The notes at the bottom of the window and the minimums row just above
-    -- them, held there when the window is taller than the list needs (it's
+    -- The minimums row at the bottom of the window and the notes just above
+    -- it, held there when the window is taller than the list needs (it's
     -- at least tall enough for the side tabs). The height leaves room for
     -- both under the list.
     frame.status:SetText(table.concat(lines, "\n"))
-    frame.status:ClearAllPoints()
-    frame.status:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PADDING, PADDING)
     frame.minimums:ClearAllPoints()
-    frame.minimums:SetPoint("BOTTOMLEFT", frame.status, "TOPLEFT", 0, 8)
+    frame.minimums:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PADDING, PADDING)
+    frame.status:ClearAllPoints()
+    frame.status:SetPoint("BOTTOMLEFT", frame.minimums, "TOPLEFT", 0, 8)
     return -y + 8 + MINIMUMS_HEIGHT + 8 + (frame.status:GetStringHeight() or 12) + PADDING
 end
 
