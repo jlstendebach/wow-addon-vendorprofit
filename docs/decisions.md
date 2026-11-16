@@ -94,7 +94,8 @@ time" route mode).
   Archaeology). Fishing is included: Forever gives it a crafting window
   (Camping), opened by casting Bait and Tackle (1278067), its first
   spellbook entry; "Fishing" (7731) casts a line. Seen in game with a /run
-  of Fishing's spellbook entries. A 1s rest after closing, so the click after Close
+  of Fishing's spellbook entries, and confirmed in game (2026-11-16): the
+  button opens Fishing's window. A 1s rest after closing, so the click after Close
   doesn't open the first profession again.
 - **Minimum profit and ROI** are boxes on their own row under the search,
   not Filter menu entries: they take exact amounts, and typing in the
@@ -113,7 +114,7 @@ time" route mode).
   it (swapped from notes-last), both held at the bottom, so
   they stay there when the window is taller than the list needs. Applied as you type; ROI compared as shown (whole
   percent); unpriced recipes hidden while either is set; the red X clears
-  them with the filters.
+  them with the filters. Confirmed working in game (2026-11-16).
 - **Every profession, window closed**: Best Crafts lists the saved recipes of
   every profession you've opened (each is saved when its window opens), ranked
   together: gold is gold whichever profession made it, and the cross-profession
@@ -228,10 +229,10 @@ time" route mode).
   this reason). Every search is watched (a hook on SendSearchQuery); when
   the latest isn't the item's, Buy searches it again first and says so,
   and the next click buys. Buying several of one item in a row needs no
-  new search.
-  Unconfirmed in game: the notification and error events for a buyout on
-  Forever (taken from TSM's handling), and whether a search finds suffixed
-  versions of an item ("of the Monkey").
+  new search. Confirmed in game (2026-11-16): gear is bought, and the
+  "won" notification records it.
+  Unconfirmed in game: whether a search finds suffixed versions of an item
+  ("of the Monkey").
 
 ### Scanning: sharing the auction house
 
@@ -265,7 +266,8 @@ opens.
   The saved recipes are kept, not deleted: they count again if it's learned
   again. Just after logging in the game lists no professions yet, so while
   it lists none every saved one counts (a character with no professions at
-  all is the one case this can't tell apart).
+  all is the one case this can't tell apart). Confirmed in game
+  (2026-11-16): Josten's dropped Mining no longer shows or counts.
 
 - **Opening another profession** needs a secure button. It's a separate
   invisible overlay laid over the Craft button at screen coordinates, never
