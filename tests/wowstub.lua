@@ -152,6 +152,7 @@ function FrameMethods:SetFontObject() end
 function FrameMethods:SetAutoFocus(f) end
 function FrameMethods:SetNumeric(n) self.__numeric = n end
 function FrameMethods:SetJustifyH(j) self.__justifyH = j end
+function FrameMethods:SetTextInsets(l, r, t, b) self.__insets = { l, r, t, b } end
 function FrameMethods:SetMaxLetters(n) self.__maxLetters = n end
 function FrameMethods:SetFocus() self.__focused = true end
 function FrameMethods:HighlightText() self.__highlighted = true end
@@ -242,6 +243,7 @@ function FontMethods:SetText(t) self.__text = t or "" end
 function FontMethods:GetText() return self.__text end
 function FontMethods:SetJustifyH() end
 function FontMethods:SetFontObject() end
+function FontMethods:SetTextColor(r, g, b) self.__color = { r, g, b } end
 function FontMethods:SetWordWrap() end
 function FontMethods:SetAllPoints(target) self.__point = { "ALL", target } end
 function FontMethods:SetDesaturated(d) self.__desaturated = d end

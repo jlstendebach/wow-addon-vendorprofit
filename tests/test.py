@@ -2210,6 +2210,10 @@ check("minimums on a row under the list, above the notes: gold, silver, copper a
       [ev(M + "." + k + ":GetText()") for k in ["gold", "silver", "copper", "roi"]] == ["0", "0", "0", "0"]
       and ev(M + ".roi.__numeric") and ev(M + ".silver.__maxLetters") == 2
       and ev(M + ".__point[5]") < ev(B + ".scroll.__point[5]") and ev(B + ".status.__point[5]") < ev(M + ".__point[5]"))
+check("...each with its unit inside at the right (coin icons, %), the text stopping short of it, like the search box",
+      all(ev(M + "." + k + ".unit.__point[2] == " + M + "." + k) and ev(M + "." + k + ".__insets[2]") >= 15
+          for k in ["gold", "silver", "copper", "roi"])
+      and "GoldIcon" in ev(M + ".gold.unit.__texture") and ev(M + ".roi.unit:GetText()") == "%")
 run(M + '.copper:Type("88")')
 check("min. profit 88c: only recipes making at least that per craft; unpriced ones can't meet it", shown() == ["Rough Bronze Cuirass"]
       and ev("VendorProfitCharDB.bestMinimums.profit") == 88 and ev(B + ".filterReset:IsEnabled()"))

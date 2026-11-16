@@ -630,9 +630,9 @@ local function Create(page)
     frame.search = search
 
     -- Minimums, on a row under the list (placed in Refresh): profit in
-    -- gold, silver and copper boxes, and ROI, each a plain number box with
-    -- its unit after it (the coin icons money is shown with, and %). 0 is no
-    -- minimum. Changes apply as you type.
+    -- gold, silver and copper boxes, and ROI, each a number box like the
+    -- search box with its unit inside. 0 is no minimum. Changes apply as you
+    -- type.
     local row = CreateFrame("Frame", nil, frame)
     row:SetSize(WIDTH - 2 * PADDING, MINIMUMS_HEIGHT)
     frame.minimums = row
@@ -653,9 +653,9 @@ local function Create(page)
         end)
         region:HookScript("OnLeave", function() GameTooltip:Hide() end)
     end
-    -- A label or unit after the previous region.
-    local function Text(after, text, gap, font)
-        local label = row:CreateFontString(nil, "OVERLAY", font or "GameFontNormalSmall")
+    -- A label, after the previous box (or first in the row).
+    local function Text(after, text, gap)
+        local label = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         if after then
             label:SetPoint("LEFT", after, "RIGHT", gap, 0)
         else
@@ -664,15 +664,32 @@ local function Create(page)
         label:SetText(text)
         return label
     end
-    local function Box(key, after, width, letters, help)
+    -- A number box like the search box (the same template underneath, the
+    -- same height and font, text from the left), with its unit inside at
+    -- the right (a coin icon, or %), the text stopping short of it.
+    local UNIT_SPACE = 18
+    local function Box(key, after, gap, width, letters, unit, help)
         local box = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
         box:SetSize(width, MINIMUMS_HEIGHT)
-        -- The template's border sits a few pixels left of the text.
-        box:SetPoint("LEFT", after, "RIGHT", 10, 0)
+        -- The template's border reaches a few pixels left of the box, so the
+        -- gap is measured as for the search box beside the Vendor tab.
+        box:SetPoint("LEFT", after, "RIGHT", gap, 0)
         box:SetAutoFocus(false)
         box:SetNumeric(true)
         box:SetMaxLetters(letters)
-        box:SetJustifyH("RIGHT")
+        box:SetTextInsets(0, UNIT_SPACE, 0, 0)
+        local mark
+        if unit.texture then
+            mark = box:CreateTexture(nil, "OVERLAY")
+            mark:SetTexture(unit.texture)
+            mark:SetSize(11, 11)
+        else
+            mark = box:CreateFontString(nil, "OVERLAY", "ChatFontNormal")
+            mark:SetText(unit.text)
+            mark:SetTextColor(0.6, 0.6, 0.6)
+        end
+        mark:SetPoint("RIGHT", box, "RIGHT", -4, 0)
+        box.unit = mark
         box:HookScript("OnTextChanged", Changed)
         box:HookScript("OnEnterPressed", function(self) self:ClearFocus() end)
         box:HookScript("OnEscapePressed", function(self) self:ClearFocus() end)
@@ -686,13 +703,11 @@ local function Create(page)
         row[key] = box
         return box
     end
-    local label = Text(nil, L.BEST_MIN_PROFIT)
-    local gold = Box("gold", label, 48, 6, L.BEST_MIN_PROFIT_HELP)
-    local silver = Box("silver", Text(gold, VendorProfit.COINS.gold, 3, "GameFontHighlightSmall"), 24, 2, L.BEST_MIN_PROFIT_HELP)
-    local copper = Box("copper", Text(silver, VendorProfit.COINS.silver, 3, "GameFontHighlightSmall"), 24, 2, L.BEST_MIN_PROFIT_HELP)
-    local roiLabel = Text(Text(copper, VendorProfit.COINS.copper, 3, "GameFontHighlightSmall"), L.BEST_MIN_ROI, 24)
-    local roi = Box("roi", roiLabel, 40, 5, L.BEST_MIN_ROI_HELP)
-    Text(roi, "%", 3, "GameFontHighlightSmall")
+    local COIN = "Interface\\MoneyFrame\\UI-%sIcon"
+    local gold = Box("gold", Text(nil, L.BEST_MIN_PROFIT), 14, 72, 6, { texture = COIN:format("Gold") }, L.BEST_MIN_PROFIT_HELP)
+    local silver = Box("silver", gold, 14, 44, 2, { texture = COIN:format("Silver") }, L.BEST_MIN_PROFIT_HELP)
+    local copper = Box("copper", silver, 14, 44, 2, { texture = COIN:format("Copper") }, L.BEST_MIN_PROFIT_HELP)
+    Box("roi", Text(copper, L.BEST_MIN_ROI, 28), 14, 60, 5, { text = "%" }, L.BEST_MIN_ROI_HELP)
     ShowMinimums()
 
     -- Filter: a button in the page's own style that opens the game's menu

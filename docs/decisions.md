@@ -102,10 +102,12 @@ time" route mode).
   "Custom..." popup in the menu were offered and turned down for that
   reason. First tried on a row under the search with the game's own money
   input (the auction house's gold/silver/copper boxes, coins inside): it
-  didn't look good. Now a row under the list, above the notes: plain
-  number boxes (gold, silver, copper, ROI) with their units after them
-  (the coin icons, %), showing 0, which is no minimum (a box left empty
-  goes back to 0). Applied as you type; ROI compared as shown (whole
+  didn't look good; then plain boxes with units after them, cramped. Now a
+  row under the list, above the notes: number boxes made like the search
+  box (same template, height, font, text from the left, the same 14px gap
+  as the search box beside the Vendor tab), each unit inside at the right
+  (a small coin icon or %) with the text inset short of it, showing 0,
+  which is no minimum (a box left empty goes back to 0). Applied as you type; ROI compared as shown (whole
   percent); unpriced recipes hidden while either is set; the red X clears
   them with the filters.
 - **Every profession, window closed**: Best Crafts lists the saved recipes of
