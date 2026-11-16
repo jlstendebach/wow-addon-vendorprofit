@@ -107,7 +107,10 @@ time" route mode).
   box (same template, height, font, text from the left, the same 14px gap
   as the search box beside the Vendor tab), each unit inside at the right
   (a small coin icon or %) with the text inset short of it, showing 0,
-  which is no minimum (a box left empty goes back to 0). Applied as you type; ROI compared as shown (whole
+  which is no minimum (a box left empty goes back to 0). Boxes only as
+  wide as their digits need (gold and ROI up to 4 digits), nearly
+  touching; the row and the notes are held at the window's bottom, so
+  they stay there when the window is taller than the list needs. Applied as you type; ROI compared as shown (whole
   percent); unpriced recipes hidden while either is set; the red X clears
   them with the filters.
 - **Every profession, window closed**: Best Crafts lists the saved recipes of

@@ -2206,10 +2206,12 @@ check("cleared: everything again", len(best()) == 5)
 # the list, above the notes.
 M = B + ".minimums"
 shown = lambda: [l.split(" | ")[0].split("|t ")[-1] for l in best()]
-check("minimums on a row under the list, above the notes: gold, silver, copper and ROI boxes, 0 to start",
+check("minimums on a row under the list, held with the notes at the bottom of the window: gold (up to 9999), silver, copper and ROI boxes, 0 to start",
       [ev(M + "." + k + ":GetText()") for k in ["gold", "silver", "copper", "roi"]] == ["0", "0", "0", "0"]
       and ev(M + ".roi.__numeric") and ev(M + ".silver.__maxLetters") == 2
-      and ev(M + ".__point[5]") < ev(B + ".scroll.__point[5]") and ev(B + ".status.__point[5]") < ev(M + ".__point[5]"))
+      and ev(M + ".gold.__maxLetters") == 4
+      and ev(B + ".status.__point[1]") == "BOTTOMLEFT" and ev(B + ".status.__point[2] == " + B)
+      and ev(M + ".__point[2] == " + B + ".status") and ev(M + ".__point[3]") == "TOPLEFT")
 check("...each with its unit inside at the right (coin icons, %), the text stopping short of it, like the search box",
       all(ev(M + "." + k + ".unit.__point[2] == " + M + "." + k) and ev(M + "." + k + ".__insets[2]") >= 15
           for k in ["gold", "silver", "copper", "roi"])

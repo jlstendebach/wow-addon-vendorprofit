@@ -667,7 +667,7 @@ local function Create(page)
     -- A number box like the search box (the same template underneath, the
     -- same height and font, text from the left), with its unit inside at
     -- the right (a coin icon, or %), the text stopping short of it.
-    local UNIT_SPACE = 18
+    local UNIT_SPACE = 17
     local function Box(key, after, gap, width, letters, unit, help)
         local box = CreateFrame("EditBox", nil, row, "InputBoxTemplate")
         box:SetSize(width, MINIMUMS_HEIGHT)
@@ -704,10 +704,12 @@ local function Create(page)
         return box
     end
     local COIN = "Interface\\MoneyFrame\\UI-%sIcon"
-    local gold = Box("gold", Text(nil, L.BEST_MIN_PROFIT), 14, 72, 6, { texture = COIN:format("Gold") }, L.BEST_MIN_PROFIT_HELP)
-    local silver = Box("silver", gold, 14, 44, 2, { texture = COIN:format("Silver") }, L.BEST_MIN_PROFIT_HELP)
-    local copper = Box("copper", silver, 14, 44, 2, { texture = COIN:format("Copper") }, L.BEST_MIN_PROFIT_HELP)
-    Box("roi", Text(copper, L.BEST_MIN_ROI, 28), 14, 60, 5, { text = "%" }, L.BEST_MIN_ROI_HELP)
+    -- Up to 9,999 gold and 9,999%. Boxes are as wide as their digits and
+    -- unit need, and nearly touching (each border reaches 5px outside it).
+    local gold = Box("gold", Text(nil, L.BEST_MIN_PROFIT), 10, 52, 4, { texture = COIN:format("Gold") }, L.BEST_MIN_PROFIT_HELP)
+    local silver = Box("silver", gold, 9, 36, 2, { texture = COIN:format("Silver") }, L.BEST_MIN_PROFIT_HELP)
+    local copper = Box("copper", silver, 9, 36, 2, { texture = COIN:format("Copper") }, L.BEST_MIN_PROFIT_HELP)
+    Box("roi", Text(copper, L.BEST_MIN_ROI, 24), 10, 52, 4, { text = "%" }, L.BEST_MIN_ROI_HELP)
     ShowMinimums()
 
     -- Filter: a button in the page's own style that opens the game's menu
@@ -1027,14 +1029,16 @@ local function Refresh()
     if text then
         lines[#lines + 1] = isError and RED_FONT_COLOR:WrapTextInColorCode(text) or text
     end
-    -- The minimums row, then the notes.
-    frame.minimums:ClearAllPoints()
-    frame.minimums:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y - 8)
-    y = y - 8 - MINIMUMS_HEIGHT
-    frame.status:ClearAllPoints()
-    frame.status:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, y - 8)
+    -- The notes at the bottom of the window and the minimums row just above
+    -- them, held there when the window is taller than the list needs (it's
+    -- at least tall enough for the side tabs). The height leaves room for
+    -- both under the list.
     frame.status:SetText(table.concat(lines, "\n"))
-    return -y + 8 + (frame.status:GetStringHeight() or 12) + PADDING
+    frame.status:ClearAllPoints()
+    frame.status:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", PADDING, PADDING)
+    frame.minimums:ClearAllPoints()
+    frame.minimums:SetPoint("BOTTOMLEFT", frame.status, "TOPLEFT", 0, 8)
+    return -y + 8 + MINIMUMS_HEIGHT + 8 + (frame.status:GetStringHeight() or 12) + PADDING
 end
 
 function BestPanel.Refresh()
