@@ -1903,6 +1903,18 @@ check("Coarse Thread with no vendor price from Auctionator yet: the usual 10c", 
 run('__stub.vendorPrices[2320] = 12')
 check("...Auctionator's recorded price wins once it has one", ev("(VendorProfit.GetBuyPrices(2320))") == 12)
 check("items vendors don't sell: no vendor price", ev("(VendorProfit.GetBuyPrices(2866))") is None)
+# A vendor's own prices, recorded when its window opens.
+run('__stub.OpenMerchant({ { itemID = 2320, price = 9 }, { itemID = 4400, price = 1800 }, '
+    '{ itemID = 3466, price = 1800, numAvailable = 5 }, { itemID = 2880, price = 400, stackCount = 5 } })')
+check("opening a vendor records what it charges (a reputation discount: Heavy Stock 18s, not the usual 20s)",
+      ev("VendorProfitCharDB.vendorPrices[4400]") == 1800 and ev("(VendorProfit.GetBuyPrices(4400))") == 1800)
+check("...ahead of Auctionator's recorded price and the usual one", ev("(VendorProfit.GetBuyPrices(2320))") == 9)
+check("...per item, for items sold in batches", ev("VendorProfitCharDB.vendorPrices[2880]") == 80)
+check("...not limited stock, which can't be counted on", ev("VendorProfitCharDB.vendorPrices[3466]") is None)
+run('__stub.CloseMerchant(); __stub.OpenMerchant({ { itemID = 4400, price = 2000 } })')
+check("a dearer vendor later (no discount there) keeps the cheapest seen", ev("VendorProfitCharDB.vendorPrices[4400]") == 1800)
+run('__stub.CloseMerchant()')
+check("...and it's kept after the window closes", ev("(VendorProfit.GetBuyPrices(4400))") == 1800)
 # /vprofit prices: the open vendor's prices in the list's format, to paste in.
 run('__stub.items["item:2321"] = { name = "Fine Thread", cached = true }')
 run('__stub.items["item:2320"] = { name = "Coarse Thread", cached = true }')
@@ -2000,12 +2012,12 @@ run('__stub.OpenMerchant({ { itemID = 3576, price = 60 }, { itemID = 2770, price
 check("vendor sells tin bars cheaper than the auction house: bought here; copper ore dearer: left for the AH",
       ev(BUY + ".tooltip").startswith("Buy from this vendor: 29 Tin Bar,") and "Tin Bar" in ev(BUY + ".tooltip")
       and "Copper Ore" not in ev(BUY + ".tooltip"))
-check("...and the list says so: tin bars from the vendor at its price here, the plan's cost with it",
+check("...and the list says so: tin bars from a vendor at its price, the plan's cost with it",
       has_line(ev, "Tin Bar x29", "vendor") and not has_line(ev, "Tin Bar x29", "auction")
       and ev("VendorProfit.Shopper.Summary().plan.buy[3576].source") == "vendor")
 run('__stub.CloseMerchant()')
-check("...away from it, back to the usual prices: tin bars from the auction house",
-      ev("VendorProfit.Shopper.Summary().plan.buy[3576].source") == "auction" and has_line(ev, "Tin Bar x29", "auction"))
+check("...the price is remembered once the window closes: still from a vendor", ev("VendorProfitCharDB.vendorPrices[3576]") == 60
+      and ev("VendorProfit.Shopper.Summary().plan.buy[3576].source") == "vendor")
 check("no errors at the vendor", ev("#__stub.errors") == 0)
 
 

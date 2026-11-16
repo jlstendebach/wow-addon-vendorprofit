@@ -315,9 +315,12 @@ VendorProfit.L = {
 -- prices for items it has seen at a vendor) and on the auction house.
 function VendorProfit.GetBuyPrices(itemID)
     local api = Auctionator.API.v1
-    -- Auctionator's vendor price once it has seen a vendor sell the item;
-    -- until then, the usual price (VendorPrices.lua).
-    local vendor = api.GetVendorPriceByItemID(ADDON_NAME, itemID)
+    -- What this character has seen a vendor charge (Merchant.lua: the
+    -- cheapest, reputation discounts and all); otherwise Auctionator's vendor
+    -- price once it has seen a vendor sell the item; until then, the usual
+    -- price (VendorPrices.lua).
+    local recorded = VendorProfitCharDB and VendorProfitCharDB.vendorPrices
+    local vendor = recorded and recorded[itemID] or api.GetVendorPriceByItemID(ADDON_NAME, itemID)
     if vendor == nil and VendorProfit.KNOWN_VENDOR_PRICES then
         vendor = VendorProfit.KNOWN_VENDOR_PRICES[itemID]
     end

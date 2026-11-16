@@ -3,10 +3,12 @@
 -- would get from a vendor (or has no price for), and anything planned from
 -- the auction house that this merchant sells for no more.
 --
--- While a merchant is open, the Shopping List plans with its prices too
--- (PriceHere): a vendor can charge less than the usual price (reputation
--- discounts), so an item a little cheaper at auction than the usual price
--- can still be cheapest here, and is listed as bought from the vendor.
+-- Opening a merchant records what it charges for each item it sells for
+-- gold without limit, per character (VendorProfitCharDB.vendorPrices): the
+-- cheapest seen, since a vendor can charge less than the usual price
+-- (reputation discounts, which are the character's own). Recorded prices
+-- come first everywhere (VendorProfit.GetBuyPrices), so the plan, routes and
+-- Best Crafts use what this character actually pays.
 --
 -- Vendor purchases land in your bags a moment later, and the plan picks them
 -- up from there; only the gold spent is recorded on the order. Until they
@@ -21,7 +23,6 @@ local Merchant = {}
 VendorProfit.Merchant = Merchant
 
 local open = false
-local catalogCache       -- Catalog() while the merchant is open, until it changes
 
 -- Purchases the vendor hasn't delivered yet: [itemID] = { target (bag count
 -- once they arrive), expires }. Until they arrive, Buy is off and they don't
@@ -75,18 +76,24 @@ local function Catalog()
     return catalog
 end
 
--- The open merchant's price for one of an item it sells for gold without
--- limit, or nil (no merchant open, not sold here, or limited stock).
-function Merchant.PriceHere(itemID)
-    if not open then
-        return nil
+-- Records the open merchant's prices: for one of each item it sells for
+-- gold without limit (limited stock can't be counted on), keeping the
+-- cheapest seen. Returns whether any changed.
+function Merchant.Record()
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    local recorded = VendorProfitCharDB.vendorPrices or {}
+    VendorProfitCharDB.vendorPrices = recorded
+    local changed = false
+    for itemID, item in pairs(Catalog()) do
+        if item.numAvailable == -1 then
+            local each = item.price / item.stackCount
+            if recorded[itemID] == nil or each < recorded[itemID] then
+                recorded[itemID] = each
+                changed = true
+            end
+        end
     end
-    catalogCache = catalogCache or Catalog()
-    local item = catalogCache[itemID]
-    if item == nil or item.numAvailable ~= -1 then
-        return nil
-    end
-    return item.price / item.stackCount
+    return changed
 end
 
 local function Bags(itemID)
@@ -324,13 +331,14 @@ events:SetScript("OnEvent", function(_, event)
         Merchant.IsBuying()
         return
     end
-    catalogCache = nil
-    -- Planned again with (or without) this merchant's prices, unless the
-    -- auction house is in the middle of something.
-    local Shopper = VendorProfit.Shopper
-    local status = Shopper.Status()
-    if status == "closed" or status == "idle" or status == "ready" then
-        Shopper.Recompute()
+    -- New prices: planned again with them, unless the auction house is in
+    -- the middle of something.
+    if open and Merchant.Record() then
+        local Shopper = VendorProfit.Shopper
+        local status = Shopper.Status()
+        if status == "closed" or status == "idle" or status == "ready" then
+            Shopper.Recompute()
+        end
     end
     Changed()
 end)

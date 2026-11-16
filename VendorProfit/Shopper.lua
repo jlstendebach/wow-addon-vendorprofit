@@ -196,12 +196,6 @@ end
 local function LivePrices(need)
     return function(itemID)
         local vendor, auction = VendorProfit.GetBuyPrices(itemID)
-        -- At a vendor that sells it for less than the usual price
-        -- (reputation discounts): that's its vendor price here.
-        local here = VendorProfit.Merchant and VendorProfit.Merchant.PriceHere(itemID)
-        if here and (vendor == nil or here < vendor) then
-            vendor = here
-        end
         local listing = listings[itemID]
         if listing then
             local total, _, got = Shopper.Walk(listing, need[itemID] or 1)

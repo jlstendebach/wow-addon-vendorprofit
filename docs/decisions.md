@@ -427,15 +427,16 @@ opens.
 - **Vendor prices are our own list** (`VendorPrices.lua`), first filled from
   public data, used when Auctionator hasn't seen a vendor sell the item.
   Updated by hand with `/vprofit prices`. Not tied to another addon.
-- **The open vendor's own prices count**: a vendor with a reputation
+- **Vendor prices are recorded per character**: a vendor with a reputation
   discount sold Heavy Stock and Strong Flux for 18s, under both the usual
-  20s and the auction house's ~19s 45c, but the list still said
-  "auction" (Buy would have bought them there, but the list and costs
-  were wrong). While a merchant window is open, the Shopping List plans
-  with its prices for what it sells without limit, the lower of those and
-  the usual price; closing it plans again with the usual prices. Only the
-  Shopping List: routes and Best Crafts keep the usual prices, as they're
-  not about where you're standing.
+  20s and the auction house's ~19s 45c, but the plan still said "auction"
+  (it only knew the usual 20s, from Auctionator and the list). Opening a
+  merchant now records its gold prices for items without a stock limit
+  (per one, batches divided out), keeping the cheapest seen, per character
+  since reputation is. Recorded prices come first in GetBuyPrices
+  (everywhere), then Auctionator's, then the list. Tried first: using the
+  open vendor's prices only while its window was open; dropped, since the
+  price should be known before you get there and after you leave.
 
 ## Releases and workflow
 
