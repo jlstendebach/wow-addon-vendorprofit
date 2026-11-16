@@ -32,6 +32,13 @@ local ROW_HEIGHT = 15
 local HEADING_HEIGHT = 20
 
 local HEADING_BUTTON_WIDTH = 120
+-- To do's details scroll in a box at most this many rows tall.
+Panel.TODO_ROWS = 12
+local SCROLLBAR_WIDTH = 24
+-- A step that has just moved into a button's place (the one before it
+-- finished) ignores clicks on it for this long, so a click meant for the
+-- old step doesn't land on the new one.
+Panel.MOVED_GUARD = 0.5
 
 local frame              -- the window
 local content            -- the Shopping List page, where the rows below go
@@ -90,7 +97,12 @@ local function GetRow(index)
             -- the mouse is on it (see OpenButton.lua), so the click opens
             -- the profession.
             if craftCover and craftCover.button == self and not Order.IsEmpty() then
-                self:SetEnabled(OpenButton.Cover(self, craftCover.profession))
+                local wait = Panel.MovedWait(craftCover.movedAt)
+                if wait > 0 then
+                    C_Timer.After(wait, Panel.Refresh)
+                else
+                    self:SetEnabled(OpenButton.Cover(self, craftCover.profession))
+                end
             end
             if self.tooltip then
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -671,29 +683,134 @@ local function Section(key, title, count)
     return not collapsed
 end
 
+-- Seconds left before a step that moved into its place at movedAt takes
+-- clicks (0 when it can).
+function Panel.MovedWait(movedAt)
+    if movedAt == nil then
+        return 0
+    end
+    return math.max(0, movedAt + Panel.MOVED_GUARD - GetTime())
+end
+
+-- To do's details: each step's items, in a scroll box under the steps, so a
+-- long order doesn't make the window run off the screen. The steps and
+-- their buttons stay put above it.
+local todoScroll, todoList
+local todoRows = {}
+local todoUsed = 0
+local todoAfter          -- the row the box follows, for Panel.Lines
+local todoPlaced = false
+
+local function TodoRow(index)
+    local row = todoRows[index]
+    if row == nil then
+        row = {}
+        row.left = todoList:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.left:SetJustifyH("LEFT")
+        row.left:SetWordWrap(false)
+        row.right = todoList:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        row.right:SetJustifyH("RIGHT")
+        row.right:SetWordWrap(false)
+        todoRows[index] = row
+    end
+    return row
+end
+
+-- groups: { { title, rows = { { left, right }, ... } }, ... }: a gold title
+-- for each step, then its items.
+local function AddTodoDetails(groups)
+    if todoScroll == nil then
+        todoScroll = CreateFrame("ScrollFrame", nil, content, "UIPanelScrollFrameTemplate")
+        todoList = CreateFrame("Frame", nil, todoScroll)
+        todoScroll:SetScrollChild(todoList)
+    end
+    local listWidth = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
+    todoList:SetWidth(listWidth)
+    todoUsed = 0
+    local function Line(left, right, isTitle)
+        todoUsed = todoUsed + 1
+        local row = TodoRow(todoUsed)
+        local top = -(todoUsed - 1) * ROW_HEIGHT
+        row.left:SetFontObject(isTitle and "GameFontNormalSmall" or "GameFontHighlightSmall")
+        row.left:ClearAllPoints()
+        row.left:SetPoint("TOPLEFT", todoList, "TOPLEFT", 0, top)
+        row.left:SetWidth(listWidth * 0.6)
+        row.left:SetText(left)
+        row.left:Show()
+        row.right:ClearAllPoints()
+        row.right:SetPoint("TOPRIGHT", todoList, "TOPRIGHT", 0, top)
+        row.right:SetText(right or "")
+        row.right:SetShown(right ~= nil)
+    end
+    for _, group in ipairs(groups) do
+        Line(group.title, nil, true)
+        for _, item in ipairs(group.rows) do
+            Line(item[1], item[2])
+        end
+    end
+    for index = todoUsed + 1, #todoRows do
+        todoRows[index].left:Hide()
+        todoRows[index].right:Hide()
+    end
+    local shown = math.min(todoUsed, Panel.TODO_ROWS)
+    todoList:SetHeight(math.max(todoUsed, 1) * ROW_HEIGHT)
+    y = y - 4
+    todoScroll:ClearAllPoints()
+    todoScroll:SetPoint("TOPLEFT", content, "TOPLEFT", PADDING, y)
+    todoScroll:SetSize(listWidth, shown * ROW_HEIGHT)
+    -- Shorter than before: don't leave it scrolled past its end.
+    local maxScroll = math.max(todoUsed - Panel.TODO_ROWS, 0) * ROW_HEIGHT
+    if (todoScroll:GetVerticalScroll() or 0) > maxScroll then
+        todoScroll:SetVerticalScroll(maxScroll)
+    end
+    todoScroll:Show()
+    todoAfter, todoPlaced = usedRows, true
+    y = y - shown * ROW_HEIGHT - 4
+end
+
+-- Where each To do step was last drawn (its top, by step), and when a step
+-- last moved into the place of one that finished.
+local stepPlaces = {}
+local stepMovedAt = {}
+
+local function Count(n, one, many)
+    return Gray(n == 1 and one or string.format(many, n))
+end
+
 -- The To do checklist, in the order you'd do it: buy (prices can change, so
 -- first), collect purchases from the mailbox, take things from the bank, then
 -- craft. Each step shows only while it has something left in it, numbered in
--- order. Returns the bags list for the information section below it.
--- Folded away, there's no Craft button, so nothing for the open-profession
--- cover to go over: it goes (FinishLayout).
+-- order, so when one is done the next moves up into its place. The steps,
+-- each with its count and button, and the next craft stay at the top; their
+-- items scroll in a box below (folding To do folds just the box). Returns the
+-- bags list for the information section below it.
 local function AddToDo(plan)
     local buying = Shopper.Status()
     local hasBuy = #plan.buyOrder > 0 or buying == "quoting" or buying == "confirm" or buying == "buying"
     local fromBags, fromMail, fromBank = Panel.SplitUses(plan.uses)
-    local steps = 1 + (hasBuy and 1 or 0) + (#fromMail > 0 and 1 or 0) + (#fromBank > 0 and 1 or 0)
-    if not Section("todo", L.HEAD_TODO, steps) then
-        shownCraft = nil
-        return fromBags
-    end
+    local detailsOpen = Section("todo", L.HEAD_TODO)
     local number = 0
-    local function Step(title, button)
+    local placed = {}
+    -- A step and its count; its button ignores clicks just after the step
+    -- moved into the place of one that finished (see MOVED_GUARD).
+    local function Step(key, title, count, button)
         number = number + 1
-        return AddRow("heading", number .. ". " .. title, nil, button)
+        if button and button.onClick then
+            local onClick = button.onClick
+            button.onClick = function(...)
+                if Panel.MovedWait(stepMovedAt[key]) == 0 then
+                    onClick(...)
+                end
+            end
+        end
+        placed[#placed + 1] = { key = key, top = y }
+        return AddRow("heading", number .. ". " .. title, count, button)
     end
+    local groups = {}
 
     if hasBuy then
-        Step(L.STEP_BUY, BuyButton(plan))
+        Step("buy", L.STEP_BUY, #plan.buyOrder > 0 and Count(#plan.buyOrder, L.TODO_ITEM, L.TODO_ITEMS) or nil,
+            BuyButton(plan))
         -- The price to confirm, where it can't be missed.
         if buying == "confirm" then
             local p = Shopper.Purchase()
@@ -701,28 +818,50 @@ local function AddToDo(plan)
                 string.format(L.BUTTON_CONFIRM, p.quantity, ItemName(p.itemID), Money(p.quote))), nil,
                 { text = L.CANCEL, onClick = Shopper.Cancel, width = 70 })
         end
+        local items = {}
         for _, line in ipairs(plan.buyOrder) do
-            AddRow("row", ItemLabel(line.itemID, line.quantity), BuyLineRight(line))
+            items[#items + 1] = { ItemLabel(line.itemID, line.quantity), BuyLineRight(line) }
         end
+        groups[#groups + 1] = { title = L.STEP_BUY, rows = items }
     end
 
-    if #fromMail > 0 then
-        Step(L.STEP_MAIL)
-        for _, use in ipairs(fromMail) do
-            AddRow("row", ItemLabel(use.itemID, use.quantity))
+    local function Uses(key, title, uses, button)
+        Step(key, title, Count(#uses, L.TODO_ITEM, L.TODO_ITEMS), button)
+        local items = {}
+        for _, use in ipairs(uses) do
+            items[#items + 1] = { ItemLabel(use.itemID, use.quantity) }
         end
+        groups[#groups + 1] = { title = title, rows = items }
+    end
+    if #fromMail > 0 then
+        Uses("mail", L.STEP_MAIL, fromMail)
     end
     if #fromBank > 0 then
-        Step(L.STEP_BANK, Panel.BankButton(fromBank))
-        for _, use in ipairs(fromBank) do
-            AddRow("row", ItemLabel(use.itemID, use.quantity))
-        end
+        Uses("bank", L.STEP_BANK, fromBank, Panel.BankButton(fromBank))
     end
 
     shownCraft = nil
     local craftButton, nextStep, openProfession = CraftButton()
-    local craftRow = Step(L.STEP_CRAFT, craftButton)
-    craftCover = openProfession and { button = craftRow.button, profession = openProfession } or nil
+    local craftRow = Step("craft", L.STEP_CRAFT, Count(#plan.crafts, L.TODO_RECIPE, L.TODO_RECIPES), craftButton)
+
+    -- A step now where one that's gone was (it finished, and this one moved
+    -- up into its place): a click there was likely meant for the old one.
+    -- Steps that only shifted (a line added above) don't count.
+    local present, places = {}, {}
+    for _, step in ipairs(placed) do
+        present[step.key] = true
+        places[step.top] = step.key
+    end
+    for _, step in ipairs(placed) do
+        local before = stepPlaces[step.top]
+        if before ~= nil and before ~= step.key and not present[before] then
+            stepMovedAt[step.key] = GetTime()
+        end
+    end
+    stepPlaces = places
+    craftCover = openProfession and { button = craftRow.button, profession = openProfession, movedAt = stepMovedAt.craft }
+        or nil
+    local items = {}
     for _, step in ipairs(plan.crafts) do
         local detail = string.format(step.crafts == 1 and L.CRAFTS_ONE or L.CRAFTS, step.crafts)
         if step.profession then
@@ -731,12 +870,19 @@ local function AddToDo(plan)
         local label = ItemLabel(step.itemID, step.crafts * step.makes)
         if step == nextStep then
             label = NORMAL_FONT_COLOR:WrapTextInColorCode(L.NEXT_MARK) .. " " .. label
+            -- The next craft under its step too, so it's seen without
+            -- scrolling.
+            AddRow("row", label, Gray(detail))
         end
-        AddRow("row", label, Gray(detail))
+        items[#items + 1] = { label, Gray(detail) }
+    end
+    groups[#groups + 1] = { title = L.STEP_CRAFT, rows = items }
+
+    if detailsOpen then
+        AddTodoDetails(groups)
     end
     return fromBags
 end
-
 
 -- What one queued entry makes, on its own, at today's prices, along its
 -- cheapest route (or as it is, for an exact one): { cost, vendor, auction }
@@ -847,10 +993,16 @@ local function FinishLayout()
     -- With the Craft button in place and the mouse on it, cover it to open
     -- the profession (otherwise its OnEnter does, when the mouse gets
     -- there), or uncover.
-    if craftCover and not Order.IsEmpty() and OpenButton.HasMouse(craftCover.button) then
+    -- A Craft step that just moved under the mouse waits a moment first (see
+    -- MOVED_GUARD), then the panel redraws and covers it.
+    local wait = craftCover and Panel.MovedWait(craftCover.movedAt) or 0
+    if craftCover and not Order.IsEmpty() and OpenButton.HasMouse(craftCover.button) and wait == 0 then
         craftCover.button:SetEnabled(OpenButton.Cover(craftCover.button, craftCover.profession))
     else
         OpenButton.Hide()
+        if wait > 0 and OpenButton.HasMouse(craftCover.button) then
+            C_Timer.After(wait, Panel.Refresh)
+        end
     end
     return -y + PADDING
 end
@@ -1005,9 +1157,13 @@ local function RefreshShopping()
     usedRows = 0
     y = TOP
     craftCover = nil
+    todoPlaced = false
     AddContent()
     local height = FinishLayout()
     HideUnusedRows()
+    if todoScroll and not todoPlaced then
+        todoScroll:Hide()
+    end
     return height
 end
 
@@ -1091,8 +1247,7 @@ end
 -- debugging.
 function Panel.Lines()
     local lines = {}
-    for index = 1, usedRows do
-        local row = rows[index]
+    local function Add(row)
         local text = row.left:IsShown() and row.left:GetText() or ""
         if row.right:IsShown() and (row.right:GetText() or "") ~= "" then
             text = text .. " | " .. row.right:GetText()
@@ -1101,7 +1256,21 @@ function Panel.Lines()
             lines[#lines + 1] = text
         end
     end
+    for index = 1, usedRows do
+        Add(rows[index])
+        -- To do's details, where their box is.
+        if todoPlaced and index == todoAfter then
+            for detail = 1, todoUsed do
+                Add(todoRows[detail])
+            end
+        end
+    end
     return lines
+end
+
+-- To do's scroll box (for tests).
+function Panel.TodoScroll()
+    return todoScroll
 end
 
 -- The first shown row button labeled text.

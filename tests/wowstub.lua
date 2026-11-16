@@ -185,6 +185,7 @@ function FrameMethods:Raise() stub.topLevel = stub.topLevel + 10; self.__level =
 function FrameMethods:SetToplevel(t) self.__toplevel = t end
 function FrameMethods:IsMouseOver() return true end
 function FrameMethods:SetScrollChild(child) self.__scrollChild = child end
+function FrameMethods:GetScrollChild() return self.__scrollChild end
 function FrameMethods:SetVerticalScroll(v) self.__scroll = v end
 function FrameMethods:GetVerticalScroll() return self.__scroll or 0 end
 function FrameMethods:RegisterForClicks(...) self.__clicks = { ... } end

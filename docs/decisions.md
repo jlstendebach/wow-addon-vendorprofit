@@ -182,6 +182,20 @@ time" route mode).
   the item's cost and both profits. A profit box was tried and removed.
 - **Buy anyway** only appears when neither selling to a vendor nor at
   auction makes money.
+- **To do's items scroll**: a big order made the window run off the
+  screen. The steps (with counts and buttons) and the next craft stay at
+  the top; their items scroll in a box under them, at most 12 rows. The
+  buttons stay out of the box so they never scroll: the secure Open
+  Profession cover has to sit exactly on its button, which a scrolled-
+  away button would break. A single "next step" button instead was
+  weighed and turned down: steps happen in different places (auction
+  house, bank, a forge), so it would hide the one you need where you are.
+  When a step finishes, the next moves up into its place, so clicks stay
+  in one spot; a step that just moved into the place of one that's gone
+  ignores clicks for 0.5s (and the cover waits as long), so a click meant
+  for the finished step doesn't buy, take or craft by accident. Steps that
+  only shifted (a line added above) aren't held. Folding To do now folds
+  only the box, so Buy and Craft never disappear.
 - **Every section folds away**: Queued, Profit, To do and Already in your
   bags are all dividers (title between lines, a plus or minus sign) that
   fold on a click, remembered per character, a folded one saying how many
