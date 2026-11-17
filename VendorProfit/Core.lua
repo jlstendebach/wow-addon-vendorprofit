@@ -298,6 +298,7 @@ VendorProfit.L = {
     NOT_ENOUGH_GOLD = "Not enough gold for the next purchase.",
     NO_QUOTE = "The auction house didn't give a price for %s. Click Buy to try again.",
     SCANNED_CLICK_BUY = "Prices are in. Click Buy for %s.",
+    SCAN_NONE_LISTED = "Nothing listed for %s: planned without the auction house (crafted, where you can).",
     QUOTE_BUSY = "The auction house was busy and didn't price %s. Click Buy again.",
     BUTTON_AH_BUSY = "Waiting a moment for the auction house to be ready...",
     NO_PURCHASE_REPLY = "No reply buying %s. Scanning it again: check your mailbox before buying more.",

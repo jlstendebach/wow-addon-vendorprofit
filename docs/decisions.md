@@ -249,6 +249,16 @@ time" route mode).
   Unconfirmed in game: whether a search finds suffixed versions of an item
   ("of the Monkey").
 
+- **A scan outlives the auction house, for an hour**: Mithril Casing with
+  nothing listed was planned as crafted at the auction house (right), but
+  closing it wiped the scan, so the plan went back to Auctionator's last
+  price and put it on the Buy list again, and at the auction house it
+  "disappeared without buying". Now the scan's listings and batch prices
+  are kept after closing for KEEP_SCAN (1 hour), until the next scan
+  replaces them; after that, Auctionator's prices again. And when a scan
+  drops something from the Buy list for having nothing listed, the panel
+  says so.
+
 ### Scanning: sharing the auction house
 
 The auction house is shared with its own Browse tab and other addons

@@ -917,6 +917,28 @@ check("buys what's there", ev(BUY + ".tooltip").startswith("Buy 10 Copper Ore"))
 check("item that doesn't stack, nothing up with a buyout: not left to buy yourself", not has_line(ev, "buy yourself")
       and not ev(BUY + ".tooltip").startswith("Buy 29 Tin Bar"))
 
+# --- Nothing listed: planned another way, and remembered after leaving -----------
+run, ev = shop_client()
+run('__stub.createCount = 10'); run(QUEUE + ':Click()')
+# Auctionator's last price makes bronze bars cheapest to buy...
+run('__stub.auctionPrices[2841] = 10; VendorProfit.Order.Changed()')
+buying = lambda: [(l.itemID, l.source) for l in ev("VendorProfit.Shopper.Summary().plan.buyOrder").values()]
+check("on Auctionator's last price: bronze bars bought", buying() == [(BRONZE_BAR, "auction")])
+# ...but there are none up now: smelted instead, from ore and tin that are.
+run('__stub.ah.listings[2770] = { { unitPrice = 50, quantity = 100 } }; __stub.ah.listings[3576] = { { unitPrice = 75, quantity = 100 } }')
+run('__stub.OpenAH()'); click(run, "scan"); run('__stub.Advance(3)')
+check("none listed: smelted instead, buying the ore and tin, and it says why",
+      buying() == [(COPPER_ORE, "auction"), (TIN_BAR, "auction")]
+      and "Nothing listed for Bronze Bar" in ev("(VendorProfit.Shopper.Message())")
+      and has_line(ev, "Bronze Bar x58", "Mining"))
+run('__stub.CloseAH()')
+check("leaving the auction house keeps the scan: still smelted, not back to Auctionator's last price",
+      buying() == [(COPPER_ORE, "auction"), (TIN_BAR, "auction")])
+run('__stub.Advance(%d); VendorProfit.Order.Changed()' % (60 * 60 + 1))
+check("...for an hour: then back to Auctionator's prices until the next scan", buying() == [(BRONZE_BAR, "auction")])
+check("no errors from kept scans", ev("#__stub.errors") == 0)
+
+
 # --- Items that don't stack: single auctions, one click each -----------------------
 run, ev = shop_client()
 run('__stub.createCount = 4; __stub.bags[2840] = 20; __stub.auctionPrices[3576] = 80'); run(QUEUE + ':Click()')
