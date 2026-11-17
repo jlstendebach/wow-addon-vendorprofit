@@ -94,7 +94,8 @@ time" route mode).
   Archaeology). Fishing is included: Forever gives it a crafting window
   (Camping), opened by casting Bait and Tackle (1278067), its first
   spellbook entry; "Fishing" (7731) casts a line. Seen in game with a /run
-  of Fishing's spellbook entries. A 1s rest after closing, so the click after Close
+  of Fishing's spellbook entries, and confirmed in game (2026-11-16): the
+  button opens Fishing's window. A 1s rest after closing, so the click after Close
   doesn't open the first profession again.
 - **Minimum profit and ROI** are boxes on their own row under the search,
   not Filter menu entries: they take exact amounts, and typing in the
@@ -113,7 +114,7 @@ time" route mode).
   it (swapped from notes-last), both held at the bottom, so
   they stay there when the window is taller than the list needs. Applied as you type; ROI compared as shown (whole
   percent); unpriced recipes hidden while either is set; the red X clears
-  them with the filters.
+  them with the filters. Confirmed working in game (2026-11-16).
 - **Every profession, window closed**: Best Crafts lists the saved recipes of
   every profession you've opened (each is saved when its window opens), ranked
   together: gold is gold whichever profession made it, and the cross-profession
@@ -181,6 +182,21 @@ time" route mode).
   the item's cost and both profits. A profit box was tried and removed.
 - **Buy anyway** only appears when neither selling to a vendor nor at
   auction makes money.
+- **To do's items scroll**: a big order made the window run off the
+  screen. The steps (with counts and buttons) and the next craft stay at
+  the top; their items scroll in a box under them, at most 12 rows, on a
+  darker background with 6px of padding. The
+  buttons stay out of the box so they never scroll: the secure Open
+  Profession cover has to sit exactly on its button, which a scrolled-
+  away button would break. A single "next step" button instead was
+  weighed and turned down: steps happen in different places (auction
+  house, bank, a forge), so it would hide the one you need where you are.
+  When a step finishes, the next moves up into its place, so clicks stay
+  in one spot; a step that just moved into the place of one that's gone
+  ignores clicks for 0.5s (and the cover waits as long), so a click meant
+  for the finished step doesn't buy, take or craft by accident. Steps that
+  only shifted (a line added above) aren't held. Folding To do now folds
+  only the box, so Buy and Craft never disappear.
 - **Every section folds away**: Queued, Profit, To do and Already in your
   bags are all dividers (title between lines, a plus or minus sign) that
   fold on a click, remembered per character, a folded one saying how many
@@ -228,10 +244,10 @@ time" route mode).
   this reason). Every search is watched (a hook on SendSearchQuery); when
   the latest isn't the item's, Buy searches it again first and says so,
   and the next click buys. Buying several of one item in a row needs no
-  new search.
-  Unconfirmed in game: the notification and error events for a buyout on
-  Forever (taken from TSM's handling), and whether a search finds suffixed
-  versions of an item ("of the Monkey").
+  new search. Confirmed in game (2026-11-16): gear is bought, and the
+  "won" notification records it.
+  Unconfirmed in game: whether a search finds suffixed versions of an item
+  ("of the Monkey").
 
 ### Scanning: sharing the auction house
 
@@ -265,7 +281,8 @@ opens.
   The saved recipes are kept, not deleted: they count again if it's learned
   again. Just after logging in the game lists no professions yet, so while
   it lists none every saved one counts (a character with no professions at
-  all is the one case this can't tell apart).
+  all is the one case this can't tell apart). Confirmed in game
+  (2026-11-16): Josten's dropped Mining no longer shows or counts.
 
 - **Opening another profession** needs a secure button. It's a separate
   invisible overlay laid over the Craft button at screen coordinates, never
@@ -410,6 +427,16 @@ opens.
 - **Vendor prices are our own list** (`VendorPrices.lua`), first filled from
   public data, used when Auctionator hasn't seen a vendor sell the item.
   Updated by hand with `/vprofit prices`. Not tied to another addon.
+- **Vendor prices are recorded per character**: a vendor with a reputation
+  discount sold Heavy Stock and Strong Flux for 18s, under both the usual
+  20s and the auction house's ~19s 45c, but the plan still said "auction"
+  (it only knew the usual 20s, from Auctionator and the list). Opening a
+  merchant now records its gold prices for items without a stock limit
+  (per one, batches divided out), keeping the cheapest seen, per character
+  since reputation is. Recorded prices come first in GetBuyPrices
+  (everywhere), then Auctionator's, then the list. Tried first: using the
+  open vendor's prices only while its window was open; dropped, since the
+  price should be known before you get there and after you leave.
 
 ## Releases and workflow
 

@@ -481,7 +481,9 @@ def lines(ev):
 
 
 DIVIDERS = {"Queued", "Profit", "To do", "Already in your bags"}
-HEADINGS = {"Shopping List"} | DIVIDERS
+# To do's details, in their scroll box: each step's title, then its items.
+DETAILS = {"Buy", "Collect from mailbox", "Take from bank", "Craft"}
+HEADINGS = {"Shopping List"} | DIVIDERS | DETAILS
 STEP = re.compile(r"^\d+\. (.*)$")
 
 
@@ -564,7 +566,24 @@ check("from your bags: 12 bronze bars, 3 copper bars",
 check("from your bank: the other 2 copper bars, to fetch", section(ev, "Take from bank") == ["|Ticon2840:0|t Copper Bar x2"])
 check("no mailbox step with nothing in the mail", section(ev, "Collect from mailbox") is None)
 check("layout: queued, profit, then the To do steps in order, then what's in your bags",
-      headings(ev) == ["Shopping List", "Queued", "Profit", "To do", "1. Buy", "2. Take from bank", "3. Craft", "Already in your bags"])
+      headings(ev) == ["Shopping List", "Queued", "Profit", "To do",
+                       "1. Buy | |cff8080802 items|r", "2. Take from bank | |cff8080801 item|r", "3. Craft | |cff8080803 recipes|r",
+                       "Buy", "Take from bank", "Craft", "Already in your bags"])
+check("To do: the steps with their counts and buttons stay at the top; their items scroll in a box below",
+      ev("VendorProfit.Panel.TodoScroll():IsShown()") and ev(BUY) is not None and ev(CRAFT) is not None
+      and section(ev, "Buy") == ["|Ticon2770:0|t Copper Ore x24 | auction  |cffffffff12s|r", "|Ticon3576:0|t Tin Bar x29 | auction  |cffffffff21s 75c|r"])
+run('VendorProfit.Panel.TODO_ROWS = 4; VendorProfit.Panel.Refresh()')
+check("a long To do list scrolls: the box stays at its most rows tall, the list inside as long as it needs",
+      ev("VendorProfit.Panel.TodoScroll():GetHeight()") == 4 * 15 and ev("VendorProfit.Panel.TodoScroll():GetScrollChild():GetHeight()") > 4 * 15)
+run('VendorProfit.Panel.TODO_ROWS = 12; VendorProfit.Panel.Refresh()')
+check("...a short one is only as tall as its rows", ev("VendorProfit.Panel.TodoScroll():GetHeight()") == ev("VendorProfit.Panel.TodoScroll():GetScrollChild():GetHeight()"))
+check("the box is darker than the window, a little bigger than its items all round",
+      ev("VendorProfit.Panel.TodoScroll().back.__color[4]") > 0 and ev("VendorProfit.Panel.TodoScroll().back:IsShown()")
+      and ev("VendorProfit.Panel.TodoScroll().back:GetHeight()") == ev("VendorProfit.Panel.TodoScroll():GetHeight()") + 12
+      and ev("VendorProfit.Panel.TodoScroll().__point[4]") - ev("VendorProfit.Panel.TodoScroll().back.__point[4]") == 6)
+check("...its scroll bar the same 6 in from the box's right edge as the items are from its left",
+      ev("VendorProfit.Panel.TodoScroll().ScrollBar.__points.TOPRIGHT[2] == VendorProfit.Panel.TodoScroll().back")
+      and ev("VendorProfit.Panel.TodoScroll().ScrollBar.__points.TOPRIGHT[4]") == -6)
 check("profit rows: sell prices (auction after the AH cut), expenses, profits", section(ev, "Profit")[:6] == [
     "Vendor price | |cffffffff60s|r", "Auction price | |cffffffff1g 23s 50c|r",
     "Items you have | |cffff2020-10s|r", "Items to buy | |cffff2020-33s 75c|r",
@@ -613,7 +632,9 @@ check("no purchase without confirming", ev("#__stub.ah.confirms") == 0)
 run('__stub.Advance(0.5)')
 check("quote within budget: confirm offered",
       ev("VendorProfit.Shopper.Status()") == "confirm" and ev(BUY + ".__text") == "Confirm" and ev(BUY + ":IsEnabled()"))
-check("the price to confirm shows under the heading", section(ev, "Buy")[0] == "|cffffd100Confirm: 24 Copper Ore for |cffffffff12s 70c|r|r")
+ls_ = lines(ev)
+check("the price to confirm shows under the Buy step, above the scroll box",
+      ls_[[i for i, l in enumerate(ls_) if l.startswith("1. Buy")][0] + 1] == "|cffffd100Confirm: 24 Copper Ore for |cffffffff12s 70c|r|r")
 check("cancel beside the price to confirm", ev('VendorProfit.Panel.FindButton("Cancel")') is not None)
 click(run, "buy")
 run('__stub.Advance(0.5)')
@@ -638,7 +659,7 @@ check("tin bars bought", ev("__stub.bags[3576]") == 29 and ev("VendorProfitCharD
 check("spent is shown but not taken off the profit", has_line(ev, "Spent on this order so far")
       and ev("VendorProfit.Shopper.Summary().profit") == ev("VendorProfit.Shopper.Summary().revenue") - ev("VendorProfit.Shopper.Summary().ownedValue"))
 check("nothing left to buy: the Buy step is gone", ev(BUY) is None and section(ev, "Buy") is None
-      and headings(ev)[3:5] == ["To do", "1. Take from bank"])
+      and headings(ev)[3:5] == ["To do", "1. Take from bank | |cff8080801 item|r"])
 check("crafts still listed", has_line(ev, "Bronze Bar x58", "29 crafts"))
 check("no errors while shopping", ev("#__stub.errors") == 0)
 
@@ -743,13 +764,15 @@ check("Queued folds away, saying how many are queued", section(ev, "Queued (1)")
 fold("Profit")
 check("Profit folds away", not has_line(ev, "Vendor profit") and "Profit" in headings(ev))
 fold("To do")
-check("To do folds away, saying how many steps, its buttons with it",
-      section(ev, "To do (3)") == [] and ev(BUY) is None and ev(CRAFT) is None
-      and headings(ev) == ["Shopping List", "Queued (1)", "Profit", "To do (3)", "Already in your bags"])
+check("To do folds just its scroll box: the steps and their buttons stay",
+      section(ev, "Buy") is None and ev(BUY) is not None and ev(CRAFT) is not None
+      and not ev("VendorProfit.Panel.TodoScroll():IsShown()")
+      and headings(ev) == ["Shopping List", "Queued (1)", "Profit", "To do", "1. Buy | |cff8080802 items|r",
+                           "2. Take from bank | |cff8080801 item|r", "3. Craft | |cff8080803 recipes|r", "Already in your bags"])
 check("Scan stays on the title line with everything folded", ev(SCAN + ".__text") == "Scan")
 for name in ["Queued", "Profit", "To do"]:
     fold(name)
-check("all open again", headings(ev) == ["Shopping List", "Queued", "Profit", "To do", "1. Buy", "2. Take from bank", "3. Craft", "Already in your bags"])
+check("all open again", headings(ev)[:4] == ["Shopping List", "Queued", "Profit", "To do"] and section(ev, "Take from bank") is not None)
 run2, ev2 = shop_client(before_load="VendorProfitCharDB = { bagsCollapsed = true }")
 run2('__stub.createCount = 10'); run2(QUEUE + ':Click()')
 check("saved before every section folded: the bags fold carries over", ev2("VendorProfitCharDB.collapsed.bags") == True
@@ -1123,12 +1146,30 @@ run(OPEN + ':Click()')
 run('__stub.Advance(4)')
 check("nothing opened after a few seconds: the cover is back", ev(CRAFT + ".__text") == "Open Mining" and ev(COVERED))
 fold("To do")
-check("To do folded: no Craft button, so the cover goes too", ev(CRAFT) is None and not ev(COVERED)
-      and not ev(OPEN + ":IsShown()"))
-fold("To do")
 run(HOVER)
-check("...open again: the mouse on Open Mining covers it", ev(CRAFT + ".__text") == "Open Mining" and ev(COVERED))
+check("To do folded: Open Mining stays (only the box folds), and the mouse on it still covers it",
+      ev(CRAFT + ".__text") == "Open Mining" and ev(COVERED))
+fold("To do")
 check("no errors", ev("#__stub.errors") == 0)
+
+
+# --- A step moving up under the mouse --------------------------------------------
+# 2 cuirasses: 14 bronze bars to smelt from 7 copper (3 in the bags, 4 from
+# ore) and 7 tin; Blacksmithing is open, so the Craft step opens Mining.
+run, ev = shop_client()
+run('__stub.bags[2841] = 0; __stub.bank[2840] = 0')
+run('__stub.createCount = 2'); run(QUEUE + ':Click()')
+OPEN = "VendorProfitOpenProfessionButton"
+COVERED = OPEN + " ~= nil and " + OPEN + ":IsShown()"
+run('__stub.Advance(1); __stub.mouseFocus = ' + BUY)
+# The ore and tin turn up (bought elsewhere): Buy is done, and Open Mining
+# moves up into its place, right under the mouse.
+run('__stub.bags[2770] = 4; __stub.bags[3576] = 7; __stub.Fire("BAG_UPDATE_DELAYED")')
+check("Open Mining moved up under the mouse into the finished Buy step's place: not covered straight away",
+      ev(BUY) is None and ev(CRAFT + ".__text") == "Open Mining" and ev("__stub.mouseFocus == " + CRAFT) and not ev(COVERED))
+run('__stub.Advance(0.6)')
+check("...covered half a second later, ready for a click meant for it", ev(COVERED))
+check("no errors from steps moving", ev("#__stub.errors") == 0)
 
 
 # --- Craft button ------------------------------------------------------------------
@@ -1178,6 +1219,10 @@ check("ore only in the main bank: can't craft with it", ev(CRAFT + ".tooltip") =
 run('__stub.bank[2770] = 0')
 run('__stub.bags[2770] = 7; __stub.bags[3576] = 7; __stub.Fire("BAG_UPDATE_DELAYED")')
 check("materials in the bags (the game's own count says 0): craft the copper bars", ev(CRAFT + ".tooltip") == "Craft Copper Bar, 7 times" and ev(CRAFT + ":IsEnabled()"))
+run(CRAFT + ":Click()")
+check("Craft just moved up into the finished Buy step's place: a click straight away is ignored (it was meant for Buy)",
+      ev("__stub.crafted") is None)
+run('__stub.Advance(0.6)')
 run(CRAFT + ":Click()")
 check("a click without a mouse down first crafts one (the game's quirk)", list(ev("__stub.crafted[1]").values()) == [2657, 1])
 run(CRAFT + ".__scripts.OnMouseDown(" + CRAFT + ")")
@@ -1858,6 +1903,18 @@ check("Coarse Thread with no vendor price from Auctionator yet: the usual 10c", 
 run('__stub.vendorPrices[2320] = 12')
 check("...Auctionator's recorded price wins once it has one", ev("(VendorProfit.GetBuyPrices(2320))") == 12)
 check("items vendors don't sell: no vendor price", ev("(VendorProfit.GetBuyPrices(2866))") is None)
+# A vendor's own prices, recorded when its window opens.
+run('__stub.OpenMerchant({ { itemID = 2320, price = 9 }, { itemID = 4400, price = 1800 }, '
+    '{ itemID = 3466, price = 1800, numAvailable = 5 }, { itemID = 2880, price = 400, stackCount = 5 } })')
+check("opening a vendor records what it charges (a reputation discount: Heavy Stock 18s, not the usual 20s)",
+      ev("VendorProfitCharDB.vendorPrices[4400]") == 1800 and ev("(VendorProfit.GetBuyPrices(4400))") == 1800)
+check("...ahead of Auctionator's recorded price and the usual one", ev("(VendorProfit.GetBuyPrices(2320))") == 9)
+check("...per item, for items sold in batches", ev("VendorProfitCharDB.vendorPrices[2880]") == 80)
+check("...not limited stock, which can't be counted on", ev("VendorProfitCharDB.vendorPrices[3466]") is None)
+run('__stub.CloseMerchant(); __stub.OpenMerchant({ { itemID = 4400, price = 2000 } })')
+check("a dearer vendor later (no discount there) keeps the cheapest seen", ev("VendorProfitCharDB.vendorPrices[4400]") == 1800)
+run('__stub.CloseMerchant()')
+check("...and it's kept after the window closes", ev("(VendorProfit.GetBuyPrices(4400))") == 1800)
 # /vprofit prices: the open vendor's prices in the list's format, to paste in.
 run('__stub.items["item:2321"] = { name = "Fine Thread", cached = true }')
 run('__stub.items["item:2320"] = { name = "Coarse Thread", cached = true }')
@@ -1955,7 +2012,12 @@ run('__stub.OpenMerchant({ { itemID = 3576, price = 60 }, { itemID = 2770, price
 check("vendor sells tin bars cheaper than the auction house: bought here; copper ore dearer: left for the AH",
       ev(BUY + ".tooltip").startswith("Buy from this vendor: 29 Tin Bar,") and "Tin Bar" in ev(BUY + ".tooltip")
       and "Copper Ore" not in ev(BUY + ".tooltip"))
+check("...and the list says so: tin bars from a vendor at its price, the plan's cost with it",
+      has_line(ev, "Tin Bar x29", "vendor") and not has_line(ev, "Tin Bar x29", "auction")
+      and ev("VendorProfit.Shopper.Summary().plan.buy[3576].source") == "vendor")
 run('__stub.CloseMerchant()')
+check("...the price is remembered once the window closes: still from a vendor", ev("VendorProfitCharDB.vendorPrices[3576]") == 60
+      and ev("VendorProfit.Shopper.Summary().plan.buy[3576].source") == "vendor")
 check("no errors at the vendor", ev("#__stub.errors") == 0)
 
 
@@ -1995,7 +2057,7 @@ check("says it's done", any("Took everything from the bank" in l for l in lines(
 run('__stub.Fire("BAG_UPDATE_DELAYED")')
 check("bank section gone, items now from bags", section(ev, "Take from bank") is None
       and section(ev, "Already in your bags")[:2] == ["|Ticon2840:0|t Copper Bar x7", "|Ticon3576:0|t Tin Bar x7"]
-      and headings(ev)[3:5] == ["To do", "1. Craft"])
+      and headings(ev)[3] == "To do" and headings(ev)[4].startswith("1. Craft"))
 run('__stub.CloseBank()')
 check("stays open when the bank closes", ev("VendorProfit.Panel.IsShown()"))
 check("no errors from the bank", ev("#__stub.errors") == 0)

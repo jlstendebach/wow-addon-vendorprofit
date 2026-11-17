@@ -41,6 +41,9 @@ function CreateFrame(_, name, parent, template)
             for _, key in ipairs({ "GoldBox", "SilverBox", "CopperBox" }) do self[key]:SetText("") end
         end
     end
+    if template == "UIPanelScrollFrameTemplate" then
+        f.ScrollBar = CreateFrame("Slider", nil, f)
+    end
     -- The window template's close button, which closes through HideUIPanel.
     if template == "ButtonFrameTemplate" then
         f.CloseButton = CreateFrame("Button", nil, f)
@@ -185,6 +188,7 @@ function FrameMethods:Raise() stub.topLevel = stub.topLevel + 10; self.__level =
 function FrameMethods:SetToplevel(t) self.__toplevel = t end
 function FrameMethods:IsMouseOver() return true end
 function FrameMethods:SetScrollChild(child) self.__scrollChild = child end
+function FrameMethods:GetScrollChild() return self.__scrollChild end
 function FrameMethods:SetVerticalScroll(v) self.__scroll = v end
 function FrameMethods:GetVerticalScroll() return self.__scroll or 0 end
 function FrameMethods:RegisterForClicks(...) self.__clicks = { ... } end
@@ -217,8 +221,9 @@ function FrameMethods:GetFrameLevel() return self.__level or 1 end
 function FrameMethods:CreateTexture()
     local t = setmetatable({ __shown = true, __parent = self, __text = "" }, FontMethods)
     t.SetColorTexture = function(tex, ...) tex.__color = { ... } end
-    t.SetHeight = function() end
-    t.SetSize = function() end
+    t.SetHeight = function(tex, h) tex.__h = h end
+    t.SetSize = function(tex, w, h) tex.__w, tex.__h = w, h end
+    t.GetHeight = function(tex) return tex.__h or 0 end
     t.SetTexture = function(tex, path) tex.__texture = path end
     t.SetBlendMode = function(tex, mode) tex.__blend = mode end
     t.SetVertexColor = function(tex, ...) tex.__vertexColor = { ... } end

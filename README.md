@@ -169,21 +169,27 @@ Shopping List                                [ Scan ]
     Vendor profit                            16s 25c
     Auction profit                           79s 75c
 ─────────────── [-] To do ───────────────
-1. Buy                                       [ Buy ]
-    Copper Ore x24             auction       12s 70c
-    Tin Bar x29                auction       21s 75c
-2. Take from bank                            [ Take ]
-    Copper Bar x2
-3. Craft                                     [ Craft ]
+1. Buy                         2 items       [ Buy ]
+2. Take from bank              1 item        [ Take ]
+3. Craft                       3 recipes     [ Craft ]
   » Copper Bar x24       Mining, 24 crafts
-    Bronze Bar x58       Mining, 29 crafts
-    Rough Bronze Cuirass x10   Blacksmithing, 10 crafts
+┌─────────────────────────────────────────┐
+│ Buy                                      │
+│ Copper Ore x24             auction 12s 70c│
+│ Tin Bar x29                auction 21s 75c│
+│ Take from bank                           │
+│ Copper Bar x2                            │
+│ Craft                                    │
+│ » Copper Bar x24       Mining, 24 crafts │
+│ Bronze Bar x58         Mining, 29 crafts │
+│ Rough Bronze Cuirass x10  Blacksmithing  │
+└─────────────────────────────────────────┘
 ────────── [-] Already in your bags ──────────
     Bronze Bar x12
     Copper Bar x3
 ```
 
-**To do** is a checklist in the order you'd do it: **Buy** first (prices are what can change, so you find out at the auction house before fetching or crafting anything), **Collect from mailbox** (purchases not collected yet), **Take from bank**, then **Craft**. Each step shows only while it has something left in it and they're numbered in order, so the list gets shorter as you go. Every button sits on its section's heading, with a short label; hover one for the details. There's no button bar at the bottom. Your items are used from your bags first, then the mailbox, then the bank, so **Take from bank** lists exactly what to fetch. Bags include the reagent bank, since crafting uses it directly. **Already in your bags** is just for information. Every section folds away: click its divider (the line with its name and a minus sign) to fold it, and again to open it. A folded section says how many rows it holds (*Queued (2)*, *To do (3)*), and which ones are folded is remembered per character. With **To do** folded its buttons go with it, so open it to buy or craft. **Scan** is on the page's title line, as on Best Crafts, since it's for the whole order. Several queued recipes share your items, so nothing is counted twice.
+**To do** is a checklist in the order you'd do it: **Buy** first (prices are what can change, so you find out at the auction house before fetching or crafting anything), **Collect from mailbox** (purchases not collected yet), **Take from bank**, then **Craft**. Each step shows only while it has something left in it and they're numbered in order, so the list gets shorter as you go: when a step is done, the next one moves up into its place, so you keep clicking in the same spot. The steps stay at the top, each with how many items (or recipes) it has and its button, with the next craft under Craft; their items are listed in a box below that scrolls once it's more than 12 rows, so a big order doesn't make the window run off the screen. A step that has just moved up into the place of one that finished ignores clicks for half a second, so a click meant for the finished one doesn't land on it. Every button has a short label; hover one for the details. There's no button bar at the bottom. Your items are used from your bags first, then the mailbox, then the bank, so **Take from bank** lists exactly what to fetch. Bags include the reagent bank, since crafting uses it directly. **Already in your bags** is just for information. Every section folds away: click its divider (the line with its name and a minus sign) to fold it, and again to open it. A folded section says how many rows it holds (*Queued (2)*, *To do (3)*), and which ones are folded is remembered per character. Folding **To do** folds just its box of items: the steps and their buttons stay. **Scan** is on the page's title line, as on Best Crafts, since it's for the whole order. Several queued recipes share your items, so nothing is counted twice.
 
 **Take from bank.** At the bank, **Take** on the **Take from bank** step moves exactly those amounts into your bags: it splits them off the bank's stacks (smallest stacks first) into empty bag slots, one move at a time, waiting for each to finish. If something isn't in the bank after all, or your bags fill up, or the bank closes, it stops and says so.
 
@@ -205,7 +211,7 @@ The auction house is shared with its own Browse tab and other addons (Auctionato
 - **Not enough gold, no reply, a failed purchase:** nothing is recorded, the panel says what happened, and the item is scanned again. A purchase that gets no reply but goes through later is still recorded when the success arrives.
 - **Items that don't stack** (gear and the like): auctions with no buyout (bid only) and your own are skipped; the panel never bids. If someone else buys an auction before your click, the game says so, nothing is recorded, and **Buy** goes on to the next cheapest.
 
-**Vendors.** Vendor prices come from Auctionator, which records them when you open the window of a vendor that sells the item. Until it has, the addon uses the item's usual vendor price from its own list (`VendorPrices.lua`), so a new install doesn't plan Coarse Thread from the auction house just because you haven't visited a trade-goods vendor yet. Auctionator's recorded price always wins.
+**Vendors.** Opening a vendor's window records what it charges for each item it sells for gold without a stock limit, per character, keeping the cheapest seen: a vendor can charge less than the usual price with a reputation discount (Heavy Stock for 18s instead of 20s), and that's what you'll pay. Recorded prices come first everywhere: the Shopping List, routes and Best Crafts. Items you haven't seen at a vendor yet use Auctionator's recorded vendor price, and failing that the item's usual price from the addon's own list (`VendorPrices.lua`), so a new install doesn't plan Coarse Thread from the auction house just because you haven't visited a trade-goods vendor yet.
 
 The list is maintained here, by hand: one item per line, `[itemID] = copper for one,`. To update it, talk to a vendor and type `/vprofit prices`: a box lists that vendor's prices in the same format, sorted, marking items that are new or whose price differs from the list. Copy the lines you want (Ctrl+C) into `VendorPrices.lua`.
 

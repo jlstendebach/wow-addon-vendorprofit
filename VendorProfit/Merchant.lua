@@ -3,6 +3,13 @@
 -- would get from a vendor (or has no price for), and anything planned from
 -- the auction house that this merchant sells for no more.
 --
+-- Opening a merchant records what it charges for each item it sells for
+-- gold without limit, per character (VendorProfitCharDB.vendorPrices): the
+-- cheapest seen, since a vendor can charge less than the usual price
+-- (reputation discounts, which are the character's own). Recorded prices
+-- come first everywhere (VendorProfit.GetBuyPrices), so the plan, routes and
+-- Best Crafts use what this character actually pays.
+--
 -- Vendor purchases land in your bags a moment later, and the plan picks them
 -- up from there; only the gold spent is recorded on the order. Until they
 -- land, Buy is off, so clicking twice can't buy twice.
@@ -67,6 +74,26 @@ local function Catalog()
         end
     end
     return catalog
+end
+
+-- Records the open merchant's prices: for one of each item it sells for
+-- gold without limit (limited stock can't be counted on), keeping the
+-- cheapest seen. Returns whether any changed.
+function Merchant.Record()
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    local recorded = VendorProfitCharDB.vendorPrices or {}
+    VendorProfitCharDB.vendorPrices = recorded
+    local changed = false
+    for itemID, item in pairs(Catalog()) do
+        if item.numAvailable == -1 then
+            local each = item.price / item.stackCount
+            if recorded[itemID] == nil or each < recorded[itemID] then
+                recorded[itemID] = each
+                changed = true
+            end
+        end
+    end
+    return changed
 end
 
 local function Bags(itemID)
@@ -303,6 +330,15 @@ events:SetScript("OnEvent", function(_, event)
         -- Purchases that have arrived stop being pending.
         Merchant.IsBuying()
         return
+    end
+    -- New prices: planned again with them, unless the auction house is in
+    -- the middle of something.
+    if open and Merchant.Record() then
+        local Shopper = VendorProfit.Shopper
+        local status = Shopper.Status()
+        if status == "closed" or status == "idle" or status == "ready" then
+            Shopper.Recompute()
+        end
     end
     Changed()
 end)
