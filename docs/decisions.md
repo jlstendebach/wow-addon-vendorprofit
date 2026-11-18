@@ -124,8 +124,23 @@ time" route mode).
   names the profession when only one is shown. Opening it from a profession's
   title-bar button leaves the ticks alone: the window doesn't change things by
   itself. Live prices are per item; a scan "covers" the professions it looked
-  up, for the "Live prices from" line. Ranking 450 recipes takes about 11 ms
-  in the test harness, so the ranking isn't cached.
+  up, for the "Live prices from" line.
+- **Rankings are cached** (2026-11-18). They weren't at first (about 11 ms
+  for 450 recipes in the test harness), but crafting with Best Crafts open
+  stuttered: each craft fires a burst of events (cast start and stop, bags,
+  money, the profession's list updating, the recipes being saved again),
+  each redrew the tab, and each redraw ranked every recipe again, with
+  price lookups through Auctionator for every item in every tree. A craft
+  changes nothing the ranking uses. Profiled on Josh's saved recipes (299,
+  6 professions): a redraw went from about 6.7 ms to 1.5 ms in the harness;
+  in game the price lookups cost more, so the saving is bigger. Kept per
+  professions and tab, and started over when: the saved recipes change for
+  routes (Recipes.Version; the profession's list is saved again after every
+  craft, but only a recipe, what it makes or what it uses changing counts,
+  not skill-up colors), prices change (Auctionator's DB update callback,
+  live lookups, a vendor opening or closing, recorded vendor prices), or
+  after a minute, in case a price changed with nothing to say so. Never
+  kept while item info is still loading.
 - **Skill-up colors** are only reported for the open profession, so each
   recipe's color is saved when its window is open, and shown for the others
   as of their last opening (possibly out of date). Josh wanted that said: a

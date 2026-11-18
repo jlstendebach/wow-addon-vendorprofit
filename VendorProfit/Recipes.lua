@@ -76,7 +76,20 @@ local function Has(key, profession)
     return current == nil or current[key] == true or current[profession.name] == true
 end
 
-local function RebuildIndex()
+-- Goes up whenever what routes are worked out from changes (recipes, what
+-- they make and use, professions learned or dropped), so rankings worked
+-- out from it know to start over.
+local version = 0
+function Recipes.Version()
+    return version
+end
+
+-- unchanged: the saved recipes were saved again exactly as they were for
+-- routes (only skill-up colors or stations differ), so the version stays.
+local function RebuildIndex(unchanged)
+    if not unchanged then
+        version = version + 1
+    end
     current = CurrentProfessions()
     local keys = {}
     for key in pairs(current or NONE) do
@@ -130,6 +143,41 @@ function Recipes.ReagentsFromSchematic(recipeSchematic)
         end
     end
     return reagents
+end
+
+-- Whether two saved lists of a profession's recipes are the same for
+-- routes: the same recipes, making the same items, from the same reagents.
+local function SameReagents(a, b)
+    if #a ~= #b then
+        return false
+    end
+    for index, slot in ipairs(a) do
+        local other = b[index]
+        if slot.quantity ~= other.quantity or #slot.items ~= #other.items then
+            return false
+        end
+        for i, itemID in ipairs(slot.items) do
+            if other.items[i] ~= itemID then
+                return false
+            end
+        end
+    end
+    return true
+end
+local function SameForRoutes(a, b)
+    for recipeID, recipe in pairs(a) do
+        local other = b[recipeID]
+        if other == nil or other.item ~= recipe.item or other.count ~= recipe.count
+            or not SameReagents(recipe.reagents or NONE, other.reagents or NONE) then
+            return false
+        end
+    end
+    for recipeID in pairs(b) do
+        if a[recipeID] == nil then
+            return false
+        end
+    end
+    return true
 end
 
 -- Known recipes that make an item.
@@ -364,12 +412,17 @@ function Recipes.Scan()
         end
     end
 
+    -- The profession's list updates after every craft (skill-ups), so it's
+    -- saved again each time; routes only care when a recipe, what it makes
+    -- or what it uses changed.
+    -- (A filtered list is merged into the saved one in place: no telling.)
+    local unchanged = complete and saved ~= nil and SameForRoutes(saved.recipes, recipes)
     db.professions[key] = {
         name = info.professionName or tostring(key),
         recipes = recipes,
     }
     lastScan = { key = key, name = db.professions[key].name, time = GetTime() }
-    RebuildIndex()
+    RebuildIndex(unchanged)
     VendorProfit.Refresh()
     -- Best Crafts lists every saved recipe (BestPanel.lua loads later).
     if VendorProfit.BestPanel then

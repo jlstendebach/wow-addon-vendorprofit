@@ -2543,6 +2543,33 @@ check("Ctrl-click - takes it off the exact recipe", entries() == [(2670, False, 
 run(ROW(1) + '.unqueue:Click()')
 check("...and does nothing with no exact one queued", entries() == [(2670, False, 1)])
 run('__stub.ctrl = false; VendorProfit.Order.Clear(); ' + B + '.__scripts.OnUpdate(' + B + ')')
+
+# Rankings are kept until what they're worked out from changes: a craft's burst
+# of events (the cast ending, bags, money, the profession's list) doesn't rank
+# every recipe again. A ranking kept is the same list as before.
+run('local f = VendorProfit.BestCrafts.Rank; VendorProfit.BestCrafts.Rank = function(...) local r, l = f(...); __ranking = r; return r, l end')
+def ranked_again(action):
+    run('VendorProfit.BestPanel.Refresh(); __before = __ranking')
+    run(action)
+    run('VendorProfit.BestPanel.Refresh()')
+    return not ev("__ranking == __before")
+check("crafting's events redraw Best Crafts without ranking every recipe again",
+      not ranked_again('for _, e in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "BAG_UPDATE_DELAYED", "PLAYER_MONEY" }) do __stub.Fire(e, "player") end')
+      and len(best()) == 3)
+check("...nor the profession's list updating after a craft, its recipes the same",
+      not ranked_again('__stub.Fire("TRADE_SKILL_LIST_UPDATE"); __stub.Advance(1)'))
+before = ev(ROW(1) + ".investment:GetText()")
+check("...nor a price changing with nothing to say so",
+      not ranked_again('__stub.auctionPrices[2770] = 1; __stub.auctionPrices[2771] = 1'))
+check("Auctionator's prices changing (its scans say so): ranked again at the new prices",
+      ranked_again('__stub.PricesChanged()') and ev(ROW(1) + ".investment:GetText()") != before)
+check("a vendor opening (its prices): ranked again", ranked_again('__stub.OpenMerchant({})'))
+run('__stub.CloseMerchant()')
+check("a minute on, in case a price changed with nothing to say so: ranked again", ranked_again('__stub.Advance(61)'))
+check("a recipe gone from the profession: ranked again",
+      ranked_again('__stub.OpenProfession(164, "Blacksmithing", { %s, %s }); __stub.Advance(1)' % (CUIRASS, SHOULDERS))
+      and len(best()) == 2)
+run('__stub.OpenProfession(164, "Blacksmithing", { %s, %s, %s }); __stub.Advance(1)' % (CUIRASS, SHOULDERS, VEST))
 check("scan off away from the auction house", not ev(B + ".scan:IsEnabled()")
       and ev(B + ".scan.tooltip") == "Open the auction house to look up live prices.")
 

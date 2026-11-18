@@ -48,7 +48,24 @@ local listeners = {}
 function BestCrafts.OnChange(fn)
     listeners[#listeners + 1] = fn
 end
+-- Rankings, kept until something they're worked out from changes: every
+-- Best Crafts redraw used to rank every recipe again, and crafting fires a
+-- burst of events (the cast ending, bags, the profession's list), each
+-- redrawing it, though a craft changes nothing the ranking uses. Kept per
+-- professions and tab; started over when the saved recipes change (the
+-- key has Recipes.Version), prices change (Auctionator's scans, live
+-- lookups, vendors), or after RANK_MAX_AGE in case a price changed with
+-- nothing to say so. Never kept while item info is still loading.
+BestCrafts.RANK_MAX_AGE = 60
+local rankings = {}
+local pricesVersion = 0
+
+function BestCrafts.PricesChanged()
+    pricesVersion = pricesVersion + 1
+end
+
 local function Changed()
+    pricesVersion = pricesVersion + 1
     for _, fn in ipairs(listeners) do
         fn()
     end
@@ -188,6 +205,11 @@ end
 -- same function each time, is called when it arrives; see
 -- VendorProfit.RedrawWhenLoaded).
 function BestCrafts.Rank(professions, by, onLoad)
+    local key = table.concat(Keys(professions), ",") .. "/" .. by .. "/" .. Recipes.Version()
+    local kept = rankings[key]
+    if kept and kept.pricesVersion == pricesVersion and GetTime() - kept.time < BestCrafts.RANK_MAX_AGE then
+        return kept.ranked, false
+    end
     local ranked, unranked, loading = {}, {}, false
     for _, recipe in ipairs(RecipesOf(professions)) do
         local entry, itemLoading = Price(recipe, by, onLoad)
@@ -207,6 +229,11 @@ function BestCrafts.Rank(professions, by, onLoad)
     end)
     for _, entry in ipairs(unranked) do
         ranked[#ranked + 1] = entry
+    end
+    if loading then
+        rankings[key] = nil
+    else
+        rankings[key] = { ranked = ranked, pricesVersion = pricesVersion, time = GetTime() }
     end
     return ranked, loading
 end
@@ -470,3 +497,16 @@ events:SetScript("OnEvent", function(_, event, ...)
     local args = { ... }
     xpcall(function() OnResults(event, args[1]) end, geterrorhandler())
 end)
+
+-- What tells the rankings prices changed: Auctionator's scans (its prices),
+-- vendors (Auctionator's vendor prices, and the ones this addon records:
+-- Merchant.lua).
+if Auctionator.API.v1.RegisterForDBUpdate then
+    Auctionator.API.v1.RegisterForDBUpdate(ADDON_NAME, BestCrafts.PricesChanged)
+end
+VendorProfit.Merchant.OnChange(BestCrafts.PricesChanged)
+local priceEvents = CreateFrame("Frame")
+for _, event in ipairs({ "MERCHANT_SHOW", "MERCHANT_CLOSED" }) do
+    pcall(priceEvents.RegisterEvent, priceEvents, event)
+end
+priceEvents:SetScript("OnEvent", BestCrafts.PricesChanged)

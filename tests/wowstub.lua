@@ -999,7 +999,11 @@ C_AuctionHouse.GetBrowseResults = function() return stub.ah.browseResults or {} 
 C_AuctionHouse.HasFullBrowseResults = function() return true end
 C_AuctionHouse.RequestMoreBrowseResults = function() end
 C_TradeSkillUI.OpenRecipe = function(recipeID) stub.openedRecipe = recipeID end
-function Auctionator.API.v1.RegisterForDBUpdate(callerID, fn) verify(callerID) stub.dbUpdate = fn end
+-- Every caller's callback, run by stub.PricesChanged (Auctionator runs them
+-- when its scans change its prices).
+stub.dbUpdates = {}
+function Auctionator.API.v1.RegisterForDBUpdate(callerID, fn) verify(callerID) table.insert(stub.dbUpdates, fn) end
+function stub.PricesChanged() for _, fn in ipairs(stub.dbUpdates) do fn() end end
 
 -- Merchant ---------------------------------------------------------------------
 -- stub.merchant = { { itemID, price, stackCount, numAvailable, extended } }.
