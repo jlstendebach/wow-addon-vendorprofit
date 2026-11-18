@@ -187,6 +187,8 @@ stub.topLevel = 100
 function FrameMethods:Raise() stub.topLevel = stub.topLevel + 10; self.__level = stub.topLevel; self.__raised = (self.__raised or 0) + 1 end
 function FrameMethods:SetToplevel(t) self.__toplevel = t end
 function FrameMethods:IsMouseOver() return true end
+function FrameMethods:SetAlpha(a) self.__alpha = a end
+function FrameMethods:GetAlpha() return self.__alpha or 1 end
 function FrameMethods:SetScrollChild(child) self.__scrollChild = child end
 function FrameMethods:GetScrollChild() return self.__scrollChild end
 function FrameMethods:SetVerticalScroll(v) self.__scroll = v end
@@ -228,6 +230,8 @@ function FrameMethods:CreateTexture()
     t.SetBlendMode = function(tex, mode) tex.__blend = mode end
     t.SetVertexColor = function(tex, ...) tex.__vertexColor = { ... } end
     t.SetTexCoord = function(tex, ...) tex.__texCoord = { ... } end
+    t.SetAtlas = function(tex, atlas) tex.__atlas = atlas end
+    t.SetAlpha = function(tex, a) tex.__alpha = a end
     return t
 end
 -- Lines (CreateLine): a texture with two end points.
@@ -337,6 +341,9 @@ function geterrorhandler()
 end
 
 C_AddOns = { GetAddOnMetadata = function(addon, key) return stub.metadata[addon] and stub.metadata[addon][key] end }
+-- Atlases the client has (C_Texture.GetAtlasInfo).
+stub.atlases = { ["auctionhouse-icon-favorite"] = { width = 14, height = 14 } }
+C_Texture = { GetAtlasInfo = function(atlas) return stub.atlases[atlas] end }
 C_Timer = { After = function(seconds, fn) stub.timers[#stub.timers + 1] = { at = stub.now + seconds, fn = fn } end }
 SlashCmdList = {}
 stub.money = 1000000

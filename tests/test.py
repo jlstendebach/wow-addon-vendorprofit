@@ -2418,6 +2418,35 @@ check("auction tab: after the cut, 1235 - 438 and 665 - 313",
                      "|Ticon2865:0|t Rough Bronze Shoulders | |cffffffff3s 52c|r"])
 run(B + ".tabs.vendor:Click()")
 check("says prices are Auctionator's", "Prices from Auctionator's last scan." in ev(B + ".status:GetText()"))
+
+# Favorites: a star before the name; favorites first, sorted among themselves.
+item_order = lambda: [ev("VendorProfit.BestPanel.Row(%d).hit.recipe.item" % i) for i in range(1, len(best()) + 1)]
+star = lambda i: "VendorProfit.BestPanel.Row(%d).favorite" % i
+check("no favorites: the stars are hidden, the auction house's star", item_order() == [2866, 2865, 2867]
+      and ev(star(1) + ":GetAlpha()") == 0 and ev(star(1) + ".icon.__atlas") == "auctionhouse-icon-favorite")
+run('local hit = VendorProfit.BestPanel.Row(1).hit; hit:GetScript("OnEnter")(hit)')
+check("...shown, faded, while the mouse is on the row", ev(star(1) + ":GetAlpha()") == 1 and ev(star(1) + ".icon.__desaturated"))
+run('local hit = VendorProfit.BestPanel.Row(1).hit; hit:GetScript("OnLeave")(hit)')
+check("...and hidden again when it leaves", ev(star(1) + ":GetAlpha()") == 0)
+check("the star sits before the name, a column gap apart", ev(star(1) + ".__point[4]") == 0
+      and ev("VendorProfit.BestPanel.Row(1).left.__point[4]") == ev(star(1) + ":GetWidth()") + ev("VendorProfit.Columns.GAP"))
+run(star(3) + ':GetScript("OnEnter")(' + star(3) + ')')
+check("hovering a star says what it does", ev("GameTooltip.lines[1].left") == "Favorite: keep it at the top of the list.")
+run(star(3) + ':Click()')
+check("starring the losing vest: it goes to the top, saved per character", item_order() == [2867, 2866, 2865]
+      and ev("VendorProfitCharDB.bestFavorites[2671]") and ev(star(1) + ":GetAlpha()") == 1
+      and not ev(star(1) + ".icon.__desaturated"))
+run(star(3) + ':Click()')
+check("two favorites: sorted by profit among themselves, above the rest", item_order() == [2865, 2867, 2866])
+run(B + '.profitHeading:Click()')
+check("sorting the other way: favorites still first, each group reversed", item_order() == [2867, 2865, 2866])
+run('VendorProfitCharDB.bestSort = nil; VendorProfit.BestPanel.Refresh()')
+run(star(1) + ':GetScript("OnEnter")(' + star(1) + ')')
+check("a favorite's star offers to remove it", ev("GameTooltip.lines[1].left") == "Remove from favorites.")
+run("GameTooltip:Hide()")
+run(star(1) + ':Click(); ' + star(1) + ':Click()')
+check("unstarred: back in profit order, nothing saved", item_order() == [2866, 2865, 2867]
+      and ev("VendorProfitCharDB.bestFavorites") is None)
 check("scan off away from the auction house", not ev(B + ".scan:IsEnabled()")
       and ev(B + ".scan.tooltip") == "Open the auction house to look up live prices.")
 

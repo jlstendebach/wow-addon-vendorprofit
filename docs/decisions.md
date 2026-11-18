@@ -134,7 +134,18 @@ time" route mode).
   professions: / colors as last seen."): the game's menu doesn't wrap and is
   as wide as its widest line, and a one-line note made it far too wide.
 
-- **Columns**: Recipe, Investment, Profit, ROI, 7d, AH, Q, then **-** and **+**.
+- **Favorites** (2026-11-18): a star before the name; favorites are listed
+  first, each group (favorites, then the rest) sorted by the chosen column,
+  unpriced favorites after priced ones but above everything else. A bare
+  star, not a red icon button: a third button on every row next to - and +
+  was too much. Empty stars show only while the mouse is on the row, faded
+  (as TradeSkillMaster's crafting list does), so the list isn't 14 rows of
+  outlines; a favorite's star always shows. The texture is the auction
+  house's favorite star atlas (`auctionhouse-icon-favorite`), desaturated
+  when off; the star raid marker if the client lacks that atlas. Saved per
+  character by recipe ID (`bestFavorites`), like the filters. Filters and
+  search still apply: favorites go first, they aren't exempt.
+- **Columns**: star, Recipe, Investment, Profit, ROI, 7d, AH, Q, then **-** and **+**.
   No rank numbers (they took space and meant little once you sort and
   filter). Clicking a recipe's name shows it in the professions window (only
   while it's open); the magnifying-glass button was removed for that.

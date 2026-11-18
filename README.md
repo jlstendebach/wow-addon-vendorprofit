@@ -121,11 +121,11 @@ The **Vendor Profit** button in the professions window's title bar (left of Trad
 ```
 Best Crafts: Blacksmithing                                 [ Scan ]
 [Auction] [Vendor]  [🔍 Search                 ] [Filter (1)] [x]
-Recipe               Investment    Profit▼    ROI    7d  AH  Q
-Rough Bronze Cuirass     4s 38c    1s 62c     37%     6   5  2  [-] [+]
-Rough Bronze Shoulders   3s 13c       87c     28%     1   -  -  [-] [+]
-Copper Chain Vest        3s 60c   -2s 10c    -58%     -   -  -  [-] [+]
-Mystery Helm          no price: Strange Ore           -   -  -  [-] [+]
+   Recipe               Investment    Profit▼    ROI    7d  AH  Q
+★  Copper Chain Vest        3s 60c   -2s 10c    -58%     -   -  -  [-] [+]
+   Rough Bronze Cuirass     4s 38c    1s 62c     37%     6   5  2  [-] [+]
+   Rough Bronze Shoulders   3s 13c       87c     28%     1   -  -  [-] [+]
+   Mystery Helm          no price: Strange Ore           -   -  -  [-] [+]
 Prices from Auctionator's last scan.
 ```
 
@@ -133,6 +133,7 @@ Prices from Auctionator's last scan.
 - **Search.** Type in the search box to filter the list by recipe name as you type (any case). Clear it to see everything.
 - **Filter.** The **Filter** button opens a menu with **Profitable only** (a positive profit on the tab you're on), **Hot only** (see **7d**, below) and skill-up colors: **Guaranteed** (orange), **Likely** (yellow) and **Unlikely** (green). Check any colors to see only recipes of those colors. The menu opens under the button, and clicking the button again closes it. The button shows how many filters are on (*Filter (2)*), and the red X at the end of the row clears them (it's grayed out while none are on). Filters are saved per character. Recipe names are shown in their skill-up color, as in the professions window; ones that won't skill you up stay white. The game only reports skill-up colors for the profession whose window is open, so each recipe's color is saved whenever its window is open: the others show the color as of their last opening, which may be out of date if you've skilled up since. The menu says so under the colors (*Closed professions: colors as last seen.*), and hovering a recipe whose color is saved says when it's from. A recipe saved before colors were kept has none until you open its profession again, and a color filter leaves it out (and says why). Under **Professions**, one checkbox per saved profession, all ticked to start with: untick one to leave its recipes out. Unticked professions count as filters, and the red X ticks them all again.
 - **Minimums.** On the bottom row of the window, under the notes, **Min profit:** (gold, silver and copper boxes, up to 9,999 gold) and **Min ROI:** (a percentage, up to 9,999%) hide recipes below them, as you type: profit per craft and ROI on the tab you're on (ROI as shown, a whole percentage). Each box looks like the search box, with its unit inside at the right (a coin, or %), 0 to start; 0 is no minimum, and a box left empty goes back to 0. Recipes with no profit to rank are hidden while either is set. They're saved per character, and the red X clears them along with the filters.
+- **Favorites.** Click the star before a recipe's name (it shows when the mouse is on the row) to make it a favorite: favorites stay at the top of the list, sorted among themselves by the same column, with their star always showing. Click it again to remove it. Favorites are saved per character; filters and the search still apply to them.
 - **Sorting.** Click a column's heading to sort by it (highest first; Recipe A to Z); click it again to reverse. The sorted column is in white with an arrow, and recipes with no profit to rank stay at the bottom. The sort is saved per character. By default it's by Profit.
 - **Auction** (the default) ranks by Auctionator's price after the 5% cut. **Vendor** ranks by selling to a vendor: usually lower, but a guaranteed sale.
 - Losses are listed too (in red), below the crafts that make money. Recipes with no profit to rank by come last, saying why: a reagent with no price anywhere (*no price: Strange Ore*, so their profit can't be trusted), or no vendor (or auction) price for what they make.
@@ -341,6 +342,7 @@ Saved data, per character (`VendorProfitCharDB`):
 - `order = { entries, inMail, lastSeen, spent }`: the queued crafts, purchases not seen in bags or bank yet (and the count they're waiting to rise from), and what the panel spent.
 - `panel = { left, top }`: where you moved the Vendor Profit window, if you did.
 - `bestSort = { key, ascending }` and `bestFilters`: how Best Crafts is sorted and filtered.
+- `bestFavorites = { [recipeID] = true }`: Best Crafts' favorite recipes.
 - `bestSellersSort = { key, ascending }`: how Profit History's Best Sellers is sorted.
 - `auctions = { counts, time }`: how many of each item you had up for auction at your last visit to the auction house, and when.
 - `history = { stock, sales, items, daily, purchases }`: what the items you have cost you, your last 10,000 sales, every sale added up per item, older sales added up per item per day, and your last 5,000 purchases.

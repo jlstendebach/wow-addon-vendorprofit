@@ -46,7 +46,7 @@ local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
 local LIST_WIDTH = BASE_LIST_WIDTH
 local ICON_BUTTON_WIDTH = 22
 -- The columns, by key (Columns.lua), laid out for what's listed on each
--- refresh: the recipe name, Investment, Profit, ROI, 7d (sold at auction
+-- refresh: the favorite star, the recipe name, Investment, Profit, ROI, 7d (sold at auction
 -- in the last 7 days, in orange for hot ones), AH (your auctions of it), Q
 -- (crafts queued), then - and + (unqueue and queue a craft). The
 -- layout key changes only when the layout does.
@@ -122,6 +122,36 @@ local ProfessionsWindowOpen = Recipes.WindowOpen
 
 local function ShowRecipe(recipe)
     Recipes.Show(recipe.recipeID, recipe.profession)
+end
+
+-- Favorite recipes, saved per character: { [recipeID] = true }. They're
+-- listed first, sorted among themselves by the same column.
+local function IsFavorite(recipeID)
+    local db = VendorProfitCharDB
+    return db ~= nil and type(db.bestFavorites) == "table" and db.bestFavorites[recipeID] == true
+end
+
+local function SetFavorite(recipeID, favorite)
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    VendorProfitCharDB.bestFavorites = VendorProfitCharDB.bestFavorites or {}
+    VendorProfitCharDB.bestFavorites[recipeID] = favorite or nil
+    if next(VendorProfitCharDB.bestFavorites) == nil then
+        VendorProfitCharDB.bestFavorites = nil
+    end
+end
+
+-- The star: the auction house's favorite star, or the star raid marker if
+-- this client hasn't that atlas. A favorite's is always shown; the others'
+-- only while the mouse is on the row (as TradeSkillMaster's crafting list
+-- does), faded, so 14 empty stars don't clutter the list.
+local STAR_ATLAS = "auctionhouse-icon-favorite"
+local STAR_SIZE = 14
+local function ShowStar(row)
+    local star = row.favorite
+    local favorite = star.recipe ~= nil and IsFavorite(star.recipe.recipeID)
+    star.icon:SetDesaturated(not favorite)
+    star.icon:SetAlpha(favorite and 1 or 0.5)
+    star:SetAlpha((favorite or row.hovered) and 1 or 0)
 end
 
 -- How many crafts of a recipe the shopping order holds.
@@ -207,11 +237,47 @@ local function GetRow(index)
             end
         end)
         row.hit:SetScript("OnEnter", function(self)
+            row.hovered = true
+            ShowStar(row)
             if self.recipe then
                 BestPanel.ShowSalesTooltip(self, row.left, self.recipe.item, self.recipe)
             end
         end)
-        row.hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row.hit:SetScript("OnLeave", function()
+            row.hovered = false
+            ShowStar(row)
+            GameTooltip:Hide()
+        end)
+        -- The favorite star, before the name. Hidden by alpha, not Hide, so
+        -- it still hears the mouse and shows itself.
+        row.favorite = CreateFrame("Button", nil, list)
+        row.favorite:SetSize(STAR_SIZE, STAR_SIZE)
+        row.favorite.icon = row.favorite:CreateTexture(nil, "ARTWORK")
+        row.favorite.icon:SetAllPoints(row.favorite)
+        if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(STAR_ATLAS) then
+            row.favorite.icon:SetAtlas(STAR_ATLAS)
+        else
+            row.favorite.icon:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_1")
+        end
+        row.favorite:SetScript("OnClick", function(self)
+            if self.recipe then
+                SetFavorite(self.recipe.recipeID, not IsFavorite(self.recipe.recipeID))
+                BestPanel.Refresh()
+            end
+        end)
+        row.favorite:SetScript("OnEnter", function(self)
+            row.hovered = true
+            ShowStar(row)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(self.recipe and IsFavorite(self.recipe.recipeID) and L.BEST_UNFAVORITE_HELP
+                or L.BEST_FAVORITE_HELP, 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        row.favorite:SetScript("OnLeave", function()
+            row.hovered = false
+            ShowStar(row)
+            GameTooltip:Hide()
+        end)
         -- Investment: what one craft's items cost along the cheapest route.
         row.investment = Column()
         row.right = Column()
@@ -244,6 +310,8 @@ local function GetRow(index)
             region:ClearAllPoints()
             region:SetPoint("TOPRIGHT", list, "TOPRIGHT", col[key].right, top - 4)
         end
+        row.favorite:ClearAllPoints()
+        row.favorite:SetPoint("TOPLEFT", list, "TOPLEFT", col.favorite.left, top - (ROW_HEIGHT - STAR_SIZE) / 2)
         row.left:SetWidth(col.name.width)
         row.left:ClearAllPoints()
         row.left:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left, top - 4)
@@ -306,7 +374,7 @@ local function SortValue(entry, key)
 end
 
 -- Orders the ranked entries by the sort; unranked ones stay last as they are.
-local function SortEntries(entries)
+local function SortGroup(entries)
     local sort = Sort()
     local ranked, unranked = {}, {}
     for _, entry in ipairs(entries) do
@@ -349,6 +417,20 @@ local function SortEntries(entries)
         ranked[#ranked + 1] = entry
     end
     return ranked
+end
+
+-- Favorites first, then the rest, each sorted the same way.
+local function SortEntries(entries)
+    local favorites, others = {}, {}
+    for _, entry in ipairs(entries) do
+        local group = IsFavorite(entry.recipe.recipeID) and favorites or others
+        group[#group + 1] = entry
+    end
+    local sorted = SortGroup(favorites)
+    for _, entry in ipairs(SortGroup(others)) do
+        sorted[#sorted + 1] = entry
+    end
+    return sorted
 end
 
 local FormatROI = VendorProfit.FormatROI
@@ -838,6 +920,7 @@ local function LayOutColumns(ranked)
     end
     local key
     col, LIST_WIDTH, key = Columns.Layout(BASE_LIST_WIDTH, {
+        { key = "favorite", width = STAR_SIZE },
         { key = "name", heading = L.BEST_RECIPE, sorts = true, fill = true },
         { key = "investment", heading = L.BEST_INVESTMENT, sorts = true, samples = Columns.Money(extents, "investment") },
         { key = "profit", heading = L.BEST_PROFIT, sorts = true, samples = Columns.Money(extents, "profit") },
@@ -1016,6 +1099,9 @@ local function Refresh()
         row.reason:Show()
         row.hit.recipe = entry.recipe
         row.hit:Show()
+        row.favorite.recipe = entry.recipe
+        ShowStar(row)
+        row.favorite:Show()
         row.queue:SetScript("OnClick", function() QueueRecipe(entry) end)
         row.queue:Show()
         row.unqueue:SetScript("OnClick", function() UnqueueRecipe(entry) end)
@@ -1034,6 +1120,8 @@ local function Refresh()
         row.reason:Hide()
         row.hit.recipe = nil
         row.hit:Hide()
+        row.favorite.recipe = nil
+        row.favorite:Hide()
         row.queue:Hide()
         row.unqueue:Hide()
     end
