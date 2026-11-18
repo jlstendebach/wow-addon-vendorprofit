@@ -569,6 +569,13 @@ check("layout: queued, profit, then the To do steps in order, then what's in you
       headings(ev) == ["Shopping List", "Queued", "Profit", "To do",
                        "1. Buy | |cff8080802 items|r", "2. Take from bank | |cff8080801 item|r", "3. Craft | |cff8080803 recipes|r",
                        "Buy", "Take from bank", "Craft", "Already in your bags"])
+# Cast times known: the Craft step says about how long its crafts take.
+run('__stub.castTimes = { [2657] = 3000, [2659] = 3000, [2670] = 5000 }; VendorProfit.Panel.Refresh()')
+check("Craft says how long: 24 + 29 smelts at 3s and 10 cuirasses at 5s, 209s, about 3 min",
+      "3. Craft (~3 min) | |cff8080803 recipes|r" in headings(ev))
+run('__stub.castTimes = { [2670] = 1500 }; VendorProfit.Panel.Refresh()')
+check("...never less than a minute, only counting the casts it knows (10 x 1.5s)", "3. Craft (~1 min) | |cff8080803 recipes|r" in headings(ev))
+run('__stub.castTimes = {}; VendorProfit.Panel.Refresh()')
 check("To do: the steps with their counts and buttons stay at the top; their items scroll in a box below",
       ev("VendorProfit.Panel.TodoScroll():IsShown()") and ev(BUY) is not None and ev(CRAFT) is not None
       and section(ev, "Buy") == ["|Ticon2770:0|t Copper Ore x24 | auction  |cffffffff12s|r", "|Ticon3576:0|t Tin Bar x29 | auction  |cffffffff21s 75c|r"])

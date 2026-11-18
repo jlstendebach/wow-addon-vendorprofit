@@ -798,6 +798,37 @@ local function Count(n, one, many)
     return Gray(n == 1 and one or string.format(many, n))
 end
 
+-- A recipe's cast time in seconds, or nil if the game doesn't say. A
+-- recipe's ID is its spell's (TradeSkillMaster times its queue the same
+-- way, from the spell's castTime, on Forever too).
+local function CastSeconds(recipeID)
+    if recipeID == nil then
+        return nil
+    end
+    local castTime
+    if C_Spell and C_Spell.GetSpellInfo then
+        local info = C_Spell.GetSpellInfo(recipeID)
+        castTime = info and info.castTime
+    elseif GetSpellInfo then
+        castTime = select(4, GetSpellInfo(recipeID))
+    end
+    return castTime and castTime > 0 and castTime / 1000 or nil
+end
+
+-- The Craft step's title: with about how long the crafts left will take,
+-- to the nearest minute (at least 1), from the cast times the game knows.
+-- Just the casts: walking to an anvil or between crafts isn't counted.
+local function CraftTitle(crafts)
+    local seconds = 0
+    for _, step in ipairs(crafts) do
+        seconds = seconds + (CastSeconds(step.recipeID) or 0) * step.crafts
+    end
+    if seconds == 0 then
+        return L.STEP_CRAFT
+    end
+    return string.format(L.STEP_CRAFT_TIME, math.max(1, math.floor(seconds / 60 + 0.5)))
+end
+
 -- The To do checklist, in the order you'd do it: buy (prices can change, so
 -- first), collect purchases from the mailbox, take things from the bank, then
 -- craft. Each step shows only while it has something left in it, numbered in
@@ -863,7 +894,7 @@ local function AddToDo(plan)
 
     shownCraft = nil
     local craftButton, nextStep, openProfession = CraftButton()
-    local craftRow = Step("craft", L.STEP_CRAFT, Count(#plan.crafts, L.TODO_RECIPE, L.TODO_RECIPES), craftButton)
+    local craftRow = Step("craft", CraftTitle(plan.crafts), Count(#plan.crafts, L.TODO_RECIPE, L.TODO_RECIPES), craftButton)
 
     -- A step now where one that's gone was (it finished, and this one moved
     -- up into its place): a click there was likely meant for the old one.

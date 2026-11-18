@@ -372,8 +372,12 @@ function print(...)
     rawPrint(...)
 end
 function GetCVarBool() return false end
+-- Cast times (ms) by spell ID, for the recipes a test gives one.
+stub.castTimes = {}
 C_Spell = { GetSpellName = function(id)
     return ({ [2575] = "Mining", [2656] = "Smelting", [7620] = "Fishing", [7731] = "Fishing", [1278067] = "Bait and Tackle" })[id]
+end, GetSpellInfo = function(id)
+    return { name = "spell " .. id, spellID = id, castTime = stub.castTimes[id] or 0 }
 end }
 stub.casting = nil
 function UnitCastingInfo(unit) if unit == "player" then return stub.casting end end

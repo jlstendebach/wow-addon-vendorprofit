@@ -200,6 +200,7 @@ VendorProfit.L = {
     STEP_MAIL = "Collect from mailbox",
     STEP_BANK = "Take from bank",
     STEP_CRAFT = "Craft",
+    STEP_CRAFT_TIME = "Craft (~%d min)",
     HEAD_BAGS = "Already in your bags",
     HEAD_PROFIT = "Profit",
     NOTHING_QUEUED = "Nothing queued. Use Queue in a recipe's Cheapest Route section in the professions window.",

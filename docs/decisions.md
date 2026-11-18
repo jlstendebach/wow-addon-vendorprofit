@@ -249,6 +249,13 @@ time" route mode).
 
 ## Shopping List
 
+- **Craft step time** (2026-11-18): "Craft (~63 min)": the crafts left in
+  the plan times each recipe's cast time (C_Spell.GetSpellInfo(recipeID)
+  .castTime; a recipe's ID is its spell's, which is how TradeSkillMaster
+  times its queue on Forever too), to the nearest minute, at least 1. Just
+  the casts: no allowance for walking between stations or the gap between
+  crafts, which vary too much to guess. Recipes with no cast time aren't
+  counted; with none known, the title is plain "Craft".
 - **Two Queue buttons**: under the Cheapest Route (along that route), and
   under Auctionator's Vendor Profit line for the exact recipe: its reagents
   only bought (or taken from what you have), never crafted, as Auctionator
