@@ -186,6 +186,10 @@ local function Price(recipe, by, onLoad, exact)
     end
     if entry.profit then
         entry.roi = cost > 0 and entry.profit / cost or nil
+        -- Profit an hour: crafts cast back to back (Profit/hr on Best
+        -- Crafts); none for a recipe the game gives no cast time.
+        local castSeconds = VendorProfit.CastSeconds(recipe.recipeID)
+        entry.perHour = castSeconds and entry.profit * 3600 / castSeconds or nil
     end
     return entry, loading
 end

@@ -149,6 +149,13 @@ time" route mode).
   professions: / colors as last seen."): the game's menu doesn't wrap and is
   as wide as its widest line, and a one-line note made it far too wide.
 
+- **Profit/hr** (2026-11-18), right of Profit: profit per craft x 3600 /
+  the recipe's cast time (VendorProfit.CastSeconds, shared with the Craft
+  step's time). Just the casts, like the Craft step's time: no allowance
+  for the gap between crafts or walking to a station, and no account of
+  how many would sell (7d is beside it for that). Worked out with the
+  ranking (cast times don't change), a dash with no cast time; sorts with
+  those last. Money shown with two coins, like the other money columns.
 - **Two coins in the list** (2026-11-18): the Investment and Profit columns
   were running out of width, so amounts in gold drop their copper. Cut
   off, not rounded: Josh would rather underestimate. Best Crafts only (the
@@ -218,8 +225,8 @@ time" route mode).
   when off; the star raid marker if the client lacks that atlas. Saved per
   character by recipe ID (`bestFavorites`), like the filters. Filters and
   search still apply: favorites go first, they aren't exempt.
-- **Columns**: Recipe (the favorite star first), Investment, Profit, ROI,
-  7d, AH, Q, then **-** and **+**.
+- **Columns**: Recipe (the favorite star first), Investment, Profit,
+  Profit/hr, ROI, 7d, AH, Q, then **-** and **+**.
   No rank numbers (they took space and meant little once you sort and
   filter). Clicking a recipe's name shows it in the professions window (only
   while it's open); the magnifying-glass button was removed for that.

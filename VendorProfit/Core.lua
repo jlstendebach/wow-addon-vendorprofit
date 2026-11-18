@@ -73,6 +73,8 @@ VendorProfit.L = {
     BEST_SORT_DOWN = "|TInterface\\Buttons\\Arrow-Down-Up:10:10|t",
     BEST_INVESTMENT = "Investment",
     BEST_PROFIT = "Profit",
+    BEST_PER_HOUR = "Profit/hr",
+    BEST_PER_HOUR_HELP = "A craft's profit times how many you can cast in an hour: just the casting, not walking to an anvil or the moment between crafts, and not whether that many would sell.",
     BEST_QUEUE_HELP = "Adds one craft to your shopping order. Shift-click: five. Ctrl-click: the exact recipe (its reagents bought, never crafted).",
     BEST_RESIZE_HELP = "Drag up or down to show fewer or more recipes.",
     BEST_FAVORITE_HELP = "Favorite: keep it at the top of the list.",
@@ -539,6 +541,23 @@ function VendorProfit.FormatROI(roi)
         return RED_FONT_COLOR:WrapTextInColorCode(text)
     end
     return text
+end
+
+-- A recipe's cast time in seconds, or nil if the game doesn't say. A
+-- recipe's ID is its spell's (TradeSkillMaster times its queue the same
+-- way, from the spell's castTime, on Forever too).
+function VendorProfit.CastSeconds(recipeID)
+    if recipeID == nil then
+        return nil
+    end
+    local castTime
+    if C_Spell and C_Spell.GetSpellInfo then
+        local info = C_Spell.GetSpellInfo(recipeID)
+        castTime = info and info.castTime
+    elseif GetSpellInfo then
+        castTime = select(4, GetSpellInfo(recipeID))
+    end
+    return castTime and castTime > 0 and castTime / 1000 or nil
 end
 
 -- How many crafts a + or - click on a queue adds or takes off: one, or

@@ -48,10 +48,11 @@ local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
 local LIST_WIDTH = BASE_LIST_WIDTH
 local ICON_BUTTON_WIDTH = 22
 -- The columns, by key (Columns.lua), laid out for what's listed on each
--- refresh: the recipe name (the favorite star inside it, first), Investment, Profit, ROI, 7d (sold at auction
--- in the last 7 days, in orange for hot ones), AH (your auctions of it), Q
--- (crafts queued), then - and + (unqueue and queue a craft). The
--- layout key changes only when the layout does.
+-- refresh: the recipe name (the favorite star inside it, first),
+-- Investment, Profit, Profit/hr, ROI, 7d (sold at auction in the last 7
+-- days, in orange for hot ones), AH (your auctions of it), Q (crafts
+-- queued), then - and + (unqueue and queue a craft). The layout key changes
+-- only when the layout does.
 local col, layoutKey
 -- This tab's entry in the window (Panel.AddPage), for the width.
 local pageDef
@@ -365,6 +366,8 @@ local function GetRow(index, top)
         -- Investment: what one craft's items cost along the cheapest route.
         row.investment = Column()
         row.right = Column()
+        -- Profit an hour, crafting it back to back.
+        row.perHour = Column()
         -- Return on investment: profit as a share of the investment.
         row.roi = Column()
         -- How many sold at auction in the last 7 days, a flame if hot.
@@ -409,6 +412,7 @@ local function GetRow(index, top)
         row.area:SetSize(LIST_WIDTH, ROW_HEIGHT)
         At(row.investment, "investment")
         At(row.right, "profit")
+        At(row.perHour, "perHour")
         At(row.roi, "roi")
         At(row.sold, "sold")
         At(row.auctions, "auctions")
@@ -450,6 +454,8 @@ local function SortValue(entry, key)
         return (C_Item.GetItemInfo(entry.recipe.item) or ""):lower()
     elseif key == "investment" then
         return entry.cost
+    elseif key == "perHour" then
+        return entry.perHour or -math.huge
     elseif key == "roi" then
         return entry.roi or -math.huge
     elseif key == "queued" then
@@ -1000,6 +1006,7 @@ local function Create(page)
     frame.nameHeading = Heading("name", L.BEST_RECIPE)
     frame.investmentHeading = Heading("investment", L.BEST_INVESTMENT)
     frame.profitHeading = Heading("profit", L.BEST_PROFIT)
+    frame.perHourHeading = Heading("perHour", L.BEST_PER_HOUR, L.BEST_PER_HOUR_HELP .. "\n" .. L.BEST_SORT_HELP)
     frame.roiHeading = Heading("roi", L.BEST_ROI)
     frame.soldHeading = Heading("sold", L.BEST_SOLD_HEADING,
         L.BEST_SOLD_HELP .. "\n" .. L.BEST_SORT_HELP)
@@ -1106,6 +1113,7 @@ local function LayOutColumns(ranked)
             Columns.Track(extents, "investment", entry.cost)
         end
         Columns.Track(extents, "profit", entry.profit)
+        Columns.Track(extents, "perHour", entry.perHour)
         Columns.Track(extents, "roi", entry.profit and entry.roi)
         Columns.Track(extents, "sold", Sold(entry.recipe.item))
         Columns.Track(extents, "auctions", Auctions.Count(entry.recipe.item))
@@ -1116,6 +1124,7 @@ local function LayOutColumns(ranked)
         { key = "name", heading = L.BEST_RECIPE, sorts = true, fill = true },
         { key = "investment", heading = L.BEST_INVESTMENT, sorts = true, samples = Columns.Money(extents, "investment", ListMoney) },
         { key = "profit", heading = L.BEST_PROFIT, sorts = true, samples = Columns.Money(extents, "profit", ListMoney) },
+        { key = "perHour", heading = L.BEST_PER_HOUR, sorts = true, samples = Columns.Money(extents, "perHour", ListMoney) },
         { key = "roi", heading = L.BEST_ROI, sorts = true, samples = Columns.Percent(extents, "roi") },
         { key = "sold", heading = L.BEST_SOLD_HEADING, sorts = true, samples = Columns.Count(extents, "sold") },
         { key = "auctions", heading = L.BEST_AUCTIONS_HEADING, sorts = true, samples = Columns.Count(extents, "auctions") },
@@ -1284,6 +1293,7 @@ local function Refresh()
         if entry.profit then
             row.investment:SetText(ListMoney(entry.cost))
             row.right:SetText(ListMoney(entry.profit))
+            row.perHour:SetText(entry.perHour and ListMoney(entry.perHour) or Gray("-"))
             row.roi:SetText(FormatROI(entry.roi))
         else
             local unpriced = entry.unpriced
@@ -1297,6 +1307,7 @@ local function Refresh()
             -- The investment is known when only the sale price is missing;
             -- the reason takes the columns without a number.
             row.right:SetText("")
+            row.perHour:SetText("")
             if unpriced.output then
                 row.investment:SetText(ListMoney(entry.cost))
                 row.reason:SetWidth(Columns.Span(col, "profit", "roi"))
@@ -1309,6 +1320,7 @@ local function Refresh()
         row.left:Show()
         row.investment:Show()
         row.right:Show()
+        row.perHour:Show()
         row.roi:Show()
         row.queued:Show()
         row.sold:Show()
@@ -1332,6 +1344,7 @@ local function Refresh()
         row.left:Hide()
         row.investment:Hide()
         row.right:Hide()
+        row.perHour:Hide()
         row.roi:Hide()
         row.queued:Hide()
         row.sold:Hide()

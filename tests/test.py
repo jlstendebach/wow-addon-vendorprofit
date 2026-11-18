@@ -2811,6 +2811,23 @@ check("...in the rows, and the column sized to fit them",
       ev(R + ".right:GetText()") == ev("VendorProfit.BestPanel.ListMoney(%d)" % ev(R + ".hit.entry.profit"))
       and "c|r" not in ev(R + ".right:GetText()") and columns_apart(B, [R + ".investment", R + ".right", R + ".roi"]))
 run('__stub.items["item:2866"].sellPrice = 600; __stub.PricesChanged(); VendorProfit.BestPanel.Refresh()')
+
+# Profit/hr: a craft's profit times the casts that fit in an hour.
+run('__stub.castTimes = { [2670] = 5000, [3328] = 1000 }; __stub.PricesChanged(); VendorProfit.BestPanel.Refresh()')
+R = best_row(2866)
+profit = ev(R + ".hit.entry.profit")
+check("Profit/hr: the cuirass casts in 5s, 720 an hour, at its profit each",
+      ev(R + ".hit.entry.perHour") == profit * 720
+      and ev(R + ".perHour:GetText()") == ev("VendorProfit.BestPanel.ListMoney(%d)" % (profit * 720)))
+check("...a dash for a recipe the game gives no cast time",
+      ev(best_row(2867) + ".perHour:GetText()") == ev("GRAY_FONT_COLOR:WrapTextInColorCode('-')"))
+check("...between Profit and ROI", ev(B + ".perHourHeading.label") == "Profit/hr"
+      and columns_apart(B, [R + ".right", R + ".perHour", R + ".roi"]))
+run(B + '.perHourHeading:Click()')
+check("...and it sorts, highest first: the shoulders, less a craft but cast in 1s, above the cuirass",
+      ev("VendorProfit.BestPanel.Row(1).hit.recipe.item") == 2865 and ev("VendorProfit.BestPanel.Row(2).hit.recipe.item") == 2866
+      and ev("VendorProfit.BestPanel.Row(1).hit.entry.profit") < profit)
+run('VendorProfitCharDB.bestSort = nil; __stub.castTimes = {}; __stub.PricesChanged(); VendorProfit.BestPanel.Refresh()')
 check("no errors from Best Crafts", ev("#__stub.errors") == 0)
 
 # --- Best Crafts with the professions window closed: every saved profession ------
