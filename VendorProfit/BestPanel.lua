@@ -46,9 +46,10 @@ local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
 local LIST_WIDTH = BASE_LIST_WIDTH
 local ICON_BUTTON_WIDTH = 22
 -- The columns, by key (Columns.lua), laid out for what's listed on each
--- refresh: the favorite star, the recipe name, Investment, Profit, ROI, 7d (sold at auction
+-- refresh: the recipe name, Investment, Profit, ROI, 7d (sold at auction
 -- in the last 7 days, in orange for hot ones), AH (your auctions of it), Q
--- (crafts queued), then - and + (unqueue and queue a craft). The
+-- (crafts queued), then the favorite star, - and + (unqueue and queue a
+-- craft). The
 -- layout key changes only when the layout does.
 local col, layoutKey
 -- This tab's entry in the window (Panel.AddPage), for the width.
@@ -146,6 +147,7 @@ end
 -- does), faded, so 14 empty stars don't clutter the list.
 local STAR_ATLAS = "auctionhouse-icon-favorite"
 local STAR_SIZE = 14
+local STAR_GAP = 6
 local function ShowStar(row)
     local star = row.favorite
     local favorite = star.recipe ~= nil and IsFavorite(star.recipe.recipeID)
@@ -248,8 +250,10 @@ local function GetRow(index)
             ShowStar(row)
             GameTooltip:Hide()
         end)
-        -- The favorite star, before the name. Hidden by alpha, not Hide, so
-        -- it still hears the mouse and shows itself.
+        -- The favorite star, with the row's buttons, so the names line up
+        -- with the window's left edge (before the name, it pushed every
+        -- name in for the few favorites). Hidden by alpha, not Hide, so it
+        -- still hears the mouse and shows itself.
         row.favorite = CreateFrame("Button", nil, list)
         row.favorite:SetSize(STAR_SIZE, STAR_SIZE)
         row.favorite.icon = row.favorite:CreateTexture(nil, "ARTWORK")
@@ -299,6 +303,7 @@ local function GetRow(index)
         row.unqueue = SmallButton(list, "-", ICON_BUTTON_WIDTH)
         row.unqueue:SetPoint("RIGHT", row.queue, "LEFT", -4, 0)
         Tooltip(row.unqueue, L.BEST_UNQUEUE_HELP)
+        row.favorite:SetPoint("RIGHT", row.unqueue, "LEFT", -STAR_GAP, 0)
         rows[index] = row
     end
     -- Placed again only when the columns change.
@@ -310,8 +315,6 @@ local function GetRow(index)
             region:ClearAllPoints()
             region:SetPoint("TOPRIGHT", list, "TOPRIGHT", col[key].right, top - 4)
         end
-        row.favorite:ClearAllPoints()
-        row.favorite:SetPoint("TOPLEFT", list, "TOPLEFT", col.favorite.left, top - (ROW_HEIGHT - STAR_SIZE) / 2)
         row.left:SetWidth(col.name.width)
         row.left:ClearAllPoints()
         row.left:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left, top - 4)
@@ -920,7 +923,6 @@ local function LayOutColumns(ranked)
     end
     local key
     col, LIST_WIDTH, key = Columns.Layout(BASE_LIST_WIDTH, {
-        { key = "favorite", width = STAR_SIZE },
         { key = "name", heading = L.BEST_RECIPE, sorts = true, fill = true },
         { key = "investment", heading = L.BEST_INVESTMENT, sorts = true, samples = Columns.Money(extents, "investment") },
         { key = "profit", heading = L.BEST_PROFIT, sorts = true, samples = Columns.Money(extents, "profit") },
@@ -928,7 +930,7 @@ local function LayOutColumns(ranked)
         { key = "sold", heading = L.BEST_SOLD_HEADING, sorts = true, samples = Columns.Count(extents, "sold") },
         { key = "auctions", heading = L.BEST_AUCTIONS_HEADING, sorts = true, samples = Columns.Count(extents, "auctions") },
         { key = "queued", heading = L.BEST_QUEUED_HEADING, sorts = true, samples = Columns.Count(extents, "queued") },
-        { key = "buttons", width = 2 * ICON_BUTTON_WIDTH + 4 },
+        { key = "buttons", width = STAR_SIZE + STAR_GAP + 2 * ICON_BUTTON_WIDTH + 4 },
     })
     if key == layoutKey then
         return
