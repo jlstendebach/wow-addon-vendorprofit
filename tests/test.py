@@ -2338,9 +2338,9 @@ def menu():
     items = [(i.text, i.title or False) for i in ev("__stub.Menu(nil)").values()]
     run('__stub.menu:Hide(); __stub.Advance(1)')
     return items
-check("a Filter button in the page's style (not the game's dropdown) opens the menu: profitable only, skill-up colors, professions",
+check("a Filter button in the page's style (not the game's dropdown) opens the menu: profitable only, hot only, skill-up colors, professions",
       ev(F + ".__text") == "Filter (1)" and [t for t, _ in menu()] ==
-      ["Profitable only", "Skill up", "|cffff8040Guaranteed|r", "|cffffff00Likely|r", "|cff40bf40Unlikely|r",
+      ["Profitable only", ev("VendorProfit.BestPanel.HOT_ICON") + " Hot only", "Skill up", "|cffff8040Guaranteed|r", "|cffffff00Likely|r", "|cff40bf40Unlikely|r",
        "|cff808080Closed professions:|r", "|cff808080colors as last seen.|r",
        "Professions", "Blacksmithing", "Mining"])
 run(F + ':Click()')
@@ -2372,9 +2372,9 @@ check("the checkbox shows it's on, and it's saved", ev("__stub.Menu(nil)[1].chec
 run('__stub.menu:Hide(); __stub.Advance(1)')
 check("the button says how many are on, and the reset X is on", ev(F + ".__text") == "Filter (2)" and ev(B + ".filterReset:IsEnabled()"))
 toggle(1)
-toggle(3)
+toggle(4)
 check("guaranteed only: just the orange recipe", len(best()) == 1 and "Rough Bronze Cuirass" in best()[0])
-toggle(5)
+toggle(6)
 check("guaranteed or unlikely: orange and green", [("Cuirass" in l, "Vest" in l) for l in best()] == [(True, False), (False, True)])
 run(B + '.filterReset:Click()')
 check("the red X resets them all, every profession ticked again, and grays out", len(best()) == 5 + 3
@@ -2385,13 +2385,13 @@ def reset_filters():
     run(B + '.filterReset:Click()')
     run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
 run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
-toggle(1); toggle(5); run(B + '.search:Type("cuirass")')
+toggle(1); toggle(6); run(B + '.search:Type("cuirass")')
 check("nothing passes: says so", best() == [] and 'No recipes match "cuirass".' in ev(B + ".status:GetText()"))
 run(B + '.search:Type("")')
 check("...and with no search text, that it's the filters", best() == [] and "No recipes pass the filters." in ev(B + ".status:GetText()"))
 reset_filters()
 run('__stub.recipes[3328].difficulty = nil; VendorProfitCharDB.professions[164].recipes[3328].skillUp = nil; VendorProfit.BestPanel.Refresh()')
-toggle(4)
+toggle(5)
 check("a recipe whose color isn't known (live or saved) can't pass a skill-up filter, and it says why",
       best() == [] and "no skill-up color yet: open their profession once" in ev(B + ".status:GetText()"))
 reset_filters()
@@ -2573,7 +2573,8 @@ run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
 tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
 check("hovering a recipe: its sales, all time, with profit and ROIs",
       ev("GameTooltip.shown") and "Rough Bronze Cuirass" in tip[0][0] and tip[1][0] == "Blacksmithing"
-      and tip[2][0] == "Your sales, all time" and tip[3][0] == "3 sold in 2 sales" and ("Avg profit", ev("VendorProfit.FormatMoney(700)")) in tip
+      and "Hot: 2 sold at auction" in tip[2][0]  # its only auction seller: hot (below)
+      and tip[3][0] == "Your sales, all time" and tip[4][0] == "3 sold in 2 sales" and ("Avg profit", ev("VendorProfit.FormatMoney(700)")) in tip
       and ("Profit", ev("VendorProfit.FormatMoney(2100)")) in tip
       and ("Avg ROI", "150%") in tip and ("ROI", "175%") in tip  # (200% x 2 + 50%) / 3; 2100 / 1200
       and ("Sold to vendors", "1") in tip and ("Sold at auction", "2") in tip and tip[-1][0].startswith("Last sold "))
@@ -2584,6 +2585,55 @@ check("...gone when the mouse leaves", not ev("GameTooltip.shown"))
 R = best_row(2865)
 run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
 check("a recipe whose item hasn't sold: says so", [l.left for l in ev("GameTooltip.lines").values()][2] == "No sales of it recorded yet.")
+run("GameTooltip:Hide()")
+
+# --- Hot crafts: selling well at auction lately ---------------------------------------
+# Heat: auction profit, halving every 7 days. Hot: the top fifth with any heat
+# that also sold 2+ at auction in the last 7 days.
+HEAT = "VendorProfit.History.Heat()"
+def add_sales(*sales):
+    # Oldest first, as the history keeps them; the newest stays last.
+    run('local list = VendorProfitCharDB.history.sales; local new = {' + ",".join(sales) + '}'
+        ' for _, sale in ipairs(new) do table.insert(list, 1, sale) end'
+        ' table.sort(list, function(a, b) return a.time < b.time end)')
+DAYS = lambda d: "time() - %d" % (d * 86400)
+check("the cuirass: 2 sold at auction a minute ago, 20s profit; the vendor sale doesn't count",
+      ev(HEAT + "[2866].sold") == 2 and round(ev(HEAT + "[2866].heat")) == 2000)
+add_sales('{ item = 2865, n = 1, cost = 100, sold = 1100, bought = 100, how = "auction", time = %s }' % DAYS(7))
+check("a sale a week old counts half", round(ev(HEAT + "[2865].heat")) == 500 and ev(HEAT + "[2865].sold") == 1)
+check("profit a day: heat x ln 2 / 7", abs(ev(HEAT + "[2866].perDay") - 2000 * 0.693147 / 7) < 0.1)
+check("one item hot of two: the top fifth, rounded up", ev(HEAT + "[2866].hot") and not ev(HEAT + "[2865].hot"))
+# Five more sellers: the top fifth of seven is two, but the shoulders sold just
+# one this week, so only the cuirass is hot.
+add_sales(*['{ item = %d, n = 1, cost = 0, sold = 10, bought = 0, how = "auction", time = %s }' % (30000 + i, DAYS(1)) for i in range(5)])
+add_sales('{ item = 2867, n = 5, cost = 0, sold = 50000, bought = 0, how = "auction", time = %s }' % DAYS(80))
+check("past 8 half-lives: not read", ev(HEAT + "[2867]") is None)
+check("top fifth, but one sale this week isn't enough", ev(HEAT + "[2866].hot") and not ev(HEAT + "[2865].hot")
+      and not ev(HEAT + "[30000].hot"))
+add_sales('{ item = 2865, n = 1, cost = 100, sold = 1100, bought = 100, how = "auction", time = %s }' % DAYS(3))
+check("a second sale this week: hot", ev(HEAT + "[2865].hot") and ev(HEAT + "[2865].sold") == 2)
+
+# On Best Crafts: a 7d column, a flame on hot ones, a tooltip line, a filter.
+FLAME = ev("VendorProfit.BestPanel.HOT_ICON")
+run("VendorProfit.BestPanel.Refresh()")
+R = best_row(2866)
+check("7d: sold at auction this week, a flame on hot ones", ev(R + ".sold:GetText()") == FLAME + " 2"
+      and ev(best_row(2867) + ".sold:GetText()") == ev("GRAY_FONT_COLOR:WrapTextInColorCode('-')"))
+check("...with a heading between ROI and AH", ev(B + ".soldHeading.label") == "7d"
+      and columns_apart(B, [R + ".roi", R + ".sold", R + ".auctions"]))
+run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
+tip = [l.left for l in ev("GameTooltip.lines").values()]
+check("hovering a hot one says so, with its profit a day", tip[2] == FLAME + " Hot: 2 sold at auction in the last 7 days, about "
+      + ev("VendorProfit.FormatMoney(%d)" % round(ev(HEAT + "[2866].perDay"))) + " profit a day lately.")
+run("GameTooltip:Hide()")
+run('VendorProfit.BestPanel.SetFilter("hot", true)')
+check("Hot only: just the hot ones", sorted(ev("VendorProfit.BestPanel.Row(%d).hit.recipe.item" % i) for i in (1, 2)) == [2865, 2866]
+      and len(best()) == 2)
+run(B + '.filterReset:Click()')
+run(B + '.soldHeading:Click()')
+check("sorting by 7d: most sold first, every recipe", ev("VendorProfit.BestPanel.Row(1).hit.recipe.item") in (2865, 2866)
+      and ev("VendorProfit.BestPanel.Row(3).sold:GetText()") == ev("GRAY_FONT_COLOR:WrapTextInColorCode('-')"))
+run('VendorProfitCharDB.bestSort = nil; VendorProfit.BestPanel.Refresh()')
 run("GameTooltip:Hide()")
 check("no errors from Best Crafts", ev("#__stub.errors") == 0)
 

@@ -134,7 +134,7 @@ time" route mode).
   professions: / colors as last seen."): the game's menu doesn't wrap and is
   as wide as its widest line, and a one-line note made it far too wide.
 
-- **Columns**: Recipe, Investment, Profit, ROI, AH, Q, then **-** and **+**.
+- **Columns**: Recipe, Investment, Profit, ROI, 7d, AH, Q, then **-** and **+**.
   No rank numbers (they took space and meant little once you sort and
   filter). Clicking a recipe's name shows it in the professions window (only
   while it's open); the magnifying-glass button was removed for that.
@@ -148,6 +148,32 @@ time" route mode).
   end, a gray dash for none, sortable. **AH** (your auctions of the item)
   works the same way. Both sort every recipe, priced or not, ties keeping the
   profit order.
+- **Hot crafts** (2026-11-17): Best Crafts showed profit at today's prices
+  but nothing about what actually sells. Josh asked for a "this item is
+  HOT" indicator from a rolling average. Chosen, after trying rules against
+  his real history (664 sales over ~10 days on Josten): **heat** = each
+  auction sale's profit, weight halving every 7 days, added up per item;
+  **hot** = top fifth (rounded up) of items with positive heat that also
+  sold 2+ at auction in the last 7 days. Why each part:
+  - Exponential decay, not a fixed window: nothing falls off a cliff on
+    day 8, and recent sales count most. 7-day half-life: shorter made one
+    lucky day hot; longer was slow to notice a new seller.
+  - Profit, not units: units made Solid Sharpening Stones (hundreds sold
+    at ~2c profit) the hottest thing; profit is what the tab ranks by.
+  - Auction sales only: a vendor buys anything, so vendor sales say
+    nothing about demand.
+  - Relative (top fifth of your own sellers), not a gold threshold: works
+    for small and big sellers alike, with nothing to set.
+  - At least 2 sold this week: without it a single big sale (a 20g
+    Dragonling) made an item hot.
+  The marker is a flame in a new **7d** column (units sold at auction in
+  the last 7 days), not next to the name: names are cut short to fit, so a
+  flame after them could be cut off, and two icons before the name looked
+  cluttered. The tooltip gives the week's count and profit a day lately
+  (heat x ln 2 / 7, the rate that would give that heat if steady). A "Hot
+  only" filter. Worked out from the history, cached until it changes (and
+  hourly, as sales age). Sales past 8 half-lives (under 1/256 weight) aren't
+  read; ones rolled up into daily totals count their day's auction share.
 - **Item info not loaded yet** (the first time a profession's list shows):
   each item is asked for once, and the list redraws once per batch, 0.2s
   after items start arriving (`VendorProfit.RedrawWhenLoaded`, used by every
