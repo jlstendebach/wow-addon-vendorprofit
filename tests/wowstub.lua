@@ -197,6 +197,7 @@ function FrameMethods:RegisterForClicks(...) self.__clicks = { ... } end
 function FrameMethods:SetHighlightTexture() end
 function FrameMethods:SetMotionScriptsWhileDisabled() end
 function FrameMethods:SetNormalTexture(t) self.__normal = t end
+function FrameMethods:SetPushedTexture(t) self.__pushed = t end
 function FrameMethods:SetCheckedTexture() end
 function FrameMethods:SetChecked(c) self.__checked = not not c end
 function FrameMethods:GetChecked() return self.__checked end

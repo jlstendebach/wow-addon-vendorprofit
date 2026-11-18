@@ -74,6 +74,7 @@ VendorProfit.L = {
     BEST_INVESTMENT = "Investment",
     BEST_PROFIT = "Profit",
     BEST_QUEUE_HELP = "Adds one craft to your shopping order. Shift-click: five.",
+    BEST_RESIZE_HELP = "Drag up or down to show fewer or more recipes.",
     BEST_FAVORITE_HELP = "Favorite: keep it at the top of the list.",
     BEST_UNFAVORITE_HELP = "Remove from favorites.",
     BEST_UNQUEUE_HELP = "Removes one craft from your shopping order. Shift-click: five.",

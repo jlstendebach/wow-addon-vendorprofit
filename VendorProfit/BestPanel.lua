@@ -40,7 +40,9 @@ local ROW_HEIGHT = 22
 local LIST_TOP = -94
 -- The minimums row, at the bottom of the window, under the notes.
 local MINIMUMS_HEIGHT = 20
-local VISIBLE_ROWS = 14
+-- How many rows the list shows before it scrolls: 14 until you drag the
+-- window's size grip (Create), then what you chose, saved per character.
+local DEFAULT_ROWS = 14
 local SCROLLBAR_WIDTH = 24
 local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
 local LIST_WIDTH = BASE_LIST_WIDTH
@@ -168,6 +170,25 @@ end
 -- 4 below.
 local DIVIDER_GAP = 7
 local DIVIDER_SPACE = 4
+
+-- The window's height besides the list's rows: the controls above it, the
+-- divider's gap (always allowed for, so favorites don't change the
+-- height), and the notes (one line) and minimums under it.
+local function ChromeHeight()
+    return -LIST_TOP + DIVIDER_GAP + 8 + MINIMUMS_HEIGHT + 8 + 12 + PADDING
+end
+
+-- The fewest rows: the window stays tall enough for the side tabs, and a
+-- list shorter than that would leave a gap under it.
+local function MinRows()
+    return math.max(1, math.ceil((Panel.MinHeight() - ChromeHeight()) / ROW_HEIGHT))
+end
+
+local function VisibleRows()
+    local db = VendorProfitCharDB
+    local rows = db and tonumber(db.bestRows) or DEFAULT_ROWS
+    return math.max(math.floor(rows), MinRows())
+end
 
 -- Where the index-th row's top is, the rows after the favorites pushed down
 -- by the gap (favorites: how many lead the list, while a divider shows).
@@ -943,6 +964,48 @@ local function Create(page)
     frame.status = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.status:SetJustifyH("LEFT")
     frame.status:SetWidth(WIDTH - 2 * PADDING)
+
+    -- The size grip, in the bottom right corner: drag it up or down to show
+    -- fewer or more rows. Height only (the width follows the columns), a
+    -- whole row at a time so no row is cut off. It works out the rows from
+    -- how far the mouse has moved rather than using the game's frame
+    -- sizing, which would fight the height each refresh sets. Never shorter
+    -- than the side tabs need, nor past the bottom of the screen.
+    local grip = CreateFrame("Button", nil, frame)
+    grip:SetSize(16, 16)
+    grip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 4)
+    grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    local function CursorY()
+        local _, y = GetCursorPosition()
+        return y / frame:GetEffectiveScale()
+    end
+    local function Drag(self)
+        local maxRows = math.max(MinRows(), math.floor((frame:GetTop() - ChromeHeight()) / ROW_HEIGHT))
+        local rows = self.startRows + math.floor((self.startY - CursorY()) / ROW_HEIGHT + 0.5)
+        rows = math.min(math.max(rows, MinRows()), maxRows)
+        if rows ~= VisibleRows() then
+            VendorProfitCharDB = VendorProfitCharDB or {}
+            VendorProfitCharDB.bestRows = rows
+            BestPanel.Refresh()
+        end
+    end
+    grip:SetScript("OnMouseDown", function(self, mouseButton)
+        if mouseButton == "LeftButton" then
+            self.startY, self.startRows = CursorY(), VisibleRows()
+            self:SetScript("OnUpdate", Drag)
+        end
+    end)
+    grip:SetScript("OnMouseUp", function(self)
+        self:SetScript("OnUpdate", nil)
+    end)
+    -- Let go off the window, or the window hidden mid-drag: stop too.
+    grip:SetScript("OnHide", function(self)
+        self:SetScript("OnUpdate", nil)
+    end)
+    Tooltip(grip, L.BEST_RESIZE_HELP)
+    frame.grip = grip
 end
 
 -- Lays the columns out to fit the entries listed (Columns.lua), and places
@@ -1190,10 +1253,11 @@ local function Refresh()
         divider:Hide()
     end
 
-    -- The list shows up to VISIBLE_ROWS at a time and scrolls for the rest,
-    -- back to the top for another profession or tab.
+    -- The list is VisibleRows tall, however many are listed (so the window
+    -- doesn't jump as you search or filter), and scrolls for the rest, back
+    -- to the top for another profession or tab.
     local gap = favorites and DIVIDER_GAP or 0
-    local listHeight = math.max(math.min(#ranked, VISIBLE_ROWS), 1) * ROW_HEIGHT + gap
+    local listHeight = VisibleRows() * ROW_HEIGHT + DIVIDER_GAP
     frame.list:SetHeight(math.max(#ranked, 1) * ROW_HEIGHT + gap)
     frame.scroll:SetSize(LIST_WIDTH, listHeight)
     frame.scroll:SetShown(#ranked > 0)
@@ -1202,7 +1266,7 @@ local function Refresh()
         shownList = listKey
         frame.scroll:SetVerticalScroll(0)
     end
-    local y = #ranked > 0 and LIST_TOP - listHeight or LIST_TOP
+    local y = LIST_TOP - listHeight
 
     -- Status: why the list is empty, where prices are from, and messages.
     local lines = {}

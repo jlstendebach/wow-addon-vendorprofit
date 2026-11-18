@@ -2398,8 +2398,10 @@ reset_filters()
 run('for _, id in ipairs({ 2670, 3328, 2671, 9102 }) do if __stub.recipes[id] then __stub.recipes[id].difficulty = nil end end')
 run('if __stub.recipe then __stub.recipe.difficulty = nil end; VendorProfit.BestPanel.Refresh()')
 check("unpriced ones can still be queued and shown", ev("VendorProfit.BestPanel.Row(4).queue:IsShown()") and ev("VendorProfit.BestPanel.Row(4).hit:IsShown()"))
-check("the list scrolls: a scroll frame holding the rows", ev(B + ".scroll.__scrollChild == " + B + ".list")
-      and ev(B + ".scroll:GetHeight()") == 5 * 22 and ev(B + ".list:GetHeight()") == 5 * 22)
+# 14 rows tall (and room for the favorites' divider) however few are listed, so
+# the window doesn't jump as you search or filter.
+check("the list scrolls: a scroll frame holding the rows, 14 tall with 5 listed", ev(B + ".scroll.__scrollChild == " + B + ".list")
+      and ev(B + ".scroll:GetHeight()") == 14 * 22 + 7 and ev(B + ".list:GetHeight()") == 5 * 22)
 run(B + '.scroll:SetVerticalScroll(40)')
 run(B + '.tabs.auction:Click()')
 check("auction tab: no auction price for the ring; scrolled back to the top", best()[4].endswith("no auction price|r")
@@ -2409,7 +2411,30 @@ run(B + '.tabs.vendor:Click()')
 many = ", ".join('{ recipeID = %d, itemLink = "item:2866", quantityMin = 1, reagents = { { itemID = 2841, quantity = 7 } } }' % (20000 + i) for i in range(20))
 run('__stub.OpenProfession(164, "Blacksmithing", { %s }); __stub.Advance(1)' % many)
 check("20 recipes: all there, 14 rows tall, the rest scrolls", len(best()) == 20
-      and ev(B + ".scroll:GetHeight()") == 14 * 22 and ev(B + ".list:GetHeight()") == 20 * 22)
+      and ev(B + ".scroll:GetHeight()") == 14 * 22 + 7 and ev(B + ".list:GetHeight()") == 20 * 22)
+
+# The size grip: drag it down for more rows, up for fewer, a whole row at a time.
+GRIP = B + ".grip"
+run(B + '.__top = 800; __stub.cursorY = 500')
+panel_height = lambda: ev("VendorProfitPanel:GetHeight()")
+before = panel_height()
+check("a size grip in the bottom right corner", ev(GRIP + ".__point[1]") == "BOTTOMRIGHT"
+      and "SizeGrabber" in ev(GRIP + ".__normal"))
+run(GRIP + '.__scripts.OnMouseDown(' + GRIP + ', "LeftButton")')
+run('__stub.cursorY = 500 - 30; ' + GRIP + '.__scripts.OnUpdate(' + GRIP + ')')
+check("dragged down a row and a bit: one more row, the window a row taller", ev("VendorProfitCharDB.bestRows") == 15
+      and ev(B + ".scroll:GetHeight()") == 15 * 22 + 7 and panel_height() == before + 22)
+run('__stub.cursorY = 500 + 2000; ' + GRIP + '.__scripts.OnUpdate(' + GRIP + ')')
+chrome = 94 + 7 + 8 + 20 + 8 + 12 + 16
+fewest = -(-(ev("VendorProfit.Panel.MinHeight()") - chrome) // 22)
+check("dragged far up: no shorter than the side tabs need", ev("VendorProfitCharDB.bestRows") == fewest
+      and panel_height() >= ev("VendorProfit.Panel.MinHeight()") and panel_height() - ev("VendorProfit.Panel.MinHeight()") < 22)
+run('__stub.cursorY = 500 - 5000; ' + GRIP + '.__scripts.OnUpdate(' + GRIP + ')')
+check("dragged far down: no lower than the bottom of the screen", ev("VendorProfitCharDB.bestRows") == (800 - chrome) // 22)
+run(GRIP + '.__scripts.OnMouseUp(' + GRIP + ', "LeftButton")')
+check("let go: the drag stops", ev(GRIP + '.__scripts.OnUpdate') is None)
+run('VendorProfitCharDB.bestRows = nil; VendorProfit.BestPanel.Refresh()')
+check("...back to 14", ev(B + ".scroll:GetHeight()") == 14 * 22 + 7)
 run('__stub.OpenProfession(164, "Blacksmithing", { %s, %s, %s }); __stub.Advance(1)' % (CUIRASS, SHOULDERS, VEST))
 check("vendor tab lit", ev(B + ".tabs.vendor.__lit") and not ev(B + ".tabs.auction.__lit"))
 run(B + ".tabs.auction:Click()")

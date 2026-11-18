@@ -134,6 +134,17 @@ time" route mode).
   professions: / colors as last seen."): the game's menu doesn't wrap and is
   as wide as its widest line, and a one-line note made it far too wide.
 
+- **Resizable height** (2026-11-18): a size grip (the chat frame's) in the
+  bottom right corner sets how many rows the list shows, whole rows only
+  (no row cut off), height only (the width follows the columns). Dragging
+  works the rows out from how far the mouse moved, not the game's frame
+  sizing (StartSizing), which would fight the height Panel.Refresh sets.
+  Fewest rows: enough for the side tabs (Panel.MinHeight); most: down to
+  the bottom of the screen. The list is now always that tall, even with
+  fewer recipes (it used to shrink to fit, up to 14): a window you sized
+  shouldn't jump as you search or filter, and the grip shouldn't move out
+  from under the mouse. It always leaves room for the favorites' divider
+  gap, so starring something doesn't change the height either.
 - **Favorites** (2026-11-18): a star before the name. First in a column of
   its own (a column gap before the names, out past the heading): it looked
   misaligned. Then by the - and + buttons: Josh preferred it on the left.

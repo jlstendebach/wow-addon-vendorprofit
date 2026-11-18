@@ -1054,6 +1054,10 @@ local function MinHeight()
     return TAB_TOP + (#pageDefs - 1) * TAB_SPACING + TAB_SIZE + 12
 end
 
+function Panel.MinHeight()
+    return MinHeight()
+end
+
 local function CreateSideTab(index, def)
     local tab = CreateFrame("CheckButton", nil, frame)
     tab:SetSize(TAB_SIZE, TAB_SIZE)

@@ -116,7 +116,7 @@ What it can't know:
 
 ## Best Crafts
 
-The **Vendor Profit** button in the professions window's title bar (left of TradeSkillMaster's, if you have it), or `/vprofit best`, opens the Vendor Profit window on its **Best Crafts** tab: every saved recipe of every profession you've opened, ranked together by profit per craft, each along its cheapest route. It works with the professions window closed: a profession's recipes are saved the first time you open it (and again whenever its list changes), so open each of your professions once. The **Filter** menu picks which professions are shown (all of them to start with); with just one, the title names it. The list shows 14 at a time and scrolls for the rest. Clicking the title-bar button again closes the window.
+The **Vendor Profit** button in the professions window's title bar (left of TradeSkillMaster's, if you have it), or `/vprofit best`, opens the Vendor Profit window on its **Best Crafts** tab: every saved recipe of every profession you've opened, ranked together by profit per craft, each along its cheapest route. It works with the professions window closed: a profession's recipes are saved the first time you open it (and again whenever its list changes), so open each of your professions once. The **Filter** menu picks which professions are shown (all of them to start with); with just one, the title names it. The list shows 14 at a time and scrolls for the rest; drag the size grip in the window's bottom right corner up or down to show fewer or more (a whole row at a time, never shorter than the side tabs need or past the bottom of the screen; saved per character). The window keeps that height however many recipes are listed, so it doesn't jump as you search or filter. Clicking the title-bar button again closes the window.
 
 ```
 Best Crafts: Blacksmithing                                 [ Scan ]
@@ -344,6 +344,7 @@ Saved data, per character (`VendorProfitCharDB`):
 - `panel = { left, top }`: where you moved the Vendor Profit window, if you did.
 - `bestSort = { key, ascending }` and `bestFilters`: how Best Crafts is sorted and filtered.
 - `bestFavorites = { [recipeID] = true }`: Best Crafts' favorite recipes.
+- `bestRows`: how many rows Best Crafts' list shows (its size grip).
 - `bestSellersSort = { key, ascending }`: how Profit History's Best Sellers is sorted.
 - `auctions = { counts, time }`: how many of each item you had up for auction at your last visit to the auction house, and when.
 - `history = { stock, sales, items, daily, purchases }`: what the items you have cost you, your last 10,000 sales, every sale added up per item, older sales added up per item per day, and your last 5,000 purchases.
