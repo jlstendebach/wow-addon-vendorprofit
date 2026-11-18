@@ -151,6 +151,41 @@ local function FirstUnpriced(children)
     end
 end
 
+-- How long one craft of a recipe takes along its route, in seconds: its own
+-- cast and every craft below it on the route (smelting the bars a cuirass
+-- needs), as a share of a craft where a step makes more than is needed (7
+-- bars from smelts that make 2 is 3.5 smelts). nil if a craft on the route
+-- has no cast time the game gives, rather than leaving it out and
+-- overstating Profit/hr.
+local function RouteSeconds(recipe, route)
+    local seconds = VendorProfit.CastSeconds(recipe.recipeID)
+    if seconds == nil then
+        return nil
+    end
+    -- amount: how many of the child's item one craft at the top needs.
+    local function Add(children, perTop)
+        for _, child in ipairs(children or {}) do
+            local node = child.node
+            if node.source == "craft" then
+                local amount = child.perUnit * perTop
+                local cast = VendorProfit.CastSeconds(node.recipe.recipeID)
+                if cast == nil then
+                    return false
+                end
+                seconds = seconds + cast * amount / node.recipe.count
+                if not Add(node.children, amount) then
+                    return false
+                end
+            end
+        end
+        return true
+    end
+    if not Add(route.children, 1) then
+        return nil
+    end
+    return seconds
+end
+
 -- One recipe priced for ranking: { recipe, cost, route, profit or
 -- unpriced } (see Rank), and whether its item info is still loading. exact:
 -- the recipe as it is, its reagents bought, never crafted (as Auctionator
@@ -186,10 +221,11 @@ local function Price(recipe, by, onLoad, exact)
     end
     if entry.profit then
         entry.roi = cost > 0 and entry.profit / cost or nil
-        -- Profit an hour: crafts cast back to back (Profit/hr on Best
-        -- Crafts); none for a recipe the game gives no cast time.
-        local castSeconds = VendorProfit.CastSeconds(recipe.recipeID)
-        entry.perHour = castSeconds and entry.profit * 3600 / castSeconds or nil
+        -- Profit an hour: crafts cast back to back, the ones on the route
+        -- below it included (Profit/hr on Best Crafts).
+        local seconds = RouteSeconds(recipe, route)
+        entry.seconds = seconds
+        entry.perHour = seconds and entry.profit * 3600 / seconds or nil
     end
     return entry, loading
 end

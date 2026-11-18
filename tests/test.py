@@ -2816,7 +2816,7 @@ run('__stub.items["item:2866"].sellPrice = 600; __stub.PricesChanged(); VendorPr
 run('__stub.castTimes = { [2670] = 5000, [3328] = 1000 }; __stub.PricesChanged(); VendorProfit.BestPanel.Refresh()')
 R = best_row(2866)
 profit = ev(R + ".hit.entry.profit")
-check("Profit/hr: the cuirass casts in 5s, 720 an hour, at its profit each",
+check("Profit/hr: the cuirass casts in 5s (its bronze bars bought, so no smelting), 720 an hour, at its profit each",
       ev(R + ".hit.entry.perHour") == profit * 720
       and ev(R + ".perHour:GetText()") == ev("VendorProfit.BestPanel.ListMoney(%d)" % (profit * 720)))
 check("...a dash for a recipe the game gives no cast time",
@@ -2881,6 +2881,30 @@ check("making 2 a craft: the tooltip says so, with investment and profit per ite
       and ("Investment per item", ev("VendorProfit.FormatMoney(%s)" % repr(entry.cost / 2))) in lines_
       and ("Profit per item", ev("VendorProfit.FormatMoney(%s)" % repr(entry.profit / 2))) in lines_)
 run("GameTooltip:Hide()")
+# Profit/hr counts every craft on the route: the cuirass's own cast, and the
+# smelting of the bars it's made from, as a share where a smelt makes 2.
+run('__stub.castTimes = { [2657] = 2000, [3304] = 2000, [2659] = 3000, [2670] = 5000 }; __stub.PricesChanged(); VendorProfit.BestPanel.Refresh()')
+row = next(i for i in range(1, 10) if "Cuirass" in ev("VendorProfit.BestPanel.Row(%d).left:GetText()" % i))
+E = "VendorProfit.BestPanel.Row(%d).hit.entry" % row
+CAST = {2657: 2, 3304: 2, 2659: 3, 2670: 5}
+def route_seconds(children, per_top):
+    total, crafted = 0, 0
+    for c in children.values():
+        n = c.node
+        if n.source == "craft":
+            amount = c.perUnit * per_top
+            total += CAST[n.recipe.recipeID] * amount / n.recipe.count
+            sub, subcrafted = route_seconds(n.children or ev("{}"), amount)
+            total, crafted = total + sub, crafted + 1 + subcrafted
+    return total, crafted
+below, crafted = route_seconds(ev(E + ".route.children"), 1)
+check("Profit/hr takes in the crafts below it on the route (smelting the bars): their casts added to its own",
+      crafted > 0 and abs(ev(E + ".seconds") - (5 + below)) < 1e-9
+      and abs(ev(E + ".perHour") - ev(E + ".profit") * 3600 / (5 + below)) < 1e-6)
+run('__stub.castTimes[2659] = nil; __stub.PricesChanged(); VendorProfit.BestPanel.Refresh()')
+check("...and a dash if a craft on the route has no cast time, rather than leaving it out",
+      ev(E + ".perHour") is None and ev("VendorProfit.BestPanel.Row(%d).perHour:GetText()" % row) == ev("GRAY_FONT_COLOR:WrapTextInColorCode('-')"))
+run('__stub.castTimes = {}; __stub.PricesChanged(); VendorProfit.BestPanel.Refresh()')
 run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
 check("Mining unticked: Blacksmithing alone, named in the title", names() == ["|cffff8040Rough Bronze Cuirass|r"]
       and ev(B2 + ".heading:GetText()") == "Best Crafts: Blacksmithing")

@@ -150,8 +150,13 @@ time" route mode).
   as wide as its widest line, and a one-line note made it far too wide.
 
 - **Profit/hr** (2026-11-18), right of Profit: profit per craft x 3600 /
-  the recipe's cast time (VendorProfit.CastSeconds, shared with the Craft
-  step's time). Just the casts, like the Craft step's time: no allowance
+  the seconds one craft takes along its cheapest route: its own cast plus
+  every craft below it on the route, as a share where a step makes more
+  than is needed (first version counted only the recipe's own cast, which
+  overstated recipes whose route smelts or crafts reagents; Josh caught
+  it). A craft on the route with no cast time gives a dash rather than
+  being left out (VendorProfit.CastSeconds, shared with the Craft step's
+  time). Just the casts, like the Craft step's time: no allowance
   for the gap between crafts or walking to a station, and no account of
   how many would sell (7d is beside it for that). Worked out with the
   ranking (cast times don't change), a dash with no cast time; sorts with
