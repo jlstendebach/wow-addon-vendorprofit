@@ -2725,7 +2725,7 @@ run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
 tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
 check("hovering a recipe: its sales, all time, with profit and ROIs",
       ev("GameTooltip.shown") and "Rough Bronze Cuirass" in tip[0][0] and tip[1][0] == "Blacksmithing"
-      and "Hot: 2 sold at auction" in tip[2][0]  # its only auction seller: hot (below)
+      and tip[2][0] == "Last 7 days at auction: 2 sold in 1 sale"
       and tip[3][0] == "Your sales, all time" and tip[4][0] == "3 sold in 2 sales" and ("Avg profit", ev("VendorProfit.FormatMoney(700)")) in tip
       and ("Profit", ev("VendorProfit.FormatMoney(2100)")) in tip
       and ("Avg ROI", "150%") in tip and ("ROI", "175%") in tip  # (200% x 2 + 50%) / 3; 2100 / 1200
@@ -2755,9 +2755,14 @@ check("the cuirass: 2 sold at auction a minute ago, 20s profit; the vendor sale 
 add_sales('{ item = 2865, n = 1, cost = 100, sold = 1100, bought = 100, how = "auction", time = %s }' % DAYS(7))
 check("a sale a week old counts half", round(ev(HEAT + "[2865].heat")) == 500 and ev(HEAT + "[2865].sold") == 1)
 check("profit a day: heat x ln 2 / 7", abs(ev(HEAT + "[2866].perDay") - 2000 * 0.693147 / 7) < 0.1)
-check("one item hot of two: the top fifth, rounded up", ev(HEAT + "[2866].hot") and not ev(HEAT + "[2865].hot"))
+check("the cuirass leads, but its 2 went to one buyer: not hot (one sale isn't enough)",
+      ev(HEAT + "[2866].sales") == 1 and not ev(HEAT + "[2866].hot") and not ev(HEAT + "[2865].hot"))
+add_sales('{ item = 2866, n = 1, cost = 500, sold = 1500, bought = 500, how = "auction", time = %s }' % DAYS(2))
+check("a second buyer: hot, the top fifth of two rounded up; the shoulders aren't",
+      ev(HEAT + "[2866].hot") and ev(HEAT + "[2866].sales") == 2 and ev(HEAT + "[2866].sold") == 3
+      and not ev(HEAT + "[2865].hot"))
 # Five more sellers: the top fifth of seven is two, but the shoulders sold just
-# one this week, so only the cuirass is hot.
+# once this week, so only the cuirass is hot.
 add_sales(*['{ item = %d, n = 1, cost = 0, sold = 10, bought = 0, how = "auction", time = %s }' % (30000 + i, DAYS(1)) for i in range(5)])
 add_sales('{ item = 2867, n = 5, cost = 0, sold = 50000, bought = 0, how = "auction", time = %s }' % DAYS(80))
 check("past 8 half-lives: not read", ev(HEAT + "[2867]") is None)
@@ -2769,14 +2774,15 @@ check("a second sale this week: hot", ev(HEAT + "[2865].hot") and ev(HEAT + "[28
 # On Best Crafts: a 7d column, orange for hot ones, a tooltip line, a filter.
 run("VendorProfit.BestPanel.Refresh()")
 R = best_row(2866)
-check("7d: sold at auction this week, in orange for hot ones", ev(R + ".sold:GetText()") == "|cffff80002|r"
+check("7d: items sold at auction this week, in orange for hot ones", ev(R + ".sold:GetText()") == "|cffff80003|r"
       and ev(best_row(2867) + ".sold:GetText()") == ev("GRAY_FONT_COLOR:WrapTextInColorCode('-')"))
 check("...with a heading between ROI and AH", ev(B + ".soldHeading.label") == "7d"
       and columns_apart(B, [R + ".roi", R + ".sold", R + ".auctions"]))
 run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
 tip = [l.left for l in ev("GameTooltip.lines").values()]
-check("hovering a hot one says so, with its profit a day", tip[2] == "Hot: 2 sold at auction in the last 7 days, about "
-      + ev("VendorProfit.FormatMoney(%d)" % round(ev(HEAT + "[2866].perDay"))) + " profit a day lately.")
+check("hovering a hot one says so, with its profit a day, and the week's items and sales",
+      tip[2] == "Hot: about " + ev("VendorProfit.FormatMoney(%d)" % round(ev(HEAT + "[2866].perDay"))) + " profit a day lately."
+      and tip[3] == "Last 7 days at auction: 3 sold in 2 sales")
 run("GameTooltip:Hide()")
 run('VendorProfit.BestPanel.SetFilter("hot", true)')
 check("Hot only: just the hot ones", sorted(ev("VendorProfit.BestPanel.Row(%d).hit.recipe.item" % i) for i in (1, 2)) == [2865, 2866]
@@ -2787,6 +2793,10 @@ check("sorting by 7d: most sold first, every recipe", ev("VendorProfit.BestPanel
       and ev("VendorProfit.BestPanel.Row(3).sold:GetText()") == ev("GRAY_FONT_COLOR:WrapTextInColorCode('-')"))
 run('VendorProfitCharDB.bestSort = nil; VendorProfit.BestPanel.Refresh()')
 run("GameTooltip:Hide()")
+check("money per item under half a copper (a craft of 200 worth under 1s) shows as <1c, not 0c",
+      ev("VendorProfit.BestPanel.PerItemMoney(0.3)") == "<" + ev("VendorProfit.FormatMoney(1)")
+      and ev("VendorProfit.BestPanel.PerItemMoney(-0.3)") == ">" + ev("VendorProfit.FormatMoney(-1)")
+      and ev("VendorProfit.BestPanel.PerItemMoney(15.2)") == ev("VendorProfit.FormatMoney(15)"))
 check("no errors from Best Crafts", ev("#__stub.errors") == 0)
 
 # --- Best Crafts with the professions window closed: every saved profession ------
@@ -2827,6 +2837,18 @@ run(R2 + '.hit:GetScript("OnEnter")(' + R2 + '.hit)')
 tip = [l.left for l in ev("GameTooltip.lines").values()]
 check("hover: its profession, and that the color is as of the last opening",
       tip[1] == "Blacksmithing" and tip[2] == "Skill-up color as of when you last opened Blacksmithing.")
+run("GameTooltip:Hide()")
+# A recipe making more than one: the columns are per craft; the tooltip says how
+# many it makes and its figures per item.
+row = next(i for i in range(1, 10) if "Bronze Bar" in ev("VendorProfit.BestPanel.Row(%d).left:GetText()" % i))
+R2 = "VendorProfit.BestPanel.Row(%d)" % row
+entry = ev(R2 + ".hit.entry")
+run(R2 + '.hit:GetScript("OnEnter")(' + R2 + '.hit)')
+lines_ = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
+check("making 2 a craft: the tooltip says so, with investment and profit per item",
+      ("Makes 2 per craft", None) in lines_ and entry.profit is not None
+      and ("Investment per item", ev("VendorProfit.FormatMoney(%s)" % repr(entry.cost / 2))) in lines_
+      and ("Profit per item", ev("VendorProfit.FormatMoney(%s)" % repr(entry.profit / 2))) in lines_)
 run("GameTooltip:Hide()")
 run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
 check("Mining unticked: Blacksmithing alone, named in the title", names() == ["|cffff8040Rough Bronze Cuirass|r"]

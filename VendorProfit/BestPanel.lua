@@ -306,7 +306,7 @@ local function GetRow(index, top)
             row.hovered = true
             ShowStar(row)
             if self.recipe then
-                BestPanel.ShowSalesTooltip(self, row.left, self.recipe.item, self.recipe)
+                BestPanel.ShowSalesTooltip(self, row.left, self.recipe.item, self.recipe, self.entry)
             end
         end)
         row.hit:SetScript("OnLeave", function()
@@ -512,8 +512,22 @@ local FormatROI = VendorProfit.FormatROI
 -- (Profit History), with the profit and ROIs. Placed like an item's
 -- tooltip: above the row, past the end of its name.
 -- With a recipe (a row's), it also names the recipe's profession and says
--- when its skill-up color is saved rather than live.
-function BestPanel.ShowSalesTooltip(owner, nameText, itemID, recipe)
+-- when its skill-up color is saved rather than live; with the row's entry,
+-- how many one craft makes and its figures per item (the columns are per
+-- craft: what you spend and what a cast earns).
+-- Money per item can be a fraction of a copper (a craft of 200): under half
+-- a copper shows as "<1c", not 0c, which would read as nothing.
+local function PerItemMoney(copper)
+    if copper > 0 and copper < 0.5 then
+        return "<" .. VendorProfit.FormatMoney(1)
+    elseif copper < 0 and copper > -0.5 then
+        return ">" .. VendorProfit.FormatMoney(-1)
+    end
+    return VendorProfit.FormatMoney(copper)
+end
+BestPanel.PerItemMoney = PerItemMoney
+
+function BestPanel.ShowSalesTooltip(owner, nameText, itemID, recipe, entry)
     VendorProfit.SetNameTooltipOwner(owner, nameText)
     GameTooltip:SetText(ItemLabel(itemID))
     if recipe then
@@ -523,11 +537,22 @@ function BestPanel.ShowSalesTooltip(owner, nameText, itemID, recipe)
             GameTooltip:AddLine(string.format(L.BEST_SKILL_SAVED, recipe.profession),
                 GRAY_FONT_COLOR.r, GRAY_FONT_COLOR.g, GRAY_FONT_COLOR.b, true)
         end
+        if recipe.count > 1 then
+            GameTooltip:AddLine(string.format(L.BEST_MAKES, recipe.count), 1, 1, 1)
+            if entry and entry.profit then
+                GameTooltip:AddDoubleLine(L.BEST_INVESTMENT_EACH, PerItemMoney(entry.cost / recipe.count))
+                GameTooltip:AddDoubleLine(L.BEST_PROFIT_EACH, PerItemMoney(entry.profit / recipe.count))
+            end
+        end
     end
     local heat = Heat(itemID)
     if heat and heat.hot then
-        GameTooltip:AddLine(string.format(L.BEST_HOT_TOOLTIP, heat.sold,
-            VendorProfit.FormatMoney(math.floor(heat.perDay + 0.5))), HOT_COLOR.r, HOT_COLOR.g, HOT_COLOR.b, true)
+        GameTooltip:AddLine(string.format(L.BEST_HOT_TOOLTIP, VendorProfit.FormatMoney(math.floor(heat.perDay + 0.5))),
+            HOT_COLOR.r, HOT_COLOR.g, HOT_COLOR.b, true)
+    end
+    if heat and heat.sold > 0 then
+        GameTooltip:AddLine(string.format(L.BEST_SOLD_RECENT,
+            VendorProfit.HistoryPanel.SoldCount(heat.sold, math.floor(heat.sales + 0.5))), 1, 1, 1)
     end
     local HistoryPanel = VendorProfit.HistoryPanel
     local item = HistoryPanel and HistoryPanel.AllTime(itemID)
@@ -1274,6 +1299,7 @@ local function Refresh()
         row.auctions:Show()
         row.reason:Show()
         row.hit.recipe = entry.recipe
+        row.hit.entry = entry
         row.hit:Show()
         row.favorite.recipe = entry.recipe
         ShowStar(row)

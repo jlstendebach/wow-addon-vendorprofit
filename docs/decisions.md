@@ -149,6 +149,21 @@ time" route mode).
   professions: / colors as last seen."): the game's menu doesn't wrap and is
   as wide as its widest line, and a one-line note made it far too wide.
 
+- **Per craft, not per item** (2026-11-18): Josh weighed showing the money
+  columns per item (easier to read at a glance; "3000 shells sold" next to
+  per-craft money felt off). Kept per craft: Investment is what you really
+  spend (you can't make 23c worth of Thorium Shells, only 45s 58c), Profit
+  is what a cast earns, and +, Q and the Shopping List all work in crafts;
+  ROI is the same either way. The worry that per item would round to 0c
+  mostly didn't hold for his recipes (shells: 23c and 15c each), only for
+  cheap ammo. 7d and AH stay in items (market numbers: buyers buy items),
+  and "crafts' worth" for 7d was dropped: rounding up made 1 mean a
+  different number of items per recipe, and decimals (0.3 crafts) read
+  badly. Per-item figures and "Makes N per craft" are in the row's
+  tooltip instead, under half a copper shown as "<1c". The hot rule's
+  minimum counts separate auction sales, not items, so one buyer of a
+  stack can't make an item hot. Revisit per item if this still feels
+  wrong in use.
 - **Ctrl: the exact recipe** (2026-11-18): holding Ctrl with the mouse on a
   row reprices that row as the exact recipe (Route.ForRecipe with exact:
   direct reagents bought, never crafted; BestCrafts.Exact), and Ctrl-click
@@ -218,7 +233,8 @@ time" route mode).
   his real history (664 sales over ~10 days on Josten): **heat** = each
   auction sale's profit, weight halving every 7 days, added up per item;
   **hot** = top fifth (rounded up) of items with positive heat that also
-  sold 2+ at auction in the last 7 days. Why each part:
+  had 2+ separate auction sales in the last 7 days (first 2+ items: one
+  buyer of a stack of 200 passed it alone, so changed to sales). Why each part:
   - Exponential decay, not a fixed window: nothing falls off a cliff on
     day 8, and recent sales count most. 7-day half-life: shorter made one
     lucky day hot; longer was slow to notice a new seller.
@@ -228,7 +244,7 @@ time" route mode).
     nothing about demand.
   - Relative (top fifth of your own sellers), not a gold threshold: works
     for small and big sellers alike, with nothing to set.
-  - At least 2 sold this week: without it a single big sale (a 20g
+  - At least 2 sales this week: without it a single big sale (a 20g
     Dragonling) made an item hot.
   The marker is the count in a new **7d** column (units sold at auction in
   the last 7 days), in orange for hot ones, not next to the name: names are
