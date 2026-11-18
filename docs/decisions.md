@@ -140,8 +140,13 @@ time" route mode).
   Now it's the first thing in the name column, where the "Recipe" heading
   starts, 4px before the name and centered on its line; every name is
   indented by the star's room whether its star shows or not, so the rows
-  line up. A gold line (the Shopping List divider's color) between the
-  favorites and the rest, only while there are both. Favorites are listed
+  line up. At 14px it looked off-center next to the item icon, so it's
+  the icon's size: the font's height (an inline |T:0|t icon's), in the
+  atlas's own shape. A gold line (the Shopping List divider's color)
+  between the favorites and the rest, only while there are both. Drawn on
+  the boundary between two rows it sat closer to one than the other, so
+  the rows after it move down 7px: with the 2px a row's buttons leave
+  free, that's 4px, the line, 4px. Favorites are listed
   first, each group (favorites, then the rest) sorted by the chosen column,
   unpriced favorites after priced ones but above everything else. A bare
   star, not a red icon button: a third button on every row next to - and +

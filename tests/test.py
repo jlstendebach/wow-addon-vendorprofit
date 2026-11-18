@@ -2434,6 +2434,8 @@ check("the star leads the name column, under the heading's start, centered on th
       and ev("VendorProfit.BestPanel.Row(1).left.__point[4]") - 4 - ev(star(1) + ":GetWidth()") == 0
       and ev(B + ".nameHeading.__point[4]") == ev(B + ".scroll.__point[4]"))
 check("no favorites: no divider", not ev(B + ".favoritesDivider:IsShown()"))
+check("the star is as tall as the item icon (the font's height), in the atlas's shape",
+      ev(star(1) + ":GetHeight()") == 10 and ev(star(1) + ":GetWidth()") == 11)
 run(star(3) + ':GetScript("OnEnter")(' + star(3) + ')')
 check("hovering a star says what it does", ev("GameTooltip.lines[1].left") == "Favorite: keep it at the top of the list.")
 run(star(3) + ':Click()')
@@ -2443,9 +2445,14 @@ check("starring the losing vest: it goes to the top, saved per character", item_
 run(star(3) + ':Click()')
 check("two favorites: sorted by profit among themselves, above the rest", item_order() == [2865, 2867, 2866])
 check("...with a gold line between them and the rest", ev(B + ".favoritesDivider:IsShown()")
-      and ev(B + ".favoritesDivider.__point[5]") == -2 * 22)
+      and ev(B + ".favoritesDivider.__point[5]") == -46)
+# Row 2's buttons end 20 down its 22 (at -42); then 4, the line (-46), 4, and row 3 at -51.
+check("...with as much room above it as below, the rows after it pushed down",
+      ev("VendorProfit.BestPanel.Row(3).queue.__point[5]") == -51 and ev("VendorProfit.BestPanel.Row(2).queue.__point[5]") == -22
+      and ev("VendorProfit.BestPanel.Row(3).left.__point[5]") == -55 and ev(B + ".list:GetHeight()") == 3 * 22 + 7)
 run(star(3) + ':Click()')
-check("everything a favorite: no line", not ev(B + ".favoritesDivider:IsShown()"))
+check("everything a favorite: no line, no gap", not ev(B + ".favoritesDivider:IsShown()")
+      and ev("VendorProfit.BestPanel.Row(3).queue.__point[5]") == -44)
 run(star(1) + ':Click()')
 run(B + '.profitHeading:Click()')
 check("sorting the other way: favorites still first, each group reversed", item_order() == [2867, 2865, 2866])

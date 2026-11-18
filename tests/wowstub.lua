@@ -252,6 +252,8 @@ function FontMethods:SetText(t) self.__text = t or "" end
 function FontMethods:GetText() return self.__text end
 function FontMethods:SetJustifyH() end
 function FontMethods:SetFontObject() end
+-- The small fonts the addon uses are 10 point.
+function FontMethods:GetFont() return "Fonts\\FRIZQT__.TTF", 10, "" end
 function FontMethods:SetTextColor(r, g, b) self.__color = { r, g, b } end
 function FontMethods:SetWordWrap() end
 function FontMethods:SetAllPoints(target) self.__point = { "ALL", target } end
@@ -342,7 +344,7 @@ end
 
 C_AddOns = { GetAddOnMetadata = function(addon, key) return stub.metadata[addon] and stub.metadata[addon][key] end }
 -- Atlases the client has (C_Texture.GetAtlasInfo).
-stub.atlases = { ["auctionhouse-icon-favorite"] = { width = 14, height = 14 } }
+stub.atlases = { ["auctionhouse-icon-favorite"] = { width = 13, height = 12 } }
 C_Texture = { GetAtlasInfo = function(atlas) return stub.atlases[atlas] end }
 C_Timer = { After = function(seconds, fn) stub.timers[#stub.timers + 1] = { at = stub.now + seconds, fn = fn } end }
 SlashCmdList = {}

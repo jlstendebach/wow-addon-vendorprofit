@@ -145,12 +145,39 @@ end
 -- only while the mouse is on the row (as TradeSkillMaster's crafting list
 -- does), faded, so 14 empty stars don't clutter the list.
 local STAR_ATLAS = "auctionhouse-icon-favorite"
-local STAR_SIZE = 14
 -- The star is the first thing in the name column, where the heading starts,
 -- and the names follow it: every row's left edge lines up with the heading
--- and the window, whether its star shows or not.
+-- and the window, whether its star shows or not. It's as tall as the item
+-- icon after it (an inline |T:0|t icon is the font's height), so the two
+-- sit on the same line; set from the font with the first row.
 local STAR_GAP = 4
-local NAME_INDENT = STAR_SIZE + STAR_GAP
+local starWidth, starHeight, nameIndent = 12, 12, 16
+local function SizeStar(fontString)
+    local _, fontHeight = fontString:GetFont()
+    starHeight = math.floor((fontHeight or 12) + 0.5)
+    -- Keeps the atlas's own shape.
+    local info = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(STAR_ATLAS)
+    starWidth = info and info.width and info.height and info.height > 0
+        and math.floor(starHeight * info.width / info.height + 0.5) or starHeight
+    nameIndent = starWidth + STAR_GAP
+end
+
+-- The favorites and the rest are set apart by a gold line with equal room
+-- above and below it. A row's buttons fill its top 20 of 22, so the space
+-- between the two groups is 2 + DIVIDER_GAP: 4 above the line, the line,
+-- 4 below.
+local DIVIDER_GAP = 7
+local DIVIDER_SPACE = 4
+
+-- Where the index-th row's top is, the rows after the favorites pushed down
+-- by the gap (favorites: how many lead the list, while a divider shows).
+local function RowTop(index, favorites)
+    local top = -(index - 1) * ROW_HEIGHT
+    if favorites and index > favorites then
+        top = top - DIVIDER_GAP
+    end
+    return top
+end
 local function ShowStar(row)
     local star = row.favorite
     local favorite = star.recipe ~= nil and IsFavorite(star.recipe.recipeID)
@@ -216,13 +243,13 @@ local function Tooltip(button, text)
     button:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
--- Rows live on the scroll child, frame.list, one ROW_HEIGHT apart.
-local function GetRow(index)
+-- Rows live on the scroll child, frame.list, one ROW_HEIGHT apart (top:
+-- RowTop's).
+local function GetRow(index, top)
     local row = rows[index]
     if row == nil then
         local list = frame.list
         row = {}
-        local top = -(index - 1) * ROW_HEIGHT
         local function Column()
             local text = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             text:SetJustifyH("RIGHT")
@@ -230,6 +257,9 @@ local function GetRow(index)
             return text
         end
         row.left = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        if index == 1 then
+            SizeStar(row.left)
+        end
         row.left:SetJustifyH("LEFT")
         row.left:SetWordWrap(false)
         -- Clicking the name shows the recipe in the professions window (while
@@ -258,7 +288,7 @@ local function GetRow(index)
         -- itself.
         row.favorite = CreateFrame("Button", nil, list)
         row.favorite:SetPoint("RIGHT", row.left, "LEFT", -STAR_GAP, 0)
-        row.favorite:SetSize(STAR_SIZE, STAR_SIZE)
+        row.favorite:SetSize(starWidth, starHeight)
         row.favorite.icon = row.favorite:CreateTexture(nil, "ARTWORK")
         row.favorite.icon:SetAllPoints(row.favorite)
         if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(STAR_ATLAS) then
@@ -301,28 +331,29 @@ local function GetRow(index)
 
         -- Queue: a plus, at the row's end; unqueue: a minus, before it.
         row.queue = SmallButton(list, "+", ICON_BUTTON_WIDTH)
-        row.queue:SetPoint("TOPRIGHT", list, "TOPRIGHT", 0, top)
         Tooltip(row.queue, L.BEST_QUEUE_HELP)
         row.unqueue = SmallButton(list, "-", ICON_BUTTON_WIDTH)
         row.unqueue:SetPoint("RIGHT", row.queue, "LEFT", -4, 0)
         Tooltip(row.unqueue, L.BEST_UNQUEUE_HELP)
         rows[index] = row
     end
-    -- Placed again only when the columns change.
-    if row.layoutKey ~= layoutKey then
-        row.layoutKey = layoutKey
-        local list, top = frame.list, -(index - 1) * ROW_HEIGHT
+    -- Placed again only when the columns or its place change.
+    if row.layoutKey ~= layoutKey or row.top ~= top then
+        row.layoutKey, row.top = layoutKey, top
+        local list = frame.list
         local function At(region, key)
             region:SetWidth(col[key].width)
             region:ClearAllPoints()
             region:SetPoint("TOPRIGHT", list, "TOPRIGHT", col[key].right, top - 4)
         end
-        row.left:SetWidth(col.name.width - NAME_INDENT)
+        row.left:SetWidth(col.name.width - nameIndent)
         row.left:ClearAllPoints()
-        row.left:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left + NAME_INDENT, top - 4)
+        row.left:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left + nameIndent, top - 4)
         row.hit:ClearAllPoints()
-        row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left + NAME_INDENT, top)
-        row.hit:SetSize(col.name.width - NAME_INDENT, ROW_HEIGHT)
+        row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left + nameIndent, top)
+        row.hit:SetSize(col.name.width - nameIndent, ROW_HEIGHT)
+        row.queue:ClearAllPoints()
+        row.queue:SetPoint("TOPRIGHT", list, "TOPRIGHT", 0, top)
         At(row.investment, "investment")
         At(row.right, "profit")
         At(row.roi, "roi")
@@ -1064,8 +1095,19 @@ local function Refresh()
         end
     end
     LayOutColumns(ranked)
+    -- How many favorites lead the list, while there are others after them
+    -- to set them apart from (nil otherwise).
+    local favorites = 0
+    for _, entry in ipairs(ranked) do
+        if IsFavorite(entry.recipe.recipeID) then
+            favorites = favorites + 1
+        end
+    end
+    if favorites == 0 or favorites == #ranked then
+        favorites = nil
+    end
     for index, entry in ipairs(ranked) do
-        local row = GetRow(index)
+        local row = GetRow(index, RowTop(index, favorites))
         local reason
         row.left:SetText(ItemLabel(entry.recipe.item, entry.skillUp))
         local queued = Queued(entry.recipe.recipeID)
@@ -1137,17 +1179,12 @@ local function Refresh()
     end
 
     -- The divider, under the last favorite, while there are others below.
-    local favorites = 0
-    for _, entry in ipairs(ranked) do
-        if IsFavorite(entry.recipe.recipeID) then
-            favorites = favorites + 1
-        end
-    end
     local divider = frame.favoritesDivider
     divider:ClearAllPoints()
-    if favorites > 0 and favorites < #ranked then
-        divider:SetPoint("TOPLEFT", frame.list, "TOPLEFT", 0, -favorites * ROW_HEIGHT)
-        divider:SetPoint("TOPRIGHT", frame.list, "TOPRIGHT", 0, -favorites * ROW_HEIGHT)
+    if favorites then
+        local y = RowTop(favorites, favorites) - ROW_HEIGHT + 2 - DIVIDER_SPACE
+        divider:SetPoint("TOPLEFT", frame.list, "TOPLEFT", 0, y)
+        divider:SetPoint("TOPRIGHT", frame.list, "TOPRIGHT", 0, y)
         divider:Show()
     else
         divider:Hide()
@@ -1155,8 +1192,9 @@ local function Refresh()
 
     -- The list shows up to VISIBLE_ROWS at a time and scrolls for the rest,
     -- back to the top for another profession or tab.
-    local listHeight = math.max(math.min(#ranked, VISIBLE_ROWS), 1) * ROW_HEIGHT
-    frame.list:SetHeight(math.max(#ranked, 1) * ROW_HEIGHT)
+    local gap = favorites and DIVIDER_GAP or 0
+    local listHeight = math.max(math.min(#ranked, VISIBLE_ROWS), 1) * ROW_HEIGHT + gap
+    frame.list:SetHeight(math.max(#ranked, 1) * ROW_HEIGHT + gap)
     frame.scroll:SetSize(LIST_WIDTH, listHeight)
     frame.scroll:SetShown(#ranked > 0)
     local listKey = table.concat(keys, ",") .. "/" .. tab .. "/" .. filter
