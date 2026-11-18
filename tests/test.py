@@ -2504,7 +2504,7 @@ def mouse_on(i):
     if i:
         run(ROW(i) + '.area.__mouseOver = nil')
     run(B + '.__scripts.OnUpdate(' + B + ')')
-exact = lambda i: ev("VendorProfit.BestCrafts.Exact(%s.entry.recipe, 'vendor')" % ROW(i))
+exact = lambda i: ev("VendorProfit.BestCrafts.PriceRecipe(%s.entry.recipe, 'vendor', nil, true)" % ROW(i))
 cheapest = [ev(ROW(i) + ".investment:GetText()") for i in (1, 2, 3)]
 mouse_on(2)
 check("Ctrl not held: nothing changes", [ev(ROW(i) + ".investment:GetText()") for i in (1, 2, 3)] == cheapest)
@@ -2543,6 +2543,40 @@ check("Ctrl-click - takes it off the exact recipe", entries() == [(2670, False, 
 run(ROW(1) + '.unqueue:Click()')
 check("...and does nothing with no exact one queued", entries() == [(2670, False, 1)])
 run('__stub.ctrl = false; VendorProfit.Order.Clear(); ' + B + '.__scripts.OnUpdate(' + B + ')')
+
+# Cheapest or Exact: how the whole list prices crafts, beside Auction and Vendor.
+MODES = B + ".modes"
+check("Cheapest and Exact buttons after Vendor, the search after them; Cheapest lit to start",
+      ev(MODES + ".cheapest.__point[2] == " + B + ".tabs.vendor") and ev(MODES + ".exact.__point[2] == " + MODES + ".cheapest")
+      and ev(B + ".search.__point[2] == " + MODES + ".exact")
+      and ev(MODES + ".cheapest.__lit") and not ev(MODES + ".exact.__lit"))
+run(MODES + '.exact:Click()')
+by_item = lambda: {ev(ROW(i) + ".hit.recipe.item"): ev(ROW(i) + ".investment:GetText()") for i in (1, 2, 3)}
+check("Exact: every row priced as the exact recipe (the cuirass's bars bought: 12s 39c), saved per character",
+      by_item()[2866] == ev("VendorProfit.FormatMoney(1239)") and ev("VendorProfitCharDB.bestExact") == True
+      and ev(MODES + ".exact.__lit") and not ev(MODES + ".cheapest.__lit")
+      and "(exact)" not in ev(ROW(1) + ".left:GetText()"))
+row_of = lambda item: next(i for i in (1, 2, 3) if ev(ROW(i) + ".hit.recipe.item") == item)
+c = row_of(2866)
+run('__stub.ctrl = true')
+mouse_on(c)
+check("...Ctrl shows the other way: the cheapest route, marked so", ev(ROW(c) + ".investment:GetText()") == cheapest[0]
+      and ev(ROW(c) + ".left:GetText()").endswith(" |cff808080(cheapest)|r"))
+run('__stub.ctrl = false; ' + B + '.__scripts.OnUpdate(' + B + ')')
+run(ROW(c) + '.hit:GetScript("OnEnter")(' + ROW(c) + '.hit)')
+check("...and the name's tooltip says so", [l.left for l in ev("GameTooltip.lines").values()][-1]
+      == "Hold Ctrl on a row to price it along its cheapest route: its reagents crafted where that's cheaper.")
+run("GameTooltip:Hide()")
+run(ROW(c) + '.queue:Click(); __stub.ctrl = true')
+run(ROW(c) + '.queue:Click(); __stub.ctrl = false')
+check("+ queues the exact recipe; Ctrl-click +, the cheapest route", entries() == [(2670, True, 1), (2670, False, 1)])
+run('__stub.ctrl = true')
+run(ROW(c) + '.unqueue:Click()')
+check("Ctrl-click - takes off the one queued the other way (the cheapest route)", entries() == [(2670, True, 1)])
+run('__stub.ctrl = false; VendorProfit.Order.Clear(); ' + B + '.__scripts.OnUpdate(' + B + ')')
+run(MODES + '.cheapest:Click()')
+check("Cheapest again: back to the cheapest routes, nothing saved", ev("VendorProfitCharDB.bestExact") is None
+      and by_item()[2866] == cheapest[0])
 
 # Rankings are kept until what they're worked out from changes: a craft's burst
 # of events (the cast ending, bags, money, the profession's list) doesn't rank

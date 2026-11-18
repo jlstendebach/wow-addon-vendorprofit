@@ -230,13 +230,15 @@ local function Price(recipe, by, onLoad, exact)
     return entry, loading
 end
 
--- A recipe priced as it is (see Price): Best Crafts' Ctrl view of a row.
-function BestCrafts.Exact(recipe, by, onLoad)
-    return (Price(recipe, by, onLoad, true))
+-- One recipe priced along its cheapest route, or as the exact recipe (see
+-- Price): Best Crafts' Ctrl view of a row, the other way from the list.
+function BestCrafts.PriceRecipe(recipe, by, onLoad, exact)
+    return (Price(recipe, by, onLoad, exact))
 end
 
 -- Ranks every saved recipe of one or more professions (a key or a list)
--- together. by = "vendor" or "auction".
+-- together. by = "vendor" or "auction"; exact: each as the exact recipe
+-- instead of along its cheapest route.
 -- Returns a list of { recipe, profit, cost, route } best first, then the
 -- recipes with no profit to rank, each with unpriced = why: { itemID = a
 -- reagent with no price anywhere } (its profit can't be trusted), or
@@ -244,15 +246,15 @@ end
 -- makes). Also returns whether some item info is still loading (onLoad, the
 -- same function each time, is called when it arrives; see
 -- VendorProfit.RedrawWhenLoaded).
-function BestCrafts.Rank(professions, by, onLoad)
-    local key = table.concat(Keys(professions), ",") .. "/" .. by .. "/" .. Recipes.Version()
+function BestCrafts.Rank(professions, by, onLoad, exact)
+    local key = table.concat(Keys(professions), ",") .. "/" .. by .. (exact and "/exact/" or "/") .. Recipes.Version()
     local kept = rankings[key]
     if kept and kept.pricesVersion == pricesVersion and GetTime() - kept.time < BestCrafts.RANK_MAX_AGE then
         return kept.ranked, false
     end
     local ranked, unranked, loading = {}, {}, false
     for _, recipe in ipairs(RecipesOf(professions)) do
-        local entry, itemLoading = Price(recipe, by, onLoad)
+        local entry, itemLoading = Price(recipe, by, onLoad, exact)
         loading = loading or itemLoading
         if entry.profit then
             ranked[#ranked + 1] = entry

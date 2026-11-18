@@ -182,6 +182,15 @@ time" route mode).
   minimum counts separate auction sales, not items, so one buyer of a
   stack can't make an item hot. Revisit per item if this still feels
   wrong in use.
+- **Cheapest / Exact buttons** (2026-11-18): the list's pricing mode, a
+  second pair of red toggle buttons beside Auction / Vendor (how you make
+  it, beside how you sell it: they change the same columns), the search
+  box narrower for them. Considered and passed over: a Filter menu entry
+  (a mode, not a filter: it would muddle the count and the reset X, and
+  be hidden), the bottom row (far from the numbers), one button that
+  flips (a lit pair reads better and matches Auction / Vendor). Ctrl now
+  means "the other way": it shows, queues (Ctrl-click +) and unqueues
+  (Ctrl-click -) whichever mode isn't picked. Rankings are kept per mode.
 - **Ctrl: the exact recipe** (2026-11-18): holding Ctrl with the mouse on a
   row reprices that row as the exact recipe (Route.ForRecipe with exact:
   direct reagents bought, never crafted; BestCrafts.Exact), and Ctrl-click
