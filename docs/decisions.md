@@ -249,7 +249,8 @@ time" route mode).
 
 ## Shopping List
 
-- **Craft step time** (2026-11-18): "Craft (~63 min)": the crafts left in
+- **Craft step time** (2026-11-18): "Craft (63 min)" (no "~": the game's
+  font draws it high on the line, and "about" was longer): the crafts left in
   the plan times each recipe's cast time (C_Spell.GetSpellInfo(recipeID)
   .castTime; a recipe's ID is its spell's, which is how TradeSkillMaster
   times its queue on Forever too), to the nearest minute, at least 1. Just
