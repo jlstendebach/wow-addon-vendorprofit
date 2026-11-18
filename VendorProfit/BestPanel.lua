@@ -47,7 +47,7 @@ local LIST_WIDTH = BASE_LIST_WIDTH
 local ICON_BUTTON_WIDTH = 22
 -- The columns, by key (Columns.lua), laid out for what's listed on each
 -- refresh: the recipe name, Investment, Profit, ROI, 7d (sold at auction
--- in the last 7 days, a flame on hot ones), AH (your auctions of it), Q
+-- in the last 7 days, in orange for hot ones), AH (your auctions of it), Q
 -- (crafts queued), then - and + (unqueue and queue a craft). The
 -- layout key changes only when the layout does.
 local col, layoutKey
@@ -88,10 +88,10 @@ local function Gray(text)
     return GRAY_FONT_COLOR:WrapTextInColorCode(text)
 end
 
--- Hot crafts (History.Heat): a flame, the Fireball icon with its border
--- trimmed, so it reads at text size.
-local HOT_ICON = "|TInterface\\Icons\\Spell_Fire_FlameBolt:0:0:0:0:64:64:5:59:5:59|t"
-BestPanel.HOT_ICON = HOT_ICON
+-- Hot crafts (History.Heat): their 7d count in orange, the game's legendary
+-- color. An icon was tried and dropped: it pulled the eye from the names.
+local HOT_COLOR = CreateColor(1, 0.5, 0)
+BestPanel.HOT_COLOR = HOT_COLOR
 
 -- How the item has been selling at auction lately: { heat, sold, perDay,
 -- hot }, or nil if it hasn't sold there within the heat's reach.
@@ -371,8 +371,8 @@ function BestPanel.ShowSalesTooltip(owner, nameText, itemID, recipe)
     end
     local heat = Heat(itemID)
     if heat and heat.hot then
-        GameTooltip:AddLine(HOT_ICON .. " " .. string.format(L.BEST_HOT_TOOLTIP, heat.sold,
-            VendorProfit.FormatMoney(math.floor(heat.perDay + 0.5))), 1, 0.5, 0.25, true)
+        GameTooltip:AddLine(string.format(L.BEST_HOT_TOOLTIP, heat.sold,
+            VendorProfit.FormatMoney(math.floor(heat.perDay + 0.5))), HOT_COLOR.r, HOT_COLOR.g, HOT_COLOR.b, true)
     end
     local HistoryPanel = VendorProfit.HistoryPanel
     local item = HistoryPanel and HistoryPanel.AllTime(itemID)
@@ -522,7 +522,7 @@ FilterMenu = function(_, root)
     root:CreateCheckbox(L.BEST_FILTER_PROFITABLE,
         function() return Filters().profitable == true end,
         function() SetFilter("profitable", not Filters().profitable) end)
-    root:CreateCheckbox(HOT_ICON .. " " .. L.BEST_FILTER_HOT,
+    root:CreateCheckbox(L.BEST_FILTER_HOT,
         function() return Filters().hot == true end,
         function() SetFilter("hot", not Filters().hot) end)
     root:CreateTitle(L.BEST_FILTER_SKILL_UP)
@@ -825,7 +825,7 @@ end
 -- the headings and sets the tab's width when that changes the layout. The
 -- rows follow as they're filled (GetRow).
 local function LayOutColumns(ranked)
-    local extents, anyHot = {}, false
+    local extents = {}
     for _, entry in ipairs(ranked) do
         if entry.profit or entry.unpriced.output then
             Columns.Track(extents, "investment", entry.cost)
@@ -835,12 +835,6 @@ local function LayOutColumns(ranked)
         Columns.Track(extents, "sold", Sold(entry.recipe.item))
         Columns.Track(extents, "auctions", Auctions.Count(entry.recipe.item))
         Columns.Track(extents, "queued", Queued(entry.recipe.recipeID))
-        anyHot = anyHot or IsHot(entry.recipe.item)
-    end
-    -- A hot one's count has the flame before it.
-    local sold = Columns.Count(extents, "sold")
-    if anyHot then
-        sold[#sold + 1] = HOT_ICON .. " " .. (sold[1] or "9")
     end
     local key
     col, LIST_WIDTH, key = Columns.Layout(BASE_LIST_WIDTH, {
@@ -848,7 +842,7 @@ local function LayOutColumns(ranked)
         { key = "investment", heading = L.BEST_INVESTMENT, sorts = true, samples = Columns.Money(extents, "investment") },
         { key = "profit", heading = L.BEST_PROFIT, sorts = true, samples = Columns.Money(extents, "profit") },
         { key = "roi", heading = L.BEST_ROI, sorts = true, samples = Columns.Percent(extents, "roi") },
-        { key = "sold", heading = L.BEST_SOLD_HEADING, sorts = true, samples = sold },
+        { key = "sold", heading = L.BEST_SOLD_HEADING, sorts = true, samples = Columns.Count(extents, "sold") },
         { key = "auctions", heading = L.BEST_AUCTIONS_HEADING, sorts = true, samples = Columns.Count(extents, "auctions") },
         { key = "queued", heading = L.BEST_QUEUED_HEADING, sorts = true, samples = Columns.Count(extents, "queued") },
         { key = "buttons", width = 2 * ICON_BUTTON_WIDTH + 4 },
@@ -985,7 +979,7 @@ local function Refresh()
         row.queued:SetText(Count(queued))
         row.auctions:SetText(Count(Auctions.Count(entry.recipe.item)))
         local sold = Sold(entry.recipe.item)
-        row.sold:SetText(IsHot(entry.recipe.item) and (HOT_ICON .. " " .. sold) or Count(sold))
+        row.sold:SetText(IsHot(entry.recipe.item) and HOT_COLOR:WrapTextInColorCode(sold) or Count(sold))
         row.roi:SetText("")
         if entry.profit then
             row.investment:SetText(VendorProfit.FormatMoney(entry.cost))

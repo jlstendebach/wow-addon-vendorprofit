@@ -2340,7 +2340,7 @@ def menu():
     return items
 check("a Filter button in the page's style (not the game's dropdown) opens the menu: profitable only, hot only, skill-up colors, professions",
       ev(F + ".__text") == "Filter (1)" and [t for t, _ in menu()] ==
-      ["Profitable only", ev("VendorProfit.BestPanel.HOT_ICON") + " Hot only", "Skill up", "|cffff8040Guaranteed|r", "|cffffff00Likely|r", "|cff40bf40Unlikely|r",
+      ["Profitable only", "Hot only", "Skill up", "|cffff8040Guaranteed|r", "|cffffff00Likely|r", "|cff40bf40Unlikely|r",
        "|cff808080Closed professions:|r", "|cff808080colors as last seen.|r",
        "Professions", "Blacksmithing", "Mining"])
 run(F + ':Click()')
@@ -2613,17 +2613,16 @@ check("top fifth, but one sale this week isn't enough", ev(HEAT + "[2866].hot") 
 add_sales('{ item = 2865, n = 1, cost = 100, sold = 1100, bought = 100, how = "auction", time = %s }' % DAYS(3))
 check("a second sale this week: hot", ev(HEAT + "[2865].hot") and ev(HEAT + "[2865].sold") == 2)
 
-# On Best Crafts: a 7d column, a flame on hot ones, a tooltip line, a filter.
-FLAME = ev("VendorProfit.BestPanel.HOT_ICON")
+# On Best Crafts: a 7d column, orange for hot ones, a tooltip line, a filter.
 run("VendorProfit.BestPanel.Refresh()")
 R = best_row(2866)
-check("7d: sold at auction this week, a flame on hot ones", ev(R + ".sold:GetText()") == FLAME + " 2"
+check("7d: sold at auction this week, in orange for hot ones", ev(R + ".sold:GetText()") == "|cffff80002|r"
       and ev(best_row(2867) + ".sold:GetText()") == ev("GRAY_FONT_COLOR:WrapTextInColorCode('-')"))
 check("...with a heading between ROI and AH", ev(B + ".soldHeading.label") == "7d"
       and columns_apart(B, [R + ".roi", R + ".sold", R + ".auctions"]))
 run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
 tip = [l.left for l in ev("GameTooltip.lines").values()]
-check("hovering a hot one says so, with its profit a day", tip[2] == FLAME + " Hot: 2 sold at auction in the last 7 days, about "
+check("hovering a hot one says so, with its profit a day", tip[2] == "Hot: 2 sold at auction in the last 7 days, about "
       + ev("VendorProfit.FormatMoney(%d)" % round(ev(HEAT + "[2866].perDay"))) + " profit a day lately.")
 run("GameTooltip:Hide()")
 run('VendorProfit.BestPanel.SetFilter("hot", true)')

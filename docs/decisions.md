@@ -166,10 +166,13 @@ time" route mode).
     for small and big sellers alike, with nothing to set.
   - At least 2 sold this week: without it a single big sale (a 20g
     Dragonling) made an item hot.
-  The marker is a flame in a new **7d** column (units sold at auction in
-  the last 7 days), not next to the name: names are cut short to fit, so a
-  flame after them could be cut off, and two icons before the name looked
-  cluttered. The tooltip gives the week's count and profit a day lately
+  The marker is the count in a new **7d** column (units sold at auction in
+  the last 7 days), in orange for hot ones, not next to the name: names are
+  cut short to fit, so a marker after them could be cut off, and two icons
+  before the name looked cluttered. A flame icon (Fireball's, before the
+  count) was tried first and dropped: Josh found it distracting. Orange
+  (the game's legendary color) rather than a row highlight: it marks the
+  number without competing with the skill-up colors on the names. The tooltip gives the week's count and profit a day lately
   (heat x ln 2 / 7, the rate that would give that heat if steady). A "Hot
   only" filter. Worked out from the history, cached until it changes (and
   hourly, as sales age). Sales past 8 half-lives (under 1/256 weight) aren't
