@@ -93,6 +93,22 @@ local function Gray(text)
     return GRAY_FONT_COLOR:WrapTextInColorCode(text)
 end
 
+-- Money in the list's columns: two coins at most, so gold amounts drop
+-- their copper (1g 20s 94c shows as 1g 20s) and the columns stay narrow.
+-- Cut off, not rounded, so a figure is never more than it really is (Josh
+-- would rather underestimate). Only the shown text: sorting, filters and
+-- the minimums use the exact amount, and tooltips and the Shopping List
+-- keep the copper.
+local function ListMoney(copper)
+    copper = math.floor(copper + 0.5)
+    local size = math.abs(copper)
+    if size >= 10000 then
+        size = size - size % 100
+    end
+    return VendorProfit.FormatMoney(copper < 0 and -size or size)
+end
+BestPanel.ListMoney = ListMoney
+
 -- Hot crafts (History.Heat): their 7d count in orange, the game's legendary
 -- color. An icon was tried and dropped: it pulled the eye from the names.
 local HOT_COLOR = CreateColor(1, 0.5, 0)
@@ -1098,8 +1114,8 @@ local function LayOutColumns(ranked)
     local key
     col, LIST_WIDTH, key = Columns.Layout(BASE_LIST_WIDTH, {
         { key = "name", heading = L.BEST_RECIPE, sorts = true, fill = true },
-        { key = "investment", heading = L.BEST_INVESTMENT, sorts = true, samples = Columns.Money(extents, "investment") },
-        { key = "profit", heading = L.BEST_PROFIT, sorts = true, samples = Columns.Money(extents, "profit") },
+        { key = "investment", heading = L.BEST_INVESTMENT, sorts = true, samples = Columns.Money(extents, "investment", ListMoney) },
+        { key = "profit", heading = L.BEST_PROFIT, sorts = true, samples = Columns.Money(extents, "profit", ListMoney) },
         { key = "roi", heading = L.BEST_ROI, sorts = true, samples = Columns.Percent(extents, "roi") },
         { key = "sold", heading = L.BEST_SOLD_HEADING, sorts = true, samples = Columns.Count(extents, "sold") },
         { key = "auctions", heading = L.BEST_AUCTIONS_HEADING, sorts = true, samples = Columns.Count(extents, "auctions") },
@@ -1266,8 +1282,8 @@ local function Refresh()
         row.sold:SetText(IsHot(entry.recipe.item) and HOT_COLOR:WrapTextInColorCode(sold) or Count(sold))
         row.roi:SetText("")
         if entry.profit then
-            row.investment:SetText(VendorProfit.FormatMoney(entry.cost))
-            row.right:SetText(VendorProfit.FormatMoney(entry.profit))
+            row.investment:SetText(ListMoney(entry.cost))
+            row.right:SetText(ListMoney(entry.profit))
             row.roi:SetText(FormatROI(entry.roi))
         else
             local unpriced = entry.unpriced
@@ -1282,7 +1298,7 @@ local function Refresh()
             -- the reason takes the columns without a number.
             row.right:SetText("")
             if unpriced.output then
-                row.investment:SetText(VendorProfit.FormatMoney(entry.cost))
+                row.investment:SetText(ListMoney(entry.cost))
                 row.reason:SetWidth(Columns.Span(col, "profit", "roi"))
             else
                 row.investment:SetText("")

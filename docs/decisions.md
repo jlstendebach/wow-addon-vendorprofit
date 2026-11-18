@@ -149,6 +149,12 @@ time" route mode).
   professions: / colors as last seen."): the game's menu doesn't wrap and is
   as wide as its widest line, and a one-line note made it far too wide.
 
+- **Two coins in the list** (2026-11-18): the Investment and Profit columns
+  were running out of width, so amounts in gold drop their copper. Cut
+  off, not rounded: Josh would rather underestimate. Best Crafts only (the
+  history tabs keep their copper, at Josh's choice); sorting, filters and
+  minimums use exact amounts; tooltips and the Shopping List (money about
+  to be spent) keep the copper. Silver keeps its two digits after gold.
 - **Per craft, not per item** (2026-11-18): Josh weighed showing the money
   columns per item (easier to read at a glance; "3000 shells sold" next to
   per-craft money felt off). Kept per craft: Investment is what you really

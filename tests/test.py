@@ -2797,6 +2797,20 @@ check("money per item under half a copper (a craft of 200 worth under 1s) shows 
       ev("VendorProfit.BestPanel.PerItemMoney(0.3)") == "<" + ev("VendorProfit.FormatMoney(1)")
       and ev("VendorProfit.BestPanel.PerItemMoney(-0.3)") == ">" + ev("VendorProfit.FormatMoney(-1)")
       and ev("VendorProfit.BestPanel.PerItemMoney(15.2)") == ev("VendorProfit.FormatMoney(15)"))
+FM = lambda c: ev("VendorProfit.FormatMoney(%d)" % c)
+check("the list's money: two coins at most, gold amounts cut to the silver (never rounded up)",
+      ev("VendorProfit.BestPanel.ListMoney(12094)") == FM(12000) == "|cffffffff1g 20s|r"
+      and ev("VendorProfit.BestPanel.ListMoney(-12094)") == FM(-12000)
+      and ev("VendorProfit.BestPanel.ListMoney(1305099)") == FM(1305000)
+      and ev("VendorProfit.BestPanel.ListMoney(2014)") == FM(2014) == "|cffffffff20s 14c|r"
+      and ev("VendorProfit.BestPanel.ListMoney(10005)") == FM(10000))
+# A craft worth gold: its columns lose the copper, and are sized for that.
+run('__stub.items["item:2866"].sellPrice = 1234567; __stub.PricesChanged(); VendorProfit.BestPanel.Refresh()')
+R = best_row(2866)
+check("...in the rows, and the column sized to fit them",
+      ev(R + ".right:GetText()") == ev("VendorProfit.BestPanel.ListMoney(%d)" % ev(R + ".hit.entry.profit"))
+      and "c|r" not in ev(R + ".right:GetText()") and columns_apart(B, [R + ".investment", R + ".right", R + ".roi"]))
+run('__stub.items["item:2866"].sellPrice = 600; __stub.PricesChanged(); VendorProfit.BestPanel.Refresh()')
 check("no errors from Best Crafts", ev("#__stub.errors") == 0)
 
 # --- Best Crafts with the professions window closed: every saved profession ------
