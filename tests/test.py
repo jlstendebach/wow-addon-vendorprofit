@@ -2488,6 +2488,54 @@ run("GameTooltip:Hide()")
 run(star(1) + ':Click(); ' + star(1) + ':Click()')
 check("unstarred: back in profit order, nothing saved", item_order() == [2866, 2865, 2867]
       and ev("VendorProfitCharDB.bestFavorites") is None)
+
+# Ctrl on a row: priced as the exact recipe (reagents bought, never crafted),
+# in place: the order doesn't change.
+ROW = lambda i: "VendorProfit.BestPanel.Row(%d)" % i
+def mouse_on(i):
+    run('for _, row in ipairs({ %s }) do row.area.__mouseOver = false end' % ", ".join(ROW(n) for n in (1, 2, 3)))
+    if i:
+        run(ROW(i) + '.area.__mouseOver = nil')
+    run(B + '.__scripts.OnUpdate(' + B + ')')
+exact = lambda i: ev("VendorProfit.BestCrafts.Exact(%s.entry.recipe, 'vendor')" % ROW(i))
+cheapest = [ev(ROW(i) + ".investment:GetText()") for i in (1, 2, 3)]
+mouse_on(2)
+check("Ctrl not held: nothing changes", [ev(ROW(i) + ".investment:GetText()") for i in (1, 2, 3)] == cheapest)
+run('__stub.ctrl = true')
+mouse_on(1)
+e = exact(1)
+check("Ctrl on the cuirass: its exact cost (7 bronze bars bought, 12s 39c, not smelted for 4s 38c), profit and ROI",
+      e.cost == 1239 and ev(ROW(1) + ".investment:GetText()") == ev("VendorProfit.FormatMoney(1239)")
+      and ev(ROW(1) + ".right:GetText()") == ev("VendorProfit.FormatMoney(%d)" % e.profit)
+      and ev(ROW(1) + ".roi:GetText()") == ev("VendorProfit.FormatROI(%s)" % repr(e.roi))
+      and ev(ROW(1) + ".left:GetText()").endswith(" |cff808080(exact)|r"))
+check("...in place: the order doesn't change, the other rows don't either", item_order() == [2866, 2865, 2867]
+      and [ev(ROW(i) + ".investment:GetText()") for i in (2, 3)] == cheapest[1:])
+mouse_on(2)
+check("moving to the next row: it shows its exact cost, the first goes back",
+      ev(ROW(2) + ".investment:GetText()") == ev("VendorProfit.FormatMoney(885)")
+      and ev(ROW(1) + ".investment:GetText()") == cheapest[0] and "(exact)" not in ev(ROW(1) + ".left:GetText()"))
+run(B + '.scroll.__mouseOver = false; ' + B + '.__scripts.OnUpdate(' + B + ')')
+check("off the list: back to the cheapest route", [ev(ROW(i) + ".investment:GetText()") for i in (1, 2, 3)] == cheapest)
+run(B + '.scroll.__mouseOver = nil')
+mouse_on(1)
+run('__stub.ctrl = false; ' + B + '.__scripts.OnUpdate(' + B + ')')
+check("Ctrl let go: back to the cheapest route", [ev(ROW(i) + ".investment:GetText()") for i in (1, 2, 3)] == cheapest)
+
+# Ctrl-click +: queues the exact recipe; Ctrl-click -: takes it off that one.
+run('VendorProfit.Order.Clear(); __stub.ctrl = true')
+run(ROW(1) + '.queue:Click()')
+run('__stub.ctrl = false')
+run(ROW(1) + '.queue:Click()')
+entries = lambda: [(x.recipeID, x.exact or False, x.crafts) for x in ev("VendorProfit.Order.Entries()").values()]
+check("Ctrl-click + queues the exact recipe; a plain click the cheapest route, separately",
+      entries() == [(2670, True, 1), (2670, False, 1)] and ev(ROW(1) + ".queued:GetText()") == "2")
+run('__stub.ctrl = true')
+run(ROW(1) + '.unqueue:Click()')
+check("Ctrl-click - takes it off the exact recipe", entries() == [(2670, False, 1)])
+run(ROW(1) + '.unqueue:Click()')
+check("...and does nothing with no exact one queued", entries() == [(2670, False, 1)])
+run('__stub.ctrl = false; VendorProfit.Order.Clear(); ' + B + '.__scripts.OnUpdate(' + B + ')')
 check("scan off away from the auction house", not ev(B + ".scan:IsEnabled()")
       and ev(B + ".scan.tooltip") == "Open the auction house to look up live prices.")
 
@@ -2647,7 +2695,8 @@ check("hovering a recipe: its sales, all time, with profit and ROIs",
       and tip[3][0] == "Your sales, all time" and tip[4][0] == "3 sold in 2 sales" and ("Avg profit", ev("VendorProfit.FormatMoney(700)")) in tip
       and ("Profit", ev("VendorProfit.FormatMoney(2100)")) in tip
       and ("Avg ROI", "150%") in tip and ("ROI", "175%") in tip  # (200% x 2 + 50%) / 3; 2100 / 1200
-      and ("Sold to vendors", "1") in tip and ("Sold at auction", "2") in tip and tip[-1][0].startswith("Last sold "))
+      and ("Sold to vendors", "1") in tip and ("Sold at auction", "2") in tip and tip[-2][0].startswith("Last sold ")
+      and tip[-1][0] == "Hold Ctrl on a row to price it as the exact recipe: its reagents bought, never crafted.")
 check("...placed like an item's tooltip, past the end of its name", ev("GameTooltip.anchor") == "ANCHOR_NONE"
       and ev("GameTooltip.point[1]") == "BOTTOMLEFT")
 run(R + '.hit:GetScript("OnLeave")(' + R + '.hit)')

@@ -186,7 +186,8 @@ end
 stub.topLevel = 100
 function FrameMethods:Raise() stub.topLevel = stub.topLevel + 10; self.__level = stub.topLevel; self.__raised = (self.__raised or 0) + 1 end
 function FrameMethods:SetToplevel(t) self.__toplevel = t end
-function FrameMethods:IsMouseOver() return true end
+-- Over everything, unless a test says otherwise (__mouseOver = false).
+function FrameMethods:IsMouseOver() return self.__mouseOver ~= false end
 function FrameMethods:SetAlpha(a) self.__alpha = a end
 function FrameMethods:GetAlpha() return self.__alpha or 1 end
 function FrameMethods:SetScrollChild(child) self.__scrollChild = child end
@@ -360,6 +361,7 @@ date = os.date
 stub.inCombat = false
 function InCombatLockdown() return stub.inCombat end
 function IsShiftKeyDown() return stub.shift end
+function IsControlKeyDown() return stub.ctrl end
 -- Chat output, kept for tests.
 stub.printed = {}
 local rawPrint = print

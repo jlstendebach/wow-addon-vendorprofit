@@ -134,6 +134,20 @@ time" route mode).
   professions: / colors as last seen."): the game's menu doesn't wrap and is
   as wide as its widest line, and a one-line note made it far too wide.
 
+- **Ctrl: the exact recipe** (2026-11-18): holding Ctrl with the mouse on a
+  row reprices that row as the exact recipe (Route.ForRecipe with exact:
+  direct reagents bought, never crafted; BestCrafts.Exact), and Ctrl-click
+  + queues it exact. Only the row's numbers change, never its place or
+  whether the filters pass it: Josh asked that it not reorder, and a row
+  jumping or vanishing under the mouse would be worse. The row is found
+  by position (an unclickable frame over each row, checked each frame
+  while Ctrl is held), since no event says the mouse moved between rows
+  over the number columns, which don't take the mouse. The column widths
+  take the exact numbers into account, so they're never cut short. The
+  name gets the Queued list's "(exact)" mark so you can tell which view
+  you're seeing, and the name's tooltip mentions Ctrl. Ctrl-click - takes
+  off the exact entry only; a plain - takes off the newest entry of either
+  kind, as before.
 - **Resizable height** (2026-11-18): a size grip (the chat frame's) in the
   bottom right corner sets how many rows the list shows, whole rows only
   (no row cut off), height only (the width follows the columns). Dragging

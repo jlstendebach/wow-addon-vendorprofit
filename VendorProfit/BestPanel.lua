@@ -69,6 +69,9 @@ local tab = "auction"     -- auction first: it's what this tab is used for most
 local rows = {}
 local shownList          -- profession, tab and filter the list was last scrolled for
 local filter = ""        -- the search box's text, lowercased
+-- The recipe whose row is shown as the exact recipe (its reagents bought,
+-- never crafted) while Ctrl is held with the mouse on it; nil for none.
+local exactRecipe
 
 -- The item's icon and name, the name in its skill-up color if given (as the
 -- professions window colors its list).
@@ -219,25 +222,32 @@ local function Queued(recipeID)
 end
 
 -- Adds one craft of a recipe to the shopping order, or five with Shift.
+-- Ctrl-click: the exact recipe (as the exact Queue button under
+-- Auctionator's line queues it), the same view Ctrl shows on the row.
 local function QueueRecipe(entry)
     local recipe = entry.recipe
     local crafts = VendorProfit.QueueStep()
+    local exact = IsControlKeyDown()
     Order.AddRecipe({
         itemID = recipe.item, recipeID = recipe.recipeID, profession = recipe.profession,
         count = recipe.count, reagents = recipe.reagents,
         sellPrice = select(11, C_Item.GetItemInfo(recipe.item)),
+        exact = exact,
     }, crafts)
-    print(string.format(L.QUEUED, crafts, C_Item.GetItemInfo(recipe.item) or ("item " .. recipe.item)))
+    local name = C_Item.GetItemInfo(recipe.item) or ("item " .. recipe.item)
+    print(string.format(L.QUEUED, crafts, exact and (name .. " " .. L.QUEUED_EXACT_MARK) or name))
 end
 
 -- Takes one craft of a recipe off the shopping order (five with Shift), and
 -- the recipe once none are left.
+-- Ctrl-click: from the exact recipe's entry only.
 local function UnqueueRecipe(entry)
     local step = VendorProfit.QueueStep()
+    local exactOnly = IsControlKeyDown()
     local entries = Order.Entries()
     for index = #entries, 1, -1 do
         local queued = entries[index]
-        if queued.recipeID == entry.recipe.recipeID then
+        if queued.recipeID == entry.recipe.recipeID and (queued.exact or not exactOnly) then
             if queued.crafts > step then
                 Order.SetCrafts(index, queued.crafts - step)
             else
@@ -349,6 +359,9 @@ local function GetRow(index, top)
         row.queued = Column()
         -- Why a recipe isn't ranked, across the columns it has no number for.
         row.reason = Column()
+        -- The whole row, to tell which row the mouse is on (for Ctrl). Not
+        -- mouse-enabled, so the name, star and buttons still get the mouse.
+        row.area = CreateFrame("Frame", nil, list)
 
         -- Queue: a plus, at the row's end; unqueue: a minus, before it.
         row.queue = SmallButton(list, "+", ICON_BUTTON_WIDTH)
@@ -375,6 +388,9 @@ local function GetRow(index, top)
         row.hit:SetSize(col.name.width - nameIndent, ROW_HEIGHT)
         row.queue:ClearAllPoints()
         row.queue:SetPoint("TOPRIGHT", list, "TOPRIGHT", 0, top)
+        row.area:ClearAllPoints()
+        row.area:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top)
+        row.area:SetSize(LIST_WIDTH, ROW_HEIGHT)
         At(row.investment, "investment")
         At(row.right, "profit")
         At(row.roi, "roi")
@@ -520,6 +536,9 @@ function BestPanel.ShowSalesTooltip(owner, nameText, itemID, recipe)
         HistoryPanel.AddSalesLines(item, true)
     else
         GameTooltip:AddLine(L.BEST_NO_SALES, 1, 1, 1, true)
+    end
+    if recipe then
+        GameTooltip:AddLine(L.BEST_EXACT_HINT, GRAY_FONT_COLOR.r, GRAY_FONT_COLOR.g, GRAY_FONT_COLOR.b, true)
     end
     GameTooltip:Show()
 end
@@ -1006,6 +1025,34 @@ local function Create(page)
     end)
     Tooltip(grip, L.BEST_RESIZE_HELP)
     frame.grip = grip
+
+    -- Ctrl on a row shows it as the exact recipe. Checked every frame while
+    -- the tab is up (no event says the mouse moved between rows), but only
+    -- the cheap Ctrl check unless Ctrl is held or a row is showing it.
+    frame:SetScript("OnUpdate", function()
+        BestPanel.UpdateExact()
+    end)
+    frame:HookScript("OnHide", function()
+        exactRecipe = nil
+    end)
+end
+
+-- Which row, if any, should show the exact recipe: the one under the mouse
+-- while Ctrl is held. Redraws when that changes.
+function BestPanel.UpdateExact()
+    local recipeID
+    if IsControlKeyDown() and frame.scroll:IsShown() and frame.scroll:IsMouseOver() then
+        for _, row in ipairs(rows) do
+            if row.entry and row.area:IsMouseOver() then
+                recipeID = row.entry.recipe.recipeID
+                break
+            end
+        end
+    end
+    if recipeID ~= exactRecipe then
+        exactRecipe = recipeID
+        BestPanel.Refresh()
+    end
 end
 
 -- Lays the columns out to fit the entries listed (Columns.lua), and places
@@ -1157,7 +1204,18 @@ local function Refresh()
             ranked[#ranked + 1] = entry
         end
     end
-    LayOutColumns(ranked)
+    -- What each row shows: its entry, or with Ctrl held on it, the exact
+    -- recipe's. Only the numbers change: the row keeps its place, and the
+    -- filters still go by the cheapest route.
+    local shownEntries = {}
+    for index, entry in ipairs(ranked) do
+        if entry.recipe.recipeID == exactRecipe then
+            shownEntries[index] = BestCrafts.Exact(entry.recipe, tab, BestPanel.Refresh)
+        else
+            shownEntries[index] = entry
+        end
+    end
+    LayOutColumns(shownEntries)
     -- How many favorites lead the list, while there are others after them
     -- to set them apart from (nil otherwise).
     local favorites = 0
@@ -1169,10 +1227,13 @@ local function Refresh()
     if favorites == 0 or favorites == #ranked then
         favorites = nil
     end
-    for index, entry in ipairs(ranked) do
+    for index, ranking in ipairs(ranked) do
+        local entry = shownEntries[index]
         local row = GetRow(index, RowTop(index, favorites))
         local reason
-        row.left:SetText(ItemLabel(entry.recipe.item, entry.skillUp))
+        local label = ItemLabel(entry.recipe.item, ranking.skillUp)
+        row.left:SetText(entry.exact and (label .. " " .. Gray(L.QUEUED_EXACT_MARK)) or label)
+        row.entry = ranking
         local queued = Queued(entry.recipe.recipeID)
         row.queued:SetText(Count(queued))
         row.auctions:SetText(Count(Auctions.Count(entry.recipe.item)))
@@ -1217,14 +1278,15 @@ local function Refresh()
         row.favorite.recipe = entry.recipe
         ShowStar(row)
         row.favorite:Show()
-        row.queue:SetScript("OnClick", function() QueueRecipe(entry) end)
+        row.queue:SetScript("OnClick", function() QueueRecipe(ranking) end)
         row.queue:Show()
-        row.unqueue:SetScript("OnClick", function() UnqueueRecipe(entry) end)
+        row.unqueue:SetScript("OnClick", function() UnqueueRecipe(ranking) end)
         row.unqueue:SetEnabled(queued > 0)
         row.unqueue:Show()
     end
     for index = #ranked + 1, #rows do
         local row = rows[index]
+        row.entry = nil
         row.left:Hide()
         row.investment:Hide()
         row.right:Hide()

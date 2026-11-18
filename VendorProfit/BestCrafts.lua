@@ -134,6 +134,50 @@ local function FirstUnpriced(children)
     end
 end
 
+-- One recipe priced for ranking: { recipe, cost, route, profit or
+-- unpriced } (see Rank), and whether its item info is still loading. exact:
+-- the recipe as it is, its reagents bought, never crafted (as Auctionator
+-- prices it and the exact Queue button queues it), instead of the cheapest
+-- route.
+local function Price(recipe, by, onLoad, exact)
+    local route = Route.ForRecipe(recipe.item, recipe.reagents, Prices, exact)
+    local cost = math.floor(route.cost + 0.5)
+    local entry = { recipe = recipe, cost = cost, route = route, exact = exact }
+    local loading = false
+    if route.missing then
+        entry.unpriced = { itemID = FirstUnpriced(route.children) }
+    elseif by == "vendor" then
+        local sellPrice = select(11, C_Item.GetItemInfo(recipe.item))
+        if sellPrice == nil then
+            loading = true
+            if onLoad then
+                VendorProfit.RedrawWhenLoaded(recipe.item, onLoad)
+            end
+            entry.unpriced = { output = true }
+        elseif sellPrice > 0 then
+            entry.profit = sellPrice * recipe.count - cost
+        else
+            entry.unpriced = { output = true }
+        end
+    else
+        local _, auction = Prices(recipe.item)
+        if auction then
+            entry.profit = math.floor(auction * recipe.count * VendorProfit.GetAfterAHCut()) - cost
+        else
+            entry.unpriced = { output = true }
+        end
+    end
+    if entry.profit then
+        entry.roi = cost > 0 and entry.profit / cost or nil
+    end
+    return entry, loading
+end
+
+-- A recipe priced as it is (see Price): Best Crafts' Ctrl view of a row.
+function BestCrafts.Exact(recipe, by, onLoad)
+    return (Price(recipe, by, onLoad, true))
+end
+
 -- Ranks every saved recipe of one or more professions (a key or a list)
 -- together. by = "vendor" or "auction".
 -- Returns a list of { recipe, profit, cost, route } best first, then the
@@ -146,32 +190,8 @@ end
 function BestCrafts.Rank(professions, by, onLoad)
     local ranked, unranked, loading = {}, {}, false
     for _, recipe in ipairs(RecipesOf(professions)) do
-        local route = Route.ForRecipe(recipe.item, recipe.reagents, Prices)
-        local cost = math.floor(route.cost + 0.5)
-        local entry = { recipe = recipe, cost = cost, route = route }
-        if route.missing then
-            entry.unpriced = { itemID = FirstUnpriced(route.children) }
-        elseif by == "vendor" then
-            local sellPrice = select(11, C_Item.GetItemInfo(recipe.item))
-            if sellPrice == nil then
-                loading = true
-                if onLoad then
-                    VendorProfit.RedrawWhenLoaded(recipe.item, onLoad)
-                end
-                entry.unpriced = { output = true }
-            elseif sellPrice > 0 then
-                entry.profit = sellPrice * recipe.count - cost
-            else
-                entry.unpriced = { output = true }
-            end
-        else
-            local _, auction = Prices(recipe.item)
-            if auction then
-                entry.profit = math.floor(auction * recipe.count * VendorProfit.GetAfterAHCut()) - cost
-            else
-                entry.unpriced = { output = true }
-            end
-        end
+        local entry, itemLoading = Price(recipe, by, onLoad)
+        loading = loading or itemLoading
         if entry.profit then
             ranked[#ranked + 1] = entry
         else
