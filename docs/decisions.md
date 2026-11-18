@@ -134,10 +134,14 @@ time" route mode).
   professions: / colors as last seen."): the game's menu doesn't wrap and is
   as wide as its widest line, and a one-line note made it far too wide.
 
-- **Favorites** (2026-11-18): a star left of the row's - and + buttons
-  (first tried before the name, in its own column: it pushed every name
-  in from the window's left edge for the sake of a few favorites, and
-  looked misaligned); favorites are listed
+- **Favorites** (2026-11-18): a star before the name. First in a column of
+  its own (a column gap before the names, out past the heading): it looked
+  misaligned. Then by the - and + buttons: Josh preferred it on the left.
+  Now it's the first thing in the name column, where the "Recipe" heading
+  starts, 4px before the name and centered on its line; every name is
+  indented by the star's room whether its star shows or not, so the rows
+  line up. A gold line (the Shopping List divider's color) between the
+  favorites and the rest, only while there are both. Favorites are listed
   first, each group (favorites, then the rest) sorted by the chosen column,
   unpriced favorites after priced ones but above everything else. A bare
   star, not a red icon button: a third button on every row next to - and +
@@ -148,8 +152,8 @@ time" route mode).
   when off; the star raid marker if the client lacks that atlas. Saved per
   character by recipe ID (`bestFavorites`), like the filters. Filters and
   search still apply: favorites go first, they aren't exempt.
-- **Columns**: Recipe, Investment, Profit, ROI, 7d, AH, Q, then the
-  favorite star, **-** and **+**.
+- **Columns**: Recipe (the favorite star first), Investment, Profit, ROI,
+  7d, AH, Q, then **-** and **+**.
   No rank numbers (they took space and meant little once you sort and
   filter). Clicking a recipe's name shows it in the professions window (only
   while it's open); the magnifying-glass button was removed for that.

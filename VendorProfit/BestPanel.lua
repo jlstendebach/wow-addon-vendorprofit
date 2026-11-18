@@ -46,10 +46,9 @@ local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
 local LIST_WIDTH = BASE_LIST_WIDTH
 local ICON_BUTTON_WIDTH = 22
 -- The columns, by key (Columns.lua), laid out for what's listed on each
--- refresh: the recipe name, Investment, Profit, ROI, 7d (sold at auction
+-- refresh: the recipe name (the favorite star inside it, first), Investment, Profit, ROI, 7d (sold at auction
 -- in the last 7 days, in orange for hot ones), AH (your auctions of it), Q
--- (crafts queued), then the favorite star, - and + (unqueue and queue a
--- craft). The
+-- (crafts queued), then - and + (unqueue and queue a craft). The
 -- layout key changes only when the layout does.
 local col, layoutKey
 -- This tab's entry in the window (Panel.AddPage), for the width.
@@ -147,7 +146,11 @@ end
 -- does), faded, so 14 empty stars don't clutter the list.
 local STAR_ATLAS = "auctionhouse-icon-favorite"
 local STAR_SIZE = 14
-local STAR_GAP = 6
+-- The star is the first thing in the name column, where the heading starts,
+-- and the names follow it: every row's left edge lines up with the heading
+-- and the window, whether its star shows or not.
+local STAR_GAP = 4
+local NAME_INDENT = STAR_SIZE + STAR_GAP
 local function ShowStar(row)
     local star = row.favorite
     local favorite = star.recipe ~= nil and IsFavorite(star.recipe.recipeID)
@@ -250,11 +253,11 @@ local function GetRow(index)
             ShowStar(row)
             GameTooltip:Hide()
         end)
-        -- The favorite star, with the row's buttons, so the names line up
-        -- with the window's left edge (before the name, it pushed every
-        -- name in for the few favorites). Hidden by alpha, not Hide, so it
-        -- still hears the mouse and shows itself.
+        -- The favorite star, before the name, centered on its line of text.
+        -- Hidden by alpha, not Hide, so it still hears the mouse and shows
+        -- itself.
         row.favorite = CreateFrame("Button", nil, list)
+        row.favorite:SetPoint("RIGHT", row.left, "LEFT", -STAR_GAP, 0)
         row.favorite:SetSize(STAR_SIZE, STAR_SIZE)
         row.favorite.icon = row.favorite:CreateTexture(nil, "ARTWORK")
         row.favorite.icon:SetAllPoints(row.favorite)
@@ -303,7 +306,6 @@ local function GetRow(index)
         row.unqueue = SmallButton(list, "-", ICON_BUTTON_WIDTH)
         row.unqueue:SetPoint("RIGHT", row.queue, "LEFT", -4, 0)
         Tooltip(row.unqueue, L.BEST_UNQUEUE_HELP)
-        row.favorite:SetPoint("RIGHT", row.unqueue, "LEFT", -STAR_GAP, 0)
         rows[index] = row
     end
     -- Placed again only when the columns change.
@@ -315,12 +317,12 @@ local function GetRow(index)
             region:ClearAllPoints()
             region:SetPoint("TOPRIGHT", list, "TOPRIGHT", col[key].right, top - 4)
         end
-        row.left:SetWidth(col.name.width)
+        row.left:SetWidth(col.name.width - NAME_INDENT)
         row.left:ClearAllPoints()
-        row.left:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left, top - 4)
+        row.left:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left + NAME_INDENT, top - 4)
         row.hit:ClearAllPoints()
-        row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left, top)
-        row.hit:SetSize(col.name.width, ROW_HEIGHT)
+        row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left + NAME_INDENT, top)
+        row.hit:SetSize(col.name.width - NAME_INDENT, ROW_HEIGHT)
         At(row.investment, "investment")
         At(row.right, "profit")
         At(row.roi, "roi")
@@ -900,6 +902,12 @@ local function Create(page)
     frame.list = CreateFrame("Frame", nil, frame.scroll)
     frame.list:SetSize(LIST_WIDTH, ROW_HEIGHT)
     frame.scroll:SetScrollChild(frame.list)
+    -- A line between the favorites and the rest, in the gold of the
+    -- Shopping List's dividers.
+    frame.favoritesDivider = frame.list:CreateTexture(nil, "ARTWORK")
+    frame.favoritesDivider:SetColorTexture(1, 0.82, 0, 0.35)
+    frame.favoritesDivider:SetHeight(1)
+    frame.favoritesDivider:Hide()
 
     frame.status = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.status:SetJustifyH("LEFT")
@@ -930,7 +938,7 @@ local function LayOutColumns(ranked)
         { key = "sold", heading = L.BEST_SOLD_HEADING, sorts = true, samples = Columns.Count(extents, "sold") },
         { key = "auctions", heading = L.BEST_AUCTIONS_HEADING, sorts = true, samples = Columns.Count(extents, "auctions") },
         { key = "queued", heading = L.BEST_QUEUED_HEADING, sorts = true, samples = Columns.Count(extents, "queued") },
-        { key = "buttons", width = STAR_SIZE + STAR_GAP + 2 * ICON_BUTTON_WIDTH + 4 },
+        { key = "buttons", width = 2 * ICON_BUTTON_WIDTH + 4 },
     })
     if key == layoutKey then
         return
@@ -1126,6 +1134,23 @@ local function Refresh()
         row.favorite:Hide()
         row.queue:Hide()
         row.unqueue:Hide()
+    end
+
+    -- The divider, under the last favorite, while there are others below.
+    local favorites = 0
+    for _, entry in ipairs(ranked) do
+        if IsFavorite(entry.recipe.recipeID) then
+            favorites = favorites + 1
+        end
+    end
+    local divider = frame.favoritesDivider
+    divider:ClearAllPoints()
+    if favorites > 0 and favorites < #ranked then
+        divider:SetPoint("TOPLEFT", frame.list, "TOPLEFT", 0, -favorites * ROW_HEIGHT)
+        divider:SetPoint("TOPRIGHT", frame.list, "TOPRIGHT", 0, -favorites * ROW_HEIGHT)
+        divider:Show()
+    else
+        divider:Hide()
     end
 
     -- The list shows up to VISIBLE_ROWS at a time and scrolls for the rest,
