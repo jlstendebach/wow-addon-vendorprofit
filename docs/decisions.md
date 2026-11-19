@@ -191,6 +191,11 @@ time" route mode).
   minimum counts separate auction sales, not items, so one buyer of a
   stack can't make an item hot. Revisit per item if this still feels
   wrong in use.
+- **Row highlight** (2026-11-19): the row under the mouse is lit with the
+  game's list highlight (the quest log's UI-QuestTitleHighlight, added),
+  drawn on the list under the text and buttons. Found by the same
+  every-frame check as Ctrl (the number columns don't take the mouse, so
+  there's no OnEnter for most of a row), only over the rows in view.
 - **Cheapest / Exact buttons** (2026-11-18): the list's pricing mode, a
   second pair of red toggle buttons beside Auction / Vendor (how you make
   it, beside how you sell it: they change the same columns), the search

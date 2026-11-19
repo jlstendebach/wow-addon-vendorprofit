@@ -2539,6 +2539,15 @@ exact = lambda i: ev("VendorProfit.BestCrafts.PriceRecipe(%s.entry.recipe, 'vend
 cheapest = [ev(ROW(i) + ".investment:GetText()") for i in (1, 2, 3)]
 mouse_on(2)
 check("Ctrl not held: nothing changes", [ev(ROW(i) + ".investment:GetText()") for i in (1, 2, 3)] == cheapest)
+lit = lambda: [i for i in (1, 2, 3) if ev(ROW(i) + ".highlight:IsShown()")]
+check("the row under the mouse is lit, with the game's list highlight, under its text and buttons",
+      lit() == [2] and ev(ROW(2) + ".highlight.__texture") == "Interface\\QuestFrame\\UI-QuestTitleHighlight"
+      and ev(ROW(2) + ".highlight.__blend") == "ADD" and ev(ROW(2) + ".highlight.__parent == " + B + ".list"))
+mouse_on(3)
+check("...the light follows the mouse", lit() == [3])
+run(B + '.scroll.__mouseOver = false; ' + B + '.__scripts.OnUpdate(' + B + ')')
+check("...and goes off the list with it", lit() == [])
+run(B + '.scroll.__mouseOver = nil')
 run('__stub.ctrl = true')
 mouse_on(1)
 e = exact(1)
