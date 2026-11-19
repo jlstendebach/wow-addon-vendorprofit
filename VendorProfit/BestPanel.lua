@@ -51,7 +51,7 @@ local ICON_BUTTON_WIDTH = 22
 local GRIP_ROOM = 24
 -- The minimum boxes' widths: 4 digits or 2, each with its unit inside.
 BestPanel.MIN_BOX_WIDE = 47
-BestPanel.MIN_BOX_NARROW = 33
+BestPanel.MIN_BOX_NARROW = 36
 -- The columns, by key (Columns.lua), laid out for what's listed on each
 -- refresh: the recipe name (the favorite star inside it, first),
 -- Investment, Profit, Profit/hr, ROI, 7d (sold at auction in the last 7
@@ -676,15 +676,21 @@ SetFilter = function(key, value)
     BestPanel.Refresh()
 end
 
--- The minimum profit per craft (copper) and ROI (a whole percentage) typed
--- into the boxes above the list, saved per character; 0 for none. They're
--- boxes rather than Filter menu entries because they take exact amounts.
+-- The minimum profit per craft and an hour (copper, to the silver: there
+-- are no copper boxes) and ROI (a whole percentage) typed into the boxes
+-- under the list, saved per character; 0 for none. They're boxes rather
+-- than Filter menu entries because they take exact amounts.
 -- Returns the minimum profit, ROI and profit an hour (copper).
 local function Minimums()
     local db = VendorProfitCharDB
     local saved = db and type(db.bestMinimums) == "table" and db.bestMinimums or {}
-    return saved.profit or 0, saved.roi or 0, saved.perHour or 0
+    -- Copper saved before the copper box went is left out, as the boxes
+    -- can't show it.
+    local profit, perHour = saved.profit or 0, saved.perHour or 0
+    return profit - profit % 100, saved.roi or 0, perHour - perHour % 100
 end
+
+BestPanel.Minimums = Minimums
 
 local function SetMinimums(profit, roi, perHour)
     VendorProfitCharDB = VendorProfitCharDB or {}
@@ -709,7 +715,6 @@ local function ShowMinimums()
     local boxes = frame.minimums
     boxes.gold:SetText(tostring(math.floor(profit / 10000)))
     boxes.silver:SetText(tostring(math.floor(profit / 100) % 100))
-    boxes.copper:SetText(tostring(profit % 100))
     boxes.hourGold:SetText(tostring(math.floor(perHour / 10000)))
     boxes.hourSilver:SetText(tostring(math.floor(perHour / 100) % 100))
     boxes.roi:SetText(tostring(roi))
@@ -919,10 +924,10 @@ local function Create(page)
     search:HookScript("OnEnterPressed", function(self) self:ClearFocus() end)
     frame.search = search
 
-    -- Minimums, on a row under the list (placed in Refresh): profit in
-    -- gold, silver and copper boxes, and ROI, each a number box like the
-    -- search box with its unit inside. 0 is no minimum. Changes apply as you
-    -- type.
+    -- Minimums, on a row under the list (placed in Refresh): profit and
+    -- profit an hour in gold and silver boxes (copper is noise next to the
+    -- rest), and ROI, each a number box like the search box with its unit
+    -- inside. 0 is no minimum. Changes apply as you type.
     local row = CreateFrame("Frame", nil, frame)
     row:SetSize(WIDTH - 2 * PADDING, MINIMUMS_HEIGHT)
     frame.minimums = row
@@ -931,7 +936,7 @@ local function Create(page)
             local function Number(box)
                 return math.floor(tonumber(row[box]:GetText() or "") or 0)
             end
-            local profit = Number("gold") * 10000 + Number("silver") * 100 + Number("copper")
+            local profit = Number("gold") * 10000 + Number("silver") * 100
             local perHour = Number("hourGold") * 10000 + Number("hourSilver") * 100
             SetMinimums(profit, Number("roi"), perHour)
         end
@@ -997,14 +1002,13 @@ local function Create(page)
     local COIN = "Interface\\MoneyFrame\\UI-%sIcon"
     -- Up to 9,999 gold and 9,999%. Boxes are as wide as their digits and
     -- unit need (4 digits, or 2, then the unit's space), and nearly touching
-    -- (each border reaches 5px outside it). They were 52 and 36, which left
-    -- a visible gap between the digits and the unit.
+    -- (each border reaches 5px outside it). 4-digit boxes were 52, which
+    -- left a gap before the unit; 2-digit ones at 33 scrolled "99" out of
+    -- sight, so they stay 36.
     local WIDE, NARROW = BestPanel.MIN_BOX_WIDE, BestPanel.MIN_BOX_NARROW
     local gold = Box("gold", Text(nil, L.BEST_MIN_PROFIT), 10, WIDE, 4, { texture = COIN:format("Gold") }, L.BEST_MIN_PROFIT_HELP)
     local silver = Box("silver", gold, 9, NARROW, 2, { texture = COIN:format("Silver") }, L.BEST_MIN_PROFIT_HELP)
-    local copper = Box("copper", silver, 9, NARROW, 2, { texture = COIN:format("Copper") }, L.BEST_MIN_PROFIT_HELP)
-    -- Profit an hour in gold and silver: copper is noise at an hour's scale.
-    local hourGold = Box("hourGold", Text(copper, L.BEST_MIN_PER_HOUR, 24), 10, WIDE, 4, { texture = COIN:format("Gold") },
+    local hourGold = Box("hourGold", Text(silver, L.BEST_MIN_PER_HOUR, 24), 10, WIDE, 4, { texture = COIN:format("Gold") },
         L.BEST_MIN_PER_HOUR_HELP)
     local hourSilver = Box("hourSilver", hourGold, 9, NARROW, 2, { texture = COIN:format("Silver") }, L.BEST_MIN_PER_HOUR_HELP)
     Box("roi", Text(hourSilver, L.BEST_MIN_ROI, 24), 10, WIDE, 4, { text = "%" }, L.BEST_MIN_ROI_HELP)
@@ -1012,7 +1016,7 @@ local function Create(page)
     -- it), however narrow the columns are.
     local rowWidth = 0
     for _, part in ipairs({
-        { Columns.Measure(L.BEST_MIN_PROFIT, "GameFontNormalSmall"), 10, WIDE, 9, NARROW, 9, NARROW },
+        { Columns.Measure(L.BEST_MIN_PROFIT, "GameFontNormalSmall"), 10, WIDE, 9, NARROW },
         { 24, Columns.Measure(L.BEST_MIN_PER_HOUR, "GameFontNormalSmall"), 10, WIDE, 9, NARROW },
         { 24, Columns.Measure(L.BEST_MIN_ROI, "GameFontNormalSmall"), 10, WIDE },
     }) do

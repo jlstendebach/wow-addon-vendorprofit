@@ -119,9 +119,11 @@ time" route mode).
   (copper is noise at an hour's scale, and the row was getting long);
   recipes with no Profit/hr can't meet it. The window's minimum width now
   follows the row (labels measured, plus room for the size grip), so the
-  boxes never run past the window when the columns are narrow. Boxes
-  narrowed then from 52 and 36 to 47 and 33: there was a visible gap
-  between the digits and the unit.
+  boxes never run past the window when the columns are narrow. The
+  4-digit boxes narrowed from 52 to 47 (a gap showed before the unit);
+  2-digit ones tried at 33 scrolled "99" out of sight in game, so they
+  stay 36. Min profit's copper box was dropped too (Josh): copper is
+  noise next to the rest; copper saved before is left out.
 - **Every profession, window closed**: Best Crafts lists the saved recipes of
   every profession you've opened (each is saved when its window opens), ranked
   together: gold is gold whichever profession made it, and the cross-profession

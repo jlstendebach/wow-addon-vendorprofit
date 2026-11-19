@@ -2297,38 +2297,40 @@ check("cleared: everything again", len(best()) == 5)
 # the list, above the notes.
 M = B + ".minimums"
 shown = lambda: [l.split(" | ")[0].split("|t ")[-1] for l in best()]
-check("minimums on the window's bottom row, the notes just above it: gold (up to 9999), silver, copper and ROI boxes, 0 to start",
-      [ev(M + "." + k + ":GetText()") for k in ["gold", "silver", "copper", "roi"]] == ["0", "0", "0", "0"]
+check("minimums on the window's bottom row, the notes just above it: gold (up to 9999), silver and ROI boxes, 0 to start; no copper",
+      [ev(M + "." + k + ":GetText()") for k in ["gold", "silver", "roi"]] == ["0", "0", "0"]
+      and ev(M + ".copper") is None
       and ev(M + ".roi.__numeric") and ev(M + ".silver.__maxLetters") == 2
       and ev(M + ".gold.__maxLetters") == 4
       and ev(M + ".__point[1]") == "BOTTOMLEFT" and ev(M + ".__point[2] == " + B)
       and ev(B + ".status.__point[2] == " + M) and ev(B + ".status.__point[3]") == "TOPLEFT")
 check("...each with its unit inside at the right (coin icons, %), the text stopping short of it, like the search box",
       all(ev(M + "." + k + ".unit.__point[2] == " + M + "." + k) and ev(M + "." + k + ".__insets[2]") >= 15
-          for k in ["gold", "silver", "copper", "roi"])
+          for k in ["gold", "silver", "roi"])
       and "GoldIcon" in ev(M + ".gold.unit.__texture") and ev(M + ".roi.unit:GetText()") == "%")
-run(M + '.copper:Type("88")')
-check("min. profit 88c: only recipes making at least that per craft; unpriced ones can't meet it", shown() == ["Rough Bronze Cuirass"]
-      and ev("VendorProfitCharDB.bestMinimums.profit") == 88 and ev(B + ".filterReset:IsEnabled()"))
-run(M + '.copper:Type("87")')
-check("...87c: exactly 87c passes", shown() == ["Rough Bronze Cuirass", "Rough Bronze Shoulders"])
+# Profits: the cuirass 1s 62c, the shoulders 87c.
 run(M + '.silver:Type("1")')
-check("...1s 87c, silver and copper together: none", shown() == [])
-run(M + '.silver:Type(""); ' + M + '.copper:Type("0")')
+check("min. profit 1s: only recipes making at least that per craft; unpriced ones can't meet it", shown() == ["Rough Bronze Cuirass"]
+      and ev("VendorProfitCharDB.bestMinimums.profit") == 100 and ev(B + ".filterReset:IsEnabled()"))
+run(M + '.silver:Type("2")')
+check("...2s: none", shown() == [])
+run(M + '.gold:Type("1"); ' + M + '.silver:Type("0")')
+check("...1g, gold and silver together: none", shown() == [] and ev("VendorProfitCharDB.bestMinimums.profit") == 10000)
+run(M + '.gold:Type("")')
 check("...an empty box counts as 0, and 0 is no minimum", len(best()) == 5 and ev("VendorProfitCharDB.bestMinimums") is None)
-run(M + '.silver.__scripts.OnEditFocusLost(' + M + '.silver)')
-check("...left empty, a box goes back to 0", ev(M + ".silver:GetText()") == "0")
+run(M + '.gold.__scripts.OnEditFocusLost(' + M + '.gold)')
+check("...left empty, a box goes back to 0", ev(M + ".gold:GetText()") == "0")
 run(M + '.roi:Type("37")')
 check("min. ROI 37%: compared as shown, a whole percentage (162 / 438 shows 37%)", shown() == ["Rough Bronze Cuirass"]
       and ev("VendorProfitCharDB.bestMinimums.roi") == 37)
 run(M + '.roi:Type("38")')
 check("...38%: none", shown() == [])
-run(M + '.copper:Type("50"); ' + M + '.roi:Type("30")')
+run(M + '.silver:Type("1"); ' + M + '.roi:Type("30")')
 check("both at once", shown() == ["Rough Bronze Cuirass"])
-run(M + '.copper:Type("0"); ' + M + '.roi:Type("0")')
+run(M + '.silver:Type("0"); ' + M + '.roi:Type("0")')
 # Min profit/hr: gold and silver boxes between Min profit and Min ROI.
 check("Min profit/hr: gold and silver boxes, after Min profit and before Min ROI",
-      ev(M + ".hourGold.__point[2] ~= " + M + ".copper") and ev(M + ".hourSilver.__point[2] == " + M + ".hourGold")
+      ev(M + ".hourGold.__point[2] ~= " + M + ".silver") and ev(M + ".hourSilver.__point[2] == " + M + ".hourGold")
       and ev(M + ".roi.__point[2] ~= " + M + ".hourSilver")
       and "GoldIcon" in ev(M + ".hourGold.unit.__texture") and "SilverIcon" in ev(M + ".hourSilver.unit.__texture"))
 # Cast times for the crafts and the smelting on their routes: Profit/hr for each.
@@ -2347,22 +2349,22 @@ run('__stub.castTimes = {}; __stub.PricesChanged()')
 run(B + '.filterReset:Click()')
 check("the red X clears the minimums too, boxes back to 0 (with the other filters: Mining ticked again)",
       len(best()) == 8 and ev("VendorProfitCharDB.bestMinimums") is None
-      and [ev(M + "." + k + ":GetText()") for k in ["gold", "silver", "copper", "hourGold", "hourSilver", "roi"]] == ["0"] * 6
+      and [ev(M + "." + k + ":GetText()") for k in ["gold", "silver", "hourGold", "hourSilver", "roi"]] == ["0"] * 5
       and not ev(B + ".filterReset:IsEnabled()"))
 run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
 run_m, ev_m = route_client("VendorProfitCharDB = { bestMinimums = { profit = 12345, roi = 25, perHour = 123400 } }")
 run_m('VendorProfit.Panel.Show("best")')
-check("minimums are saved per character, shown in their boxes next time",
-      [ev_m("VendorProfit.BestPanel.Frame().minimums." + k + ":GetText()") for k in ["gold", "silver", "copper", "hourGold", "hourSilver", "roi"]]
-      == ["1", "23", "45", "12", "34", "25"])
+check("minimums are saved per character, shown in their boxes next time (copper saved before the box went: left out)",
+      [ev_m("VendorProfit.BestPanel.Frame().minimums." + k + ":GetText()") for k in ["gold", "silver", "hourGold", "hourSilver", "roi"]]
+      == ["1", "23", "12", "34", "25"] and ev_m("({ (function() return VendorProfit.BestPanel.Minimums() end)() })[1]") == 12300)
 check("the window is wide enough for the bottom row and the size grip, however narrow the columns",
       ev_m("VendorProfitPanel:GetWidth()") - 2 * 16 >=
-      ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_PROFIT, "GameFontNormalSmall")') + 10 + 47 + 9 + 33 + 9 + 33
-      + 24 + ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_PER_HOUR, "GameFontNormalSmall")') + 10 + 47 + 9 + 33
+      ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_PROFIT, "GameFontNormalSmall")') + 10 + 47 + 9 + 36
+      + 24 + ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_PER_HOUR, "GameFontNormalSmall")') + 10 + 47 + 9 + 36
       + 24 + ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_ROI, "GameFontNormalSmall")') + 10 + 47 + 16)
 check("the minimum boxes as wide as 4 digits (or 2) and their unit",
       ev_m("VendorProfit.BestPanel.Frame().minimums.gold:GetWidth()") == 47
-      and ev_m("VendorProfit.BestPanel.Frame().minimums.silver:GetWidth()") == 33
+      and ev_m("VendorProfit.BestPanel.Frame().minimums.silver:GetWidth()") == 36
       and ev_m("VendorProfit.BestPanel.Frame().minimums.roi:GetWidth()") == 47)
 # Filters: profitable only, and skill-up colors, from the game's filter dropdown.
 run('__stub.recipes[2670].difficulty = 0; __stub.recipes[3328].difficulty = 1; __stub.recipes[2671].difficulty = 2; __stub.recipes[9102].difficulty = 3')
