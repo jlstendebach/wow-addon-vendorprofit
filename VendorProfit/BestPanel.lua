@@ -92,6 +92,8 @@ end
 -- The recipe whose row is shown the other way (cheapest route or exact
 -- recipe) while Ctrl is held with the mouse on it; nil for none.
 local exactRecipe
+-- The row lit as the one under the mouse.
+local litRow
 
 -- The item's icon and name, the name in its skill-up color if given (as the
 -- professions window colors its list).
@@ -402,6 +404,12 @@ local function GetRow(index, top)
         -- The whole row, to tell which row the mouse is on (for Ctrl). Not
         -- mouse-enabled, so the name, star and buttons still get the mouse.
         row.area = CreateFrame("Frame", nil, list)
+        -- Lit while the mouse is on the row, with the game's own list
+        -- highlight (the quest log's), under the text and buttons.
+        row.highlight = list:CreateTexture(nil, "BACKGROUND")
+        row.highlight:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+        row.highlight:SetBlendMode("ADD")
+        row.highlight:Hide()
 
         -- Queue: a plus, at the row's end; unqueue: a minus, before it.
         row.queue = SmallButton(list, "+", ICON_BUTTON_WIDTH)
@@ -431,6 +439,9 @@ local function GetRow(index, top)
         row.area:ClearAllPoints()
         row.area:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top)
         row.area:SetSize(LIST_WIDTH, ROW_HEIGHT)
+        row.highlight:ClearAllPoints()
+        row.highlight:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top)
+        row.highlight:SetSize(LIST_WIDTH, ROW_HEIGHT)
         At(row.investment, "investment")
         At(row.right, "profit")
         At(row.perHour, "perHour")
@@ -1144,29 +1155,51 @@ local function Create(page)
     Tooltip(grip, L.BEST_RESIZE_HELP)
     frame.grip = grip
 
-    -- Ctrl on a row shows it as the exact recipe. Checked every frame while
-    -- the tab is up (no event says the mouse moved between rows), but only
-    -- the cheap Ctrl check unless Ctrl is held or a row is showing it.
+    -- The row under the mouse: lit, and with Ctrl shown the other way
+    -- (UpdateHover, every frame while the tab is up).
     frame:SetScript("OnUpdate", function()
-        BestPanel.UpdateExact()
+        BestPanel.UpdateHover()
     end)
     frame:HookScript("OnHide", function()
         exactRecipe = nil
+        if litRow then
+            litRow.highlight:Hide()
+            litRow = nil
+        end
     end)
 end
 
--- Which row, if any, should show the exact recipe: the one under the mouse
--- while Ctrl is held. Redraws when that changes.
-function BestPanel.UpdateExact()
-    local recipeID
-    if IsControlKeyDown() and frame.scroll:IsShown() and frame.scroll:IsMouseOver() then
-        for _, row in ipairs(rows) do
-            if row.entry and row.area:IsMouseOver() then
-                recipeID = row.entry.recipe.recipeID
-                break
-            end
+-- The row under the mouse, if any. Only the rows in view are checked
+-- (this runs every frame, and a long list has hundreds of rows).
+local function HoveredRow()
+    if not (frame.scroll:IsShown() and frame.scroll:IsMouseOver()) then
+        return nil
+    end
+    local first = math.max(1, math.floor(frame.scroll:GetVerticalScroll() / ROW_HEIGHT))
+    for index = first, math.min(#rows, first + VisibleRows() + 1) do
+        local row = rows[index]
+        if row.entry and row.area:IsMouseOver() then
+            return row
         end
     end
+end
+
+-- Lights the row under the mouse, and with Ctrl held shows it the other
+-- way (redrawing when that changes). No event says the mouse moved
+-- between rows over the number columns (they don't take the mouse), so
+-- it's checked every frame.
+function BestPanel.UpdateHover()
+    local row = HoveredRow()
+    if row ~= litRow then
+        if litRow then
+            litRow.highlight:Hide()
+        end
+        if row then
+            row.highlight:Show()
+        end
+        litRow = row
+    end
+    local recipeID = IsControlKeyDown() and row and row.entry.recipe.recipeID or nil
     if recipeID ~= exactRecipe then
         exactRecipe = recipeID
         BestPanel.Refresh()
@@ -1423,6 +1456,10 @@ local function Refresh()
     for index = #ranked + 1, #rows do
         local row = rows[index]
         row.entry = nil
+        row.highlight:Hide()
+        if litRow == row then
+            litRow = nil
+        end
         row.left:Hide()
         row.investment:Hide()
         row.right:Hide()
