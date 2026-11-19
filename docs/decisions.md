@@ -115,6 +115,11 @@ time" route mode).
   they stay there when the window is taller than the list needs. Applied as you type; ROI compared as shown (whole
   percent); unpriced recipes hidden while either is set; the red X clears
   them with the filters. Confirmed working in game (2026-11-16).
+  **Min profit/hr** (2026-11-18) between them: gold and silver boxes only
+  (copper is noise at an hour's scale, and the row was getting long);
+  recipes with no Profit/hr can't meet it. The window's minimum width now
+  follows the row (labels measured, plus room for the size grip), so the
+  boxes never run past the window when the columns are narrow.
 - **Every profession, window closed**: Best Crafts lists the saved recipes of
   every profession you've opened (each is saved when its window opens), ranked
   together: gold is gold whichever profession made it, and the cross-profession

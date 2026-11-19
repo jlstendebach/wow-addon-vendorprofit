@@ -47,6 +47,8 @@ local SCROLLBAR_WIDTH = 24
 local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
 local LIST_WIDTH = BASE_LIST_WIDTH
 local ICON_BUTTON_WIDTH = 22
+-- Room for the size grip at the end of the bottom row (16, and a gap).
+local GRIP_ROOM = 24
 -- The columns, by key (Columns.lua), laid out for what's listed on each
 -- refresh: the recipe name (the favorite star inside it, first),
 -- Investment, Profit, Profit/hr, ROI, 7d (sold at auction in the last 7
@@ -674,16 +676,21 @@ end
 -- The minimum profit per craft (copper) and ROI (a whole percentage) typed
 -- into the boxes above the list, saved per character; 0 for none. They're
 -- boxes rather than Filter menu entries because they take exact amounts.
+-- Returns the minimum profit, ROI and profit an hour (copper).
 local function Minimums()
     local db = VendorProfitCharDB
     local saved = db and type(db.bestMinimums) == "table" and db.bestMinimums or {}
-    return saved.profit or 0, saved.roi or 0
+    return saved.profit or 0, saved.roi or 0, saved.perHour or 0
 end
 
-local function SetMinimums(profit, roi)
+local function SetMinimums(profit, roi, perHour)
     VendorProfitCharDB = VendorProfitCharDB or {}
-    if profit > 0 or roi > 0 then
-        VendorProfitCharDB.bestMinimums = { profit = profit > 0 and profit or nil, roi = roi > 0 and roi or nil }
+    if profit > 0 or roi > 0 or perHour > 0 then
+        VendorProfitCharDB.bestMinimums = {
+            profit = profit > 0 and profit or nil,
+            roi = roi > 0 and roi or nil,
+            perHour = perHour > 0 and perHour or nil,
+        }
     else
         VendorProfitCharDB.bestMinimums = nil
     end
@@ -695,11 +702,13 @@ local function ShowMinimums()
     if frame == nil or frame.minimums == nil then
         return
     end
-    local profit, roi = Minimums()
+    local profit, roi, perHour = Minimums()
     local boxes = frame.minimums
     boxes.gold:SetText(tostring(math.floor(profit / 10000)))
     boxes.silver:SetText(tostring(math.floor(profit / 100) % 100))
     boxes.copper:SetText(tostring(profit % 100))
+    boxes.hourGold:SetText(tostring(math.floor(perHour / 10000)))
+    boxes.hourSilver:SetText(tostring(math.floor(perHour / 100) % 100))
     boxes.roi:SetText(tostring(roi))
 end
 
@@ -724,8 +733,12 @@ local function PassesFilters(entry)
     if filters.hot and not IsHot(entry.recipe.item) then
         return false
     end
-    local minProfit, minRoi = Minimums()
+    local minProfit, minRoi, minPerHour = Minimums()
     if minProfit > 0 and not (entry.profit and entry.profit >= minProfit) then
+        return false
+    end
+    -- A recipe with no Profit/hr (no cast time) can't meet it either.
+    if minPerHour > 0 and not (entry.perHour and entry.perHour >= minPerHour) then
         return false
     end
     if minRoi > 0 and not (entry.profit and entry.roi and math.floor(entry.roi * 100 + 0.5) >= minRoi) then
@@ -916,7 +929,8 @@ local function Create(page)
                 return math.floor(tonumber(row[box]:GetText() or "") or 0)
             end
             local profit = Number("gold") * 10000 + Number("silver") * 100 + Number("copper")
-            SetMinimums(profit, Number("roi"))
+            local perHour = Number("hourGold") * 10000 + Number("hourSilver") * 100
+            SetMinimums(profit, Number("roi"), perHour)
         end
     end
     local function Help(region, text)
@@ -983,7 +997,24 @@ local function Create(page)
     local gold = Box("gold", Text(nil, L.BEST_MIN_PROFIT), 10, 52, 4, { texture = COIN:format("Gold") }, L.BEST_MIN_PROFIT_HELP)
     local silver = Box("silver", gold, 9, 36, 2, { texture = COIN:format("Silver") }, L.BEST_MIN_PROFIT_HELP)
     local copper = Box("copper", silver, 9, 36, 2, { texture = COIN:format("Copper") }, L.BEST_MIN_PROFIT_HELP)
-    Box("roi", Text(copper, L.BEST_MIN_ROI, 24), 10, 52, 4, { text = "%" }, L.BEST_MIN_ROI_HELP)
+    -- Profit an hour in gold and silver: copper is noise at an hour's scale.
+    local hourGold = Box("hourGold", Text(copper, L.BEST_MIN_PER_HOUR, 24), 10, 52, 4, { texture = COIN:format("Gold") },
+        L.BEST_MIN_PER_HOUR_HELP)
+    local hourSilver = Box("hourSilver", hourGold, 9, 36, 2, { texture = COIN:format("Silver") }, L.BEST_MIN_PER_HOUR_HELP)
+    Box("roi", Text(hourSilver, L.BEST_MIN_ROI, 24), 10, 52, 4, { text = "%" }, L.BEST_MIN_ROI_HELP)
+    -- The window is at least as wide as the row (and the size grip after
+    -- it), however narrow the columns are.
+    local rowWidth = 0
+    for _, part in ipairs({
+        { Columns.Measure(L.BEST_MIN_PROFIT, "GameFontNormalSmall"), 10, 52, 9, 36, 9, 36 },
+        { 24, Columns.Measure(L.BEST_MIN_PER_HOUR, "GameFontNormalSmall"), 10, 52, 9, 36 },
+        { 24, Columns.Measure(L.BEST_MIN_ROI, "GameFontNormalSmall"), 10, 52 },
+    }) do
+        for _, width in ipairs(part) do
+            rowWidth = rowWidth + width
+        end
+    end
+    BASE_LIST_WIDTH = math.max(BASE_LIST_WIDTH, rowWidth + GRIP_ROOM - SCROLLBAR_WIDTH)
     ShowMinimums()
 
     -- Filter: a button in the page's own style that opens the game's menu
@@ -1200,8 +1231,8 @@ local function Refresh()
         end
         frame.filter:SetText(on > 0 and string.format(L.BEST_FILTER_ON, on) or L.BEST_FILTER)
         -- The X clears the minimums too.
-        local minProfit, minRoi = Minimums()
-        local any = on > 0 or minProfit > 0 or minRoi > 0
+        local minProfit, minRoi, minPerHour = Minimums()
+        local any = on > 0 or minProfit > 0 or minRoi > 0 or minPerHour > 0
         frame.filterReset:SetEnabled(any)
         frame.filterReset.icon:SetDesaturated(not any)
     end
