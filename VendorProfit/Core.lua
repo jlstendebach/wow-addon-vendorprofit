@@ -66,6 +66,11 @@ VendorProfit.L = {
     BEST_TITLE_ALL = "Best Crafts",
     BEST_TAB_VENDOR = "Vendor",
     BEST_TAB_AUCTION = "Auction",
+    BEST_MODE_CHEAPEST = "Cheapest",
+    BEST_MODE_EXACT = "Exact",
+    BEST_MODE_CHEAPEST_HELP = "Price each craft along its cheapest route: its reagents crafted where that's cheaper than buying them.",
+    BEST_MODE_EXACT_HELP = "Price each craft as the exact recipe, as Auctionator does: its reagents bought, never crafted.",
+    BEST_CHEAPEST_MARK = "(cheapest)",
     BEST_RECIPE = "Recipe",
     BEST_ROI = "ROI",
     BEST_SORT_HELP = "Click to sort by this column; again to reverse.",
@@ -73,10 +78,24 @@ VendorProfit.L = {
     BEST_SORT_DOWN = "|TInterface\\Buttons\\Arrow-Down-Up:10:10|t",
     BEST_INVESTMENT = "Investment",
     BEST_PROFIT = "Profit",
-    BEST_QUEUE_HELP = "Adds one craft to your shopping order. Shift-click: five.",
-    BEST_UNQUEUE_HELP = "Removes one craft from your shopping order. Shift-click: five.",
+    BEST_PER_HOUR = "Profit/hr",
+    BEST_PER_HOUR_HELP = "A craft's profit times how many you can cast in an hour: just the casting, not walking to an anvil or the moment between crafts, and not whether that many would sell.",
+    BEST_QUEUE_HELP = "Adds one craft to your shopping order, priced the way the list is. Shift-click: five. Ctrl-click: the other way (exact recipe or cheapest route).",
+    BEST_RESIZE_HELP = "Drag up or down to show fewer or more recipes.",
+    BEST_FAVORITE_HELP = "Favorite: keep it at the top of the list.",
+    BEST_UNFAVORITE_HELP = "Remove from favorites.",
+    BEST_UNQUEUE_HELP = "Removes one craft from your shopping order. Shift-click: five. Ctrl-click: only from the one queued the other way.",
+    BEST_EXACT_HINT = "Hold Ctrl on a row to price it as the exact recipe: its reagents bought, never crafted.",
+    BEST_CHEAPEST_HINT = "Hold Ctrl on a row to price it along its cheapest route: its reagents crafted where that's cheaper.",
     BEST_QUEUED_HEADING = "Q",
     BEST_AUCTIONS_HEADING = "AH",
+    BEST_SOLD_HEADING = "7d",
+    BEST_SOLD_HELP = "How many you sold at auction in the last 7 days: items, not crafts.\nIn orange: a hot craft, one of your top sellers lately, by profit at auction, recent sales counting most.",
+    BEST_HOT_TOOLTIP = "Hot: about %s profit a day lately.",
+    BEST_SOLD_RECENT = "Last 7 days at auction: %s",
+    BEST_MAKES = "Makes %d per craft",
+    BEST_INVESTMENT_EACH = "Investment per item",
+    BEST_PROFIT_EACH = "Profit per item",
     BEST_AUCTIONS_HELP = "How many you have up for auction, as of your last visit to the auction house.",
     BEST_QUEUED_HELP = "Crafts in your shopping order.",
     BEST_SCAN_HELP = "Looks up live lowest prices for every item in the shown professions' recipes, in a few batches. Auctionator saves them too.",
@@ -94,6 +113,7 @@ VendorProfit.L = {
     BEST_FILTER_ON = "Filter (%d)",
     BEST_FILTER_RESET = "Clear the filters and minimums.",
     BEST_FILTER_PROFITABLE = "Profitable only",
+    BEST_FILTER_HOT = "Hot only",
     BEST_FILTER_SKILL_UP = "Skill up",
     BEST_SKILL_OPTIMAL = "Guaranteed",
     BEST_SKILL_MEDIUM = "Likely",
@@ -104,6 +124,8 @@ VendorProfit.L = {
     BEST_SKILL_SAVED_NOTE = "Closed professions:\ncolors as last seen.",
     BEST_MIN_PROFIT = "Min profit:",
     BEST_MIN_PROFIT_HELP = "Hides recipes that make less than this per craft (on the Auction or Vendor tab you're on). 0: no minimum.",
+    BEST_MIN_PER_HOUR = "Min profit/hr:",
+    BEST_MIN_PER_HOUR_HELP = "Hides recipes that make less than this an hour of crafting (Profit/hr), and those with no Profit/hr. 0: no minimum.",
     BEST_MIN_ROI = "Min ROI:",
     BEST_MIN_ROI_HELP = "Hides recipes whose return on investment is below this percentage. 0: no minimum.",
     BEST_FILTER_PROFESSIONS = "Professions",
@@ -162,6 +184,7 @@ VendorProfit.L = {
     HISTORY_SOLD_UNITS = "Sold",
     HISTORY_AVERAGE = "Avg profit",
     HISTORY_SOLD_COUNT = "%d sold in %d sales",
+    HISTORY_SOLD_COUNT_ONE = "%d sold in 1 sale",
     HISTORY_AVERAGE_COST = "Average cost",
     HISTORY_AVERAGE_SOLD = "Average sold for",
     HISTORY_TO_VENDORS = "Sold to vendors",
@@ -192,6 +215,7 @@ VendorProfit.L = {
     STEP_MAIL = "Collect from mailbox",
     STEP_BANK = "Take from bank",
     STEP_CRAFT = "Craft",
+    STEP_CRAFT_TIME = "Craft (%d min)",
     HEAD_BAGS = "Already in your bags",
     HEAD_PROFIT = "Profit",
     NOTHING_QUEUED = "Nothing queued. Use Queue in a recipe's Cheapest Route section in the professions window.",
@@ -298,6 +322,7 @@ VendorProfit.L = {
     NOT_ENOUGH_GOLD = "Not enough gold for the next purchase.",
     NO_QUOTE = "The auction house didn't give a price for %s. Click Buy to try again.",
     SCANNED_CLICK_BUY = "Prices are in. Click Buy for %s.",
+    SCAN_NONE_LISTED = "Nothing listed for %s: planned without the auction house (crafted, where you can).",
     QUOTE_BUSY = "The auction house was busy and didn't price %s. Click Buy again.",
     BUTTON_AH_BUSY = "Waiting a moment for the auction house to be ready...",
     NO_PURCHASE_REPLY = "No reply buying %s. Scanning it again: check your mailbox before buying more.",
@@ -524,6 +549,23 @@ function VendorProfit.FormatROI(roi)
         return RED_FONT_COLOR:WrapTextInColorCode(text)
     end
     return text
+end
+
+-- A recipe's cast time in seconds, or nil if the game doesn't say. A
+-- recipe's ID is its spell's (TradeSkillMaster times its queue the same
+-- way, from the spell's castTime, on Forever too).
+function VendorProfit.CastSeconds(recipeID)
+    if recipeID == nil then
+        return nil
+    end
+    local castTime
+    if C_Spell and C_Spell.GetSpellInfo then
+        local info = C_Spell.GetSpellInfo(recipeID)
+        castTime = info and info.castTime
+    elseif GetSpellInfo then
+        castTime = select(4, GetSpellInfo(recipeID))
+    end
+    return castTime and castTime > 0 and castTime / 1000 or nil
 end
 
 -- How many crafts a + or - click on a queue adds or takes off: one, or

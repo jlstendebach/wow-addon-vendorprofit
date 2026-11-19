@@ -403,12 +403,17 @@ local function ShowSaleTooltip(row)
     GameTooltip:Show()
 end
 
+-- "3000 sold in 15 sales", or "in 1 sale".
+function HistoryPanel.SoldCount(n, sales)
+    return string.format(sales == 1 and L.HISTORY_SOLD_COUNT_ONE or L.HISTORY_SOLD_COUNT, n, sales)
+end
+
 -- An item's sales lines for a tooltip (from BestSellers or AllTime): how
 -- many, then with withProfit its profit and ROIs (Best Sellers has those in
 -- its columns), what one cost and sold for on average, which way they sold,
 -- and when it last sold.
 function HistoryPanel.AddSalesLines(item, withProfit)
-    GameTooltip:AddLine(string.format(L.HISTORY_SOLD_COUNT, item.n, item.sales), 1, 1, 1)
+    GameTooltip:AddLine(HistoryPanel.SoldCount(item.n, item.sales), 1, 1, 1)
     if withProfit then
         GameTooltip:AddDoubleLine(L.HISTORY_AVERAGE, Money(item.average))
         GameTooltip:AddDoubleLine(L.BEST_PROFIT, Money(item.profit))

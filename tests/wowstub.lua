@@ -186,7 +186,10 @@ end
 stub.topLevel = 100
 function FrameMethods:Raise() stub.topLevel = stub.topLevel + 10; self.__level = stub.topLevel; self.__raised = (self.__raised or 0) + 1 end
 function FrameMethods:SetToplevel(t) self.__toplevel = t end
-function FrameMethods:IsMouseOver() return true end
+-- Over everything, unless a test says otherwise (__mouseOver = false).
+function FrameMethods:IsMouseOver() return self.__mouseOver ~= false end
+function FrameMethods:SetAlpha(a) self.__alpha = a end
+function FrameMethods:GetAlpha() return self.__alpha or 1 end
 function FrameMethods:SetScrollChild(child) self.__scrollChild = child end
 function FrameMethods:GetScrollChild() return self.__scrollChild end
 function FrameMethods:SetVerticalScroll(v) self.__scroll = v end
@@ -195,6 +198,7 @@ function FrameMethods:RegisterForClicks(...) self.__clicks = { ... } end
 function FrameMethods:SetHighlightTexture() end
 function FrameMethods:SetMotionScriptsWhileDisabled() end
 function FrameMethods:SetNormalTexture(t) self.__normal = t end
+function FrameMethods:SetPushedTexture(t) self.__pushed = t end
 function FrameMethods:SetCheckedTexture() end
 function FrameMethods:SetChecked(c) self.__checked = not not c end
 function FrameMethods:GetChecked() return self.__checked end
@@ -228,6 +232,8 @@ function FrameMethods:CreateTexture()
     t.SetBlendMode = function(tex, mode) tex.__blend = mode end
     t.SetVertexColor = function(tex, ...) tex.__vertexColor = { ... } end
     t.SetTexCoord = function(tex, ...) tex.__texCoord = { ... } end
+    t.SetAtlas = function(tex, atlas) tex.__atlas = atlas end
+    t.SetAlpha = function(tex, a) tex.__alpha = a end
     return t
 end
 -- Lines (CreateLine): a texture with two end points.
@@ -248,6 +254,8 @@ function FontMethods:SetText(t) self.__text = t or "" end
 function FontMethods:GetText() return self.__text end
 function FontMethods:SetJustifyH() end
 function FontMethods:SetFontObject() end
+-- The small fonts the addon uses are 10 point.
+function FontMethods:GetFont() return "Fonts\\FRIZQT__.TTF", 10, "" end
 function FontMethods:SetTextColor(r, g, b) self.__color = { r, g, b } end
 function FontMethods:SetWordWrap() end
 function FontMethods:SetAllPoints(target) self.__point = { "ALL", target } end
@@ -337,6 +345,9 @@ function geterrorhandler()
 end
 
 C_AddOns = { GetAddOnMetadata = function(addon, key) return stub.metadata[addon] and stub.metadata[addon][key] end }
+-- Atlases the client has (C_Texture.GetAtlasInfo).
+stub.atlases = { ["auctionhouse-icon-favorite"] = { width = 13, height = 12 } }
+C_Texture = { GetAtlasInfo = function(atlas) return stub.atlases[atlas] end }
 C_Timer = { After = function(seconds, fn) stub.timers[#stub.timers + 1] = { at = stub.now + seconds, fn = fn } end }
 SlashCmdList = {}
 stub.money = 1000000
@@ -350,6 +361,7 @@ date = os.date
 stub.inCombat = false
 function InCombatLockdown() return stub.inCombat end
 function IsShiftKeyDown() return stub.shift end
+function IsControlKeyDown() return stub.ctrl end
 -- Chat output, kept for tests.
 stub.printed = {}
 local rawPrint = print
@@ -360,8 +372,12 @@ function print(...)
     rawPrint(...)
 end
 function GetCVarBool() return false end
+-- Cast times (ms) by spell ID, for the recipes a test gives one.
+stub.castTimes = {}
 C_Spell = { GetSpellName = function(id)
     return ({ [2575] = "Mining", [2656] = "Smelting", [7620] = "Fishing", [7731] = "Fishing", [1278067] = "Bait and Tackle" })[id]
+end, GetSpellInfo = function(id)
+    return { name = "spell " .. id, spellID = id, castTime = stub.castTimes[id] or 0 }
 end }
 stub.casting = nil
 function UnitCastingInfo(unit) if unit == "player" then return stub.casting end end
@@ -983,7 +999,11 @@ C_AuctionHouse.GetBrowseResults = function() return stub.ah.browseResults or {} 
 C_AuctionHouse.HasFullBrowseResults = function() return true end
 C_AuctionHouse.RequestMoreBrowseResults = function() end
 C_TradeSkillUI.OpenRecipe = function(recipeID) stub.openedRecipe = recipeID end
-function Auctionator.API.v1.RegisterForDBUpdate(callerID, fn) verify(callerID) stub.dbUpdate = fn end
+-- Every caller's callback, run by stub.PricesChanged (Auctionator runs them
+-- when its scans change its prices).
+stub.dbUpdates = {}
+function Auctionator.API.v1.RegisterForDBUpdate(callerID, fn) verify(callerID) table.insert(stub.dbUpdates, fn) end
+function stub.PricesChanged() for _, fn in ipairs(stub.dbUpdates) do fn() end end
 
 -- Merchant ---------------------------------------------------------------------
 -- stub.merchant = { { itemID, price, stackCount, numAvailable, extended } }.

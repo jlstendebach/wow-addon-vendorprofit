@@ -569,6 +569,13 @@ check("layout: queued, profit, then the To do steps in order, then what's in you
       headings(ev) == ["Shopping List", "Queued", "Profit", "To do",
                        "1. Buy | |cff8080802 items|r", "2. Take from bank | |cff8080801 item|r", "3. Craft | |cff8080803 recipes|r",
                        "Buy", "Take from bank", "Craft", "Already in your bags"])
+# Cast times known: the Craft step says about how long its crafts take.
+run('__stub.castTimes = { [2657] = 3000, [2659] = 3000, [2670] = 5000 }; VendorProfit.Panel.Refresh()')
+check("Craft says how long: 24 + 29 smelts at 3s and 10 cuirasses at 5s, 209s, about 3 min",
+      "3. Craft (3 min) | |cff8080803 recipes|r" in headings(ev))
+run('__stub.castTimes = { [2670] = 1500 }; VendorProfit.Panel.Refresh()')
+check("...never less than a minute, only counting the casts it knows (10 x 1.5s)", "3. Craft (1 min) | |cff8080803 recipes|r" in headings(ev))
+run('__stub.castTimes = {}; VendorProfit.Panel.Refresh()')
 check("To do: the steps with their counts and buttons stay at the top; their items scroll in a box below",
       ev("VendorProfit.Panel.TodoScroll():IsShown()") and ev(BUY) is not None and ev(CRAFT) is not None
       and section(ev, "Buy") == ["|Ticon2770:0|t Copper Ore x24 | auction  |cffffffff12s|r", "|Ticon3576:0|t Tin Bar x29 | auction  |cffffffff21s 75c|r"])
@@ -916,6 +923,28 @@ check("only 10 listed: says so", has_line(ev, "Copper Ore x24", "only 10 listed"
 check("buys what's there", ev(BUY + ".tooltip").startswith("Buy 10 Copper Ore"))
 check("item that doesn't stack, nothing up with a buyout: not left to buy yourself", not has_line(ev, "buy yourself")
       and not ev(BUY + ".tooltip").startswith("Buy 29 Tin Bar"))
+
+# --- Nothing listed: planned another way, and remembered after leaving -----------
+run, ev = shop_client()
+run('__stub.createCount = 10'); run(QUEUE + ':Click()')
+# Auctionator's last price makes bronze bars cheapest to buy...
+run('__stub.auctionPrices[2841] = 10; VendorProfit.Order.Changed()')
+buying = lambda: [(l.itemID, l.source) for l in ev("VendorProfit.Shopper.Summary().plan.buyOrder").values()]
+check("on Auctionator's last price: bronze bars bought", buying() == [(BRONZE_BAR, "auction")])
+# ...but there are none up now: smelted instead, from ore and tin that are.
+run('__stub.ah.listings[2770] = { { unitPrice = 50, quantity = 100 } }; __stub.ah.listings[3576] = { { unitPrice = 75, quantity = 100 } }')
+run('__stub.OpenAH()'); click(run, "scan"); run('__stub.Advance(3)')
+check("none listed: smelted instead, buying the ore and tin, and it says why",
+      buying() == [(COPPER_ORE, "auction"), (TIN_BAR, "auction")]
+      and "Nothing listed for Bronze Bar" in ev("(VendorProfit.Shopper.Message())")
+      and has_line(ev, "Bronze Bar x58", "Mining"))
+run('__stub.CloseAH()')
+check("leaving the auction house keeps the scan: still smelted, not back to Auctionator's last price",
+      buying() == [(COPPER_ORE, "auction"), (TIN_BAR, "auction")])
+run('__stub.Advance(%d); VendorProfit.Order.Changed()' % (60 * 60 + 1))
+check("...for an hour: then back to Auctionator's prices until the next scan", buying() == [(BRONZE_BAR, "auction")])
+check("no errors from kept scans", ev("#__stub.errors") == 0)
+
 
 # --- Items that don't stack: single auctions, one click each -----------------------
 run, ev = shop_client()
@@ -2268,44 +2297,75 @@ check("cleared: everything again", len(best()) == 5)
 # the list, above the notes.
 M = B + ".minimums"
 shown = lambda: [l.split(" | ")[0].split("|t ")[-1] for l in best()]
-check("minimums on the window's bottom row, the notes just above it: gold (up to 9999), silver, copper and ROI boxes, 0 to start",
-      [ev(M + "." + k + ":GetText()") for k in ["gold", "silver", "copper", "roi"]] == ["0", "0", "0", "0"]
+check("minimums on the window's bottom row, the notes just above it: gold (up to 9999), silver and ROI boxes, 0 to start; no copper",
+      [ev(M + "." + k + ":GetText()") for k in ["gold", "silver", "roi"]] == ["0", "0", "0"]
+      and ev(M + ".copper") is None
       and ev(M + ".roi.__numeric") and ev(M + ".silver.__maxLetters") == 2
       and ev(M + ".gold.__maxLetters") == 4
       and ev(M + ".__point[1]") == "BOTTOMLEFT" and ev(M + ".__point[2] == " + B)
       and ev(B + ".status.__point[2] == " + M) and ev(B + ".status.__point[3]") == "TOPLEFT")
 check("...each with its unit inside at the right (coin icons, %), the text stopping short of it, like the search box",
       all(ev(M + "." + k + ".unit.__point[2] == " + M + "." + k) and ev(M + "." + k + ".__insets[2]") >= 15
-          for k in ["gold", "silver", "copper", "roi"])
+          for k in ["gold", "silver", "roi"])
       and "GoldIcon" in ev(M + ".gold.unit.__texture") and ev(M + ".roi.unit:GetText()") == "%")
-run(M + '.copper:Type("88")')
-check("min. profit 88c: only recipes making at least that per craft; unpriced ones can't meet it", shown() == ["Rough Bronze Cuirass"]
-      and ev("VendorProfitCharDB.bestMinimums.profit") == 88 and ev(B + ".filterReset:IsEnabled()"))
-run(M + '.copper:Type("87")')
-check("...87c: exactly 87c passes", shown() == ["Rough Bronze Cuirass", "Rough Bronze Shoulders"])
+# Profits: the cuirass 1s 62c, the shoulders 87c.
 run(M + '.silver:Type("1")')
-check("...1s 87c, silver and copper together: none", shown() == [])
-run(M + '.silver:Type(""); ' + M + '.copper:Type("0")')
+check("min. profit 1s: only recipes making at least that per craft; unpriced ones can't meet it", shown() == ["Rough Bronze Cuirass"]
+      and ev("VendorProfitCharDB.bestMinimums.profit") == 100 and ev(B + ".filterReset:IsEnabled()"))
+run(M + '.silver:Type("2")')
+check("...2s: none", shown() == [])
+run(M + '.gold:Type("1"); ' + M + '.silver:Type("0")')
+check("...1g, gold and silver together: none", shown() == [] and ev("VendorProfitCharDB.bestMinimums.profit") == 10000)
+run(M + '.gold:Type("")')
 check("...an empty box counts as 0, and 0 is no minimum", len(best()) == 5 and ev("VendorProfitCharDB.bestMinimums") is None)
-run(M + '.silver.__scripts.OnEditFocusLost(' + M + '.silver)')
-check("...left empty, a box goes back to 0", ev(M + ".silver:GetText()") == "0")
+run(M + '.gold.__scripts.OnEditFocusLost(' + M + '.gold)')
+check("...left empty, a box goes back to 0", ev(M + ".gold:GetText()") == "0")
 run(M + '.roi:Type("37")')
 check("min. ROI 37%: compared as shown, a whole percentage (162 / 438 shows 37%)", shown() == ["Rough Bronze Cuirass"]
       and ev("VendorProfitCharDB.bestMinimums.roi") == 37)
 run(M + '.roi:Type("38")')
 check("...38%: none", shown() == [])
-run(M + '.copper:Type("50"); ' + M + '.roi:Type("30")')
+run(M + '.silver:Type("1"); ' + M + '.roi:Type("30")')
 check("both at once", shown() == ["Rough Bronze Cuirass"])
+run(M + '.silver:Type("0"); ' + M + '.roi:Type("0")')
+# Min profit/hr: gold and silver boxes between Min profit and Min ROI.
+check("Min profit/hr: gold and silver boxes, after Min profit and before Min ROI",
+      ev(M + ".hourGold.__point[2] ~= " + M + ".silver") and ev(M + ".hourSilver.__point[2] == " + M + ".hourGold")
+      and ev(M + ".roi.__point[2] ~= " + M + ".hourSilver")
+      and "GoldIcon" in ev(M + ".hourGold.unit.__texture") and "SilverIcon" in ev(M + ".hourSilver.unit.__texture"))
+# Cast times for the crafts and the smelting on their routes: Profit/hr for each.
+run('__stub.castTimes = { [2657] = 2000, [3304] = 2000, [2659] = 3000, [2670] = 5000, [3328] = 5000 }; __stub.PricesChanged(); VendorProfit.BestPanel.Refresh()')
+ph = {ev("VendorProfit.BestPanel.Row(%d).hit.recipe.item" % i): ev("VendorProfit.BestPanel.Row(%d).hit.entry.perHour" % i) for i in range(1, 6)}
+cuirass_ph, shoulders_ph = ph[2866], ph[2865]
+at = int(shoulders_ph) // 100 * 100   # the shoulders' Profit/hr, down to the silver
+run(M + '.hourGold:Type("%d"); ' % (at // 10000) + M + '.hourSilver:Type("%d")' % (at // 100 % 100))
+check("min profit/hr at the shoulders' (to the silver): the cuirass and the shoulders; recipes with no cast time can't meet it",
+      cuirass_ph > shoulders_ph and shown() == ["Rough Bronze Cuirass", "Rough Bronze Shoulders"]
+      and ev("VendorProfitCharDB.bestMinimums.perHour") == at and ev(B + ".filterReset:IsEnabled()"))
+above = at + 100
+run(M + '.hourGold:Type("%d"); ' % (above // 10000) + M + '.hourSilver:Type("%d")' % (above // 100 % 100))
+check("...a silver more: not the shoulders", shown() == ["Rough Bronze Cuirass"])
+run('__stub.castTimes = {}; __stub.PricesChanged()')
 run(B + '.filterReset:Click()')
 check("the red X clears the minimums too, boxes back to 0 (with the other filters: Mining ticked again)",
       len(best()) == 8 and ev("VendorProfitCharDB.bestMinimums") is None
-      and [ev(M + "." + k + ":GetText()") for k in ["gold", "silver", "copper", "roi"]] == ["0", "0", "0", "0"]
+      and [ev(M + "." + k + ":GetText()") for k in ["gold", "silver", "hourGold", "hourSilver", "roi"]] == ["0"] * 5
       and not ev(B + ".filterReset:IsEnabled()"))
 run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
-run_m, ev_m = route_client("VendorProfitCharDB = { bestMinimums = { profit = 12345, roi = 25 } }")
+run_m, ev_m = route_client("VendorProfitCharDB = { bestMinimums = { profit = 12345, roi = 25, perHour = 123400 } }")
 run_m('VendorProfit.Panel.Show("best")')
-check("minimums are saved per character, shown in their boxes next time",
-      [ev_m("VendorProfit.BestPanel.Frame().minimums." + k + ":GetText()") for k in ["gold", "silver", "copper", "roi"]] == ["1", "23", "45", "25"])
+check("minimums are saved per character, shown in their boxes next time (copper saved before the box went: left out)",
+      [ev_m("VendorProfit.BestPanel.Frame().minimums." + k + ":GetText()") for k in ["gold", "silver", "hourGold", "hourSilver", "roi"]]
+      == ["1", "23", "12", "34", "25"] and ev_m("({ (function() return VendorProfit.BestPanel.Minimums() end)() })[1]") == 12300)
+check("the window is wide enough for the bottom row and the size grip, however narrow the columns",
+      ev_m("VendorProfitPanel:GetWidth()") - 2 * 16 >=
+      ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_PROFIT, "GameFontNormalSmall")') + 10 + 47 + 9 + 36
+      + 24 + ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_PER_HOUR, "GameFontNormalSmall")') + 10 + 47 + 9 + 36
+      + 24 + ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_ROI, "GameFontNormalSmall")') + 10 + 47 + 16)
+check("the minimum boxes as wide as 4 digits (or 2) and their unit",
+      ev_m("VendorProfit.BestPanel.Frame().minimums.gold:GetWidth()") == 47
+      and ev_m("VendorProfit.BestPanel.Frame().minimums.silver:GetWidth()") == 36
+      and ev_m("VendorProfit.BestPanel.Frame().minimums.roi:GetWidth()") == 47)
 # Filters: profitable only, and skill-up colors, from the game's filter dropdown.
 run('__stub.recipes[2670].difficulty = 0; __stub.recipes[3328].difficulty = 1; __stub.recipes[2671].difficulty = 2; __stub.recipes[9102].difficulty = 3')
 run('if __stub.recipe and __stub.recipe.recipeID == 2670 then __stub.recipe.difficulty = 0 end')
@@ -2316,9 +2376,9 @@ def menu():
     items = [(i.text, i.title or False) for i in ev("__stub.Menu(nil)").values()]
     run('__stub.menu:Hide(); __stub.Advance(1)')
     return items
-check("a Filter button in the page's style (not the game's dropdown) opens the menu: profitable only, skill-up colors, professions",
+check("a Filter button in the page's style (not the game's dropdown) opens the menu: profitable only, hot only, skill-up colors, professions",
       ev(F + ".__text") == "Filter (1)" and [t for t, _ in menu()] ==
-      ["Profitable only", "Skill up", "|cffff8040Guaranteed|r", "|cffffff00Likely|r", "|cff40bf40Unlikely|r",
+      ["Profitable only", "Hot only", "Skill up", "|cffff8040Guaranteed|r", "|cffffff00Likely|r", "|cff40bf40Unlikely|r",
        "|cff808080Closed professions:|r", "|cff808080colors as last seen.|r",
        "Professions", "Blacksmithing", "Mining"])
 run(F + ':Click()')
@@ -2350,9 +2410,9 @@ check("the checkbox shows it's on, and it's saved", ev("__stub.Menu(nil)[1].chec
 run('__stub.menu:Hide(); __stub.Advance(1)')
 check("the button says how many are on, and the reset X is on", ev(F + ".__text") == "Filter (2)" and ev(B + ".filterReset:IsEnabled()"))
 toggle(1)
-toggle(3)
+toggle(4)
 check("guaranteed only: just the orange recipe", len(best()) == 1 and "Rough Bronze Cuirass" in best()[0])
-toggle(5)
+toggle(6)
 check("guaranteed or unlikely: orange and green", [("Cuirass" in l, "Vest" in l) for l in best()] == [(True, False), (False, True)])
 run(B + '.filterReset:Click()')
 check("the red X resets them all, every profession ticked again, and grays out", len(best()) == 5 + 3
@@ -2363,21 +2423,23 @@ def reset_filters():
     run(B + '.filterReset:Click()')
     run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
 run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
-toggle(1); toggle(5); run(B + '.search:Type("cuirass")')
+toggle(1); toggle(6); run(B + '.search:Type("cuirass")')
 check("nothing passes: says so", best() == [] and 'No recipes match "cuirass".' in ev(B + ".status:GetText()"))
 run(B + '.search:Type("")')
 check("...and with no search text, that it's the filters", best() == [] and "No recipes pass the filters." in ev(B + ".status:GetText()"))
 reset_filters()
 run('__stub.recipes[3328].difficulty = nil; VendorProfitCharDB.professions[164].recipes[3328].skillUp = nil; VendorProfit.BestPanel.Refresh()')
-toggle(4)
+toggle(5)
 check("a recipe whose color isn't known (live or saved) can't pass a skill-up filter, and it says why",
       best() == [] and "no skill-up color yet: open their profession once" in ev(B + ".status:GetText()"))
 reset_filters()
 run('for _, id in ipairs({ 2670, 3328, 2671, 9102 }) do if __stub.recipes[id] then __stub.recipes[id].difficulty = nil end end')
 run('if __stub.recipe then __stub.recipe.difficulty = nil end; VendorProfit.BestPanel.Refresh()')
 check("unpriced ones can still be queued and shown", ev("VendorProfit.BestPanel.Row(4).queue:IsShown()") and ev("VendorProfit.BestPanel.Row(4).hit:IsShown()"))
-check("the list scrolls: a scroll frame holding the rows", ev(B + ".scroll.__scrollChild == " + B + ".list")
-      and ev(B + ".scroll:GetHeight()") == 5 * 22 and ev(B + ".list:GetHeight()") == 5 * 22)
+# 14 rows tall (and room for the favorites' divider) however few are listed, so
+# the window doesn't jump as you search or filter.
+check("the list scrolls: a scroll frame holding the rows, 14 tall with 5 listed", ev(B + ".scroll.__scrollChild == " + B + ".list")
+      and ev(B + ".scroll:GetHeight()") == 14 * 22 + 7 and ev(B + ".list:GetHeight()") == 5 * 22)
 run(B + '.scroll:SetVerticalScroll(40)')
 run(B + '.tabs.auction:Click()')
 check("auction tab: no auction price for the ring; scrolled back to the top", best()[4].endswith("no auction price|r")
@@ -2387,7 +2449,30 @@ run(B + '.tabs.vendor:Click()')
 many = ", ".join('{ recipeID = %d, itemLink = "item:2866", quantityMin = 1, reagents = { { itemID = 2841, quantity = 7 } } }' % (20000 + i) for i in range(20))
 run('__stub.OpenProfession(164, "Blacksmithing", { %s }); __stub.Advance(1)' % many)
 check("20 recipes: all there, 14 rows tall, the rest scrolls", len(best()) == 20
-      and ev(B + ".scroll:GetHeight()") == 14 * 22 and ev(B + ".list:GetHeight()") == 20 * 22)
+      and ev(B + ".scroll:GetHeight()") == 14 * 22 + 7 and ev(B + ".list:GetHeight()") == 20 * 22)
+
+# The size grip: drag it down for more rows, up for fewer, a whole row at a time.
+GRIP = B + ".grip"
+run(B + '.__top = 800; __stub.cursorY = 500')
+panel_height = lambda: ev("VendorProfitPanel:GetHeight()")
+before = panel_height()
+check("a size grip in the bottom right corner", ev(GRIP + ".__point[1]") == "BOTTOMRIGHT"
+      and "SizeGrabber" in ev(GRIP + ".__normal"))
+run(GRIP + '.__scripts.OnMouseDown(' + GRIP + ', "LeftButton")')
+run('__stub.cursorY = 500 - 30; ' + GRIP + '.__scripts.OnUpdate(' + GRIP + ')')
+check("dragged down a row and a bit: one more row, the window a row taller", ev("VendorProfitCharDB.bestRows") == 15
+      and ev(B + ".scroll:GetHeight()") == 15 * 22 + 7 and panel_height() == before + 22)
+run('__stub.cursorY = 500 + 2000; ' + GRIP + '.__scripts.OnUpdate(' + GRIP + ')')
+chrome = 94 + 7 + 8 + 20 + 8 + 12 + 16
+fewest = -(-(ev("VendorProfit.Panel.MinHeight()") - chrome) // 22)
+check("dragged far up: no shorter than the side tabs need", ev("VendorProfitCharDB.bestRows") == fewest
+      and panel_height() >= ev("VendorProfit.Panel.MinHeight()") and panel_height() - ev("VendorProfit.Panel.MinHeight()") < 22)
+run('__stub.cursorY = 500 - 5000; ' + GRIP + '.__scripts.OnUpdate(' + GRIP + ')')
+check("dragged far down: no lower than the bottom of the screen", ev("VendorProfitCharDB.bestRows") == (800 - chrome) // 22)
+run(GRIP + '.__scripts.OnMouseUp(' + GRIP + ', "LeftButton")')
+check("let go: the drag stops", ev(GRIP + '.__scripts.OnUpdate') is None)
+run('VendorProfitCharDB.bestRows = nil; VendorProfit.BestPanel.Refresh()')
+check("...back to 14", ev(B + ".scroll:GetHeight()") == 14 * 22 + 7)
 run('__stub.OpenProfession(164, "Blacksmithing", { %s, %s, %s }); __stub.Advance(1)' % (CUIRASS, SHOULDERS, VEST))
 check("vendor tab lit", ev(B + ".tabs.vendor.__lit") and not ev(B + ".tabs.auction.__lit"))
 run(B + ".tabs.auction:Click()")
@@ -2396,6 +2481,160 @@ check("auction tab: after the cut, 1235 - 438 and 665 - 313",
                      "|Ticon2865:0|t Rough Bronze Shoulders | |cffffffff3s 52c|r"])
 run(B + ".tabs.vendor:Click()")
 check("says prices are Auctionator's", "Prices from Auctionator's last scan." in ev(B + ".status:GetText()"))
+
+# Favorites: a star before the name; favorites first, sorted among themselves.
+item_order = lambda: [ev("VendorProfit.BestPanel.Row(%d).hit.recipe.item" % i) for i in range(1, len(best()) + 1)]
+star = lambda i: "VendorProfit.BestPanel.Row(%d).favorite" % i
+check("no favorites: the stars are hidden, the auction house's star", item_order() == [2866, 2865, 2867]
+      and ev(star(1) + ":GetAlpha()") == 0 and ev(star(1) + ".icon.__atlas") == "auctionhouse-icon-favorite")
+run('local hit = VendorProfit.BestPanel.Row(1).hit; hit:GetScript("OnEnter")(hit)')
+check("...shown, faded, while the mouse is on the row", ev(star(1) + ":GetAlpha()") == 1 and ev(star(1) + ".icon.__desaturated"))
+run('local hit = VendorProfit.BestPanel.Row(1).hit; hit:GetScript("OnLeave")(hit)')
+check("...and hidden again when it leaves", ev(star(1) + ":GetAlpha()") == 0)
+check("the star leads the name column, under the heading's start, centered on the name's line",
+      ev(star(1) + ".__point[1]") == "RIGHT" and ev(star(1) + ".__point[2] == VendorProfit.BestPanel.Row(1).left")
+      and ev(star(1) + ".__point[3]") == "LEFT" and ev(star(1) + ".__point[5]") == 0
+      and ev("VendorProfit.BestPanel.Row(1).left.__point[4]") - 4 - ev(star(1) + ":GetWidth()") == 0
+      and ev(B + ".nameHeading.__point[4]") == ev(B + ".scroll.__point[4]"))
+check("no favorites: no divider", not ev(B + ".favoritesDivider:IsShown()"))
+check("the star is as tall as the item icon (the font's height), in the atlas's shape",
+      ev(star(1) + ":GetHeight()") == 10 and ev(star(1) + ":GetWidth()") == 11)
+run(star(3) + ':GetScript("OnEnter")(' + star(3) + ')')
+check("hovering a star says what it does", ev("GameTooltip.lines[1].left") == "Favorite: keep it at the top of the list.")
+run(star(3) + ':Click()')
+check("starring the losing vest: it goes to the top, saved per character", item_order() == [2867, 2866, 2865]
+      and ev("VendorProfitCharDB.bestFavorites[2671]") and ev(star(1) + ":GetAlpha()") == 1
+      and not ev(star(1) + ".icon.__desaturated"))
+run(star(3) + ':Click()')
+check("two favorites: sorted by profit among themselves, above the rest", item_order() == [2865, 2867, 2866])
+check("...with a gold line between them and the rest", ev(B + ".favoritesDivider:IsShown()")
+      and ev(B + ".favoritesDivider.__point[5]") == -46)
+# Row 2's buttons end 20 down its 22 (at -42); then 4, the line (-46), 4, and row 3 at -51.
+check("...with as much room above it as below, the rows after it pushed down",
+      ev("VendorProfit.BestPanel.Row(3).queue.__point[5]") == -51 and ev("VendorProfit.BestPanel.Row(2).queue.__point[5]") == -22
+      and ev("VendorProfit.BestPanel.Row(3).left.__point[5]") == -55 and ev(B + ".list:GetHeight()") == 3 * 22 + 7)
+run(star(3) + ':Click()')
+check("everything a favorite: no line, no gap", not ev(B + ".favoritesDivider:IsShown()")
+      and ev("VendorProfit.BestPanel.Row(3).queue.__point[5]") == -44)
+run(star(1) + ':Click()')
+run(B + '.profitHeading:Click()')
+check("sorting the other way: favorites still first, each group reversed", item_order() == [2867, 2865, 2866])
+run('VendorProfitCharDB.bestSort = nil; VendorProfit.BestPanel.Refresh()')
+run(star(1) + ':GetScript("OnEnter")(' + star(1) + ')')
+check("a favorite's star offers to remove it", ev("GameTooltip.lines[1].left") == "Remove from favorites.")
+run("GameTooltip:Hide()")
+run(star(1) + ':Click(); ' + star(1) + ':Click()')
+check("unstarred: back in profit order, nothing saved", item_order() == [2866, 2865, 2867]
+      and ev("VendorProfitCharDB.bestFavorites") is None)
+
+# Ctrl on a row: priced as the exact recipe (reagents bought, never crafted),
+# in place: the order doesn't change.
+ROW = lambda i: "VendorProfit.BestPanel.Row(%d)" % i
+def mouse_on(i):
+    run('for _, row in ipairs({ %s }) do row.area.__mouseOver = false end' % ", ".join(ROW(n) for n in (1, 2, 3)))
+    if i:
+        run(ROW(i) + '.area.__mouseOver = nil')
+    run(B + '.__scripts.OnUpdate(' + B + ')')
+exact = lambda i: ev("VendorProfit.BestCrafts.PriceRecipe(%s.entry.recipe, 'vendor', nil, true)" % ROW(i))
+cheapest = [ev(ROW(i) + ".investment:GetText()") for i in (1, 2, 3)]
+mouse_on(2)
+check("Ctrl not held: nothing changes", [ev(ROW(i) + ".investment:GetText()") for i in (1, 2, 3)] == cheapest)
+run('__stub.ctrl = true')
+mouse_on(1)
+e = exact(1)
+check("Ctrl on the cuirass: its exact cost (7 bronze bars bought, 12s 39c, not smelted for 4s 38c), profit and ROI",
+      e.cost == 1239 and ev(ROW(1) + ".investment:GetText()") == ev("VendorProfit.FormatMoney(1239)")
+      and ev(ROW(1) + ".right:GetText()") == ev("VendorProfit.FormatMoney(%d)" % e.profit)
+      and ev(ROW(1) + ".roi:GetText()") == ev("VendorProfit.FormatROI(%s)" % repr(e.roi))
+      and ev(ROW(1) + ".left:GetText()").endswith(" |cff808080(exact)|r"))
+check("...in place: the order doesn't change, the other rows don't either", item_order() == [2866, 2865, 2867]
+      and [ev(ROW(i) + ".investment:GetText()") for i in (2, 3)] == cheapest[1:])
+mouse_on(2)
+check("moving to the next row: it shows its exact cost, the first goes back",
+      ev(ROW(2) + ".investment:GetText()") == ev("VendorProfit.FormatMoney(885)")
+      and ev(ROW(1) + ".investment:GetText()") == cheapest[0] and "(exact)" not in ev(ROW(1) + ".left:GetText()"))
+run(B + '.scroll.__mouseOver = false; ' + B + '.__scripts.OnUpdate(' + B + ')')
+check("off the list: back to the cheapest route", [ev(ROW(i) + ".investment:GetText()") for i in (1, 2, 3)] == cheapest)
+run(B + '.scroll.__mouseOver = nil')
+mouse_on(1)
+run('__stub.ctrl = false; ' + B + '.__scripts.OnUpdate(' + B + ')')
+check("Ctrl let go: back to the cheapest route", [ev(ROW(i) + ".investment:GetText()") for i in (1, 2, 3)] == cheapest)
+
+# Ctrl-click +: queues the exact recipe; Ctrl-click -: takes it off that one.
+run('VendorProfit.Order.Clear(); __stub.ctrl = true')
+run(ROW(1) + '.queue:Click()')
+run('__stub.ctrl = false')
+run(ROW(1) + '.queue:Click()')
+entries = lambda: [(x.recipeID, x.exact or False, x.crafts) for x in ev("VendorProfit.Order.Entries()").values()]
+check("Ctrl-click + queues the exact recipe; a plain click the cheapest route, separately",
+      entries() == [(2670, True, 1), (2670, False, 1)] and ev(ROW(1) + ".queued:GetText()") == "2")
+run('__stub.ctrl = true')
+run(ROW(1) + '.unqueue:Click()')
+check("Ctrl-click - takes it off the exact recipe", entries() == [(2670, False, 1)])
+run(ROW(1) + '.unqueue:Click()')
+check("...and does nothing with no exact one queued", entries() == [(2670, False, 1)])
+run('__stub.ctrl = false; VendorProfit.Order.Clear(); ' + B + '.__scripts.OnUpdate(' + B + ')')
+
+# Cheapest or Exact: how the whole list prices crafts, beside Auction and Vendor.
+MODES = B + ".modes"
+check("Cheapest and Exact buttons after Vendor, the search after them; Cheapest lit to start",
+      ev(MODES + ".cheapest.__point[2] == " + B + ".tabs.vendor") and ev(MODES + ".exact.__point[2] == " + MODES + ".cheapest")
+      and ev(B + ".search.__point[2] == " + MODES + ".exact")
+      and ev(MODES + ".cheapest.__lit") and not ev(MODES + ".exact.__lit"))
+run(MODES + '.exact:Click()')
+by_item = lambda: {ev(ROW(i) + ".hit.recipe.item"): ev(ROW(i) + ".investment:GetText()") for i in (1, 2, 3)}
+check("Exact: every row priced as the exact recipe (the cuirass's bars bought: 12s 39c), saved per character",
+      by_item()[2866] == ev("VendorProfit.FormatMoney(1239)") and ev("VendorProfitCharDB.bestExact") == True
+      and ev(MODES + ".exact.__lit") and not ev(MODES + ".cheapest.__lit")
+      and "(exact)" not in ev(ROW(1) + ".left:GetText()"))
+row_of = lambda item: next(i for i in (1, 2, 3) if ev(ROW(i) + ".hit.recipe.item") == item)
+c = row_of(2866)
+run('__stub.ctrl = true')
+mouse_on(c)
+check("...Ctrl shows the other way: the cheapest route, marked so", ev(ROW(c) + ".investment:GetText()") == cheapest[0]
+      and ev(ROW(c) + ".left:GetText()").endswith(" |cff808080(cheapest)|r"))
+run('__stub.ctrl = false; ' + B + '.__scripts.OnUpdate(' + B + ')')
+run(ROW(c) + '.hit:GetScript("OnEnter")(' + ROW(c) + '.hit)')
+check("...and the name's tooltip says so", [l.left for l in ev("GameTooltip.lines").values()][-1]
+      == "Hold Ctrl on a row to price it along its cheapest route: its reagents crafted where that's cheaper.")
+run("GameTooltip:Hide()")
+run(ROW(c) + '.queue:Click(); __stub.ctrl = true')
+run(ROW(c) + '.queue:Click(); __stub.ctrl = false')
+check("+ queues the exact recipe; Ctrl-click +, the cheapest route", entries() == [(2670, True, 1), (2670, False, 1)])
+run('__stub.ctrl = true')
+run(ROW(c) + '.unqueue:Click()')
+check("Ctrl-click - takes off the one queued the other way (the cheapest route)", entries() == [(2670, True, 1)])
+run('__stub.ctrl = false; VendorProfit.Order.Clear(); ' + B + '.__scripts.OnUpdate(' + B + ')')
+run(MODES + '.cheapest:Click()')
+check("Cheapest again: back to the cheapest routes, nothing saved", ev("VendorProfitCharDB.bestExact") is None
+      and by_item()[2866] == cheapest[0])
+
+# Rankings are kept until what they're worked out from changes: a craft's burst
+# of events (the cast ending, bags, money, the profession's list) doesn't rank
+# every recipe again. A ranking kept is the same list as before.
+run('local f = VendorProfit.BestCrafts.Rank; VendorProfit.BestCrafts.Rank = function(...) local r, l = f(...); __ranking = r; return r, l end')
+def ranked_again(action):
+    run('VendorProfit.BestPanel.Refresh(); __before = __ranking')
+    run(action)
+    run('VendorProfit.BestPanel.Refresh()')
+    return not ev("__ranking == __before")
+check("crafting's events redraw Best Crafts without ranking every recipe again",
+      not ranked_again('for _, e in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "BAG_UPDATE_DELAYED", "PLAYER_MONEY" }) do __stub.Fire(e, "player") end')
+      and len(best()) == 3)
+check("...nor the profession's list updating after a craft, its recipes the same",
+      not ranked_again('__stub.Fire("TRADE_SKILL_LIST_UPDATE"); __stub.Advance(1)'))
+before = ev(ROW(1) + ".investment:GetText()")
+check("...nor a price changing with nothing to say so",
+      not ranked_again('__stub.auctionPrices[2770] = 1; __stub.auctionPrices[2771] = 1'))
+check("Auctionator's prices changing (its scans say so): ranked again at the new prices",
+      ranked_again('__stub.PricesChanged()') and ev(ROW(1) + ".investment:GetText()") != before)
+check("a vendor opening (its prices): ranked again", ranked_again('__stub.OpenMerchant({})'))
+run('__stub.CloseMerchant()')
+check("a minute on, in case a price changed with nothing to say so: ranked again", ranked_again('__stub.Advance(61)'))
+check("a recipe gone from the profession: ranked again",
+      ranked_again('__stub.OpenProfession(164, "Blacksmithing", { %s, %s }); __stub.Advance(1)' % (CUIRASS, SHOULDERS))
+      and len(best()) == 2)
+run('__stub.OpenProfession(164, "Blacksmithing", { %s, %s, %s }); __stub.Advance(1)' % (CUIRASS, SHOULDERS, VEST))
 check("scan off away from the auction house", not ev(B + ".scan:IsEnabled()")
       and ev(B + ".scan.tooltip") == "Open the auction house to look up live prices.")
 
@@ -2551,10 +2790,12 @@ run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
 tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
 check("hovering a recipe: its sales, all time, with profit and ROIs",
       ev("GameTooltip.shown") and "Rough Bronze Cuirass" in tip[0][0] and tip[1][0] == "Blacksmithing"
-      and tip[2][0] == "Your sales, all time" and tip[3][0] == "3 sold in 2 sales" and ("Avg profit", ev("VendorProfit.FormatMoney(700)")) in tip
+      and tip[2][0] == "Last 7 days at auction: 2 sold in 1 sale"
+      and tip[3][0] == "Your sales, all time" and tip[4][0] == "3 sold in 2 sales" and ("Avg profit", ev("VendorProfit.FormatMoney(700)")) in tip
       and ("Profit", ev("VendorProfit.FormatMoney(2100)")) in tip
       and ("Avg ROI", "150%") in tip and ("ROI", "175%") in tip  # (200% x 2 + 50%) / 3; 2100 / 1200
-      and ("Sold to vendors", "1") in tip and ("Sold at auction", "2") in tip and tip[-1][0].startswith("Last sold "))
+      and ("Sold to vendors", "1") in tip and ("Sold at auction", "2") in tip and tip[-2][0].startswith("Last sold ")
+      and tip[-1][0] == "Hold Ctrl on a row to price it as the exact recipe: its reagents bought, never crafted.")
 check("...placed like an item's tooltip, past the end of its name", ev("GameTooltip.anchor") == "ANCHOR_NONE"
       and ev("GameTooltip.point[1]") == "BOTTOMLEFT")
 run(R + '.hit:GetScript("OnLeave")(' + R + '.hit)')
@@ -2563,6 +2804,95 @@ R = best_row(2865)
 run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
 check("a recipe whose item hasn't sold: says so", [l.left for l in ev("GameTooltip.lines").values()][2] == "No sales of it recorded yet.")
 run("GameTooltip:Hide()")
+
+# --- Hot crafts: selling well at auction lately ---------------------------------------
+# Heat: auction profit, halving every 7 days. Hot: the top fifth with any heat
+# that also sold 2+ at auction in the last 7 days.
+HEAT = "VendorProfit.History.Heat()"
+def add_sales(*sales):
+    # Oldest first, as the history keeps them; the newest stays last.
+    run('local list = VendorProfitCharDB.history.sales; local new = {' + ",".join(sales) + '}'
+        ' for _, sale in ipairs(new) do table.insert(list, 1, sale) end'
+        ' table.sort(list, function(a, b) return a.time < b.time end)')
+DAYS = lambda d: "time() - %d" % (d * 86400)
+check("the cuirass: 2 sold at auction a minute ago, 20s profit; the vendor sale doesn't count",
+      ev(HEAT + "[2866].sold") == 2 and round(ev(HEAT + "[2866].heat")) == 2000)
+add_sales('{ item = 2865, n = 1, cost = 100, sold = 1100, bought = 100, how = "auction", time = %s }' % DAYS(7))
+check("a sale a week old counts half", round(ev(HEAT + "[2865].heat")) == 500 and ev(HEAT + "[2865].sold") == 1)
+check("profit a day: heat x ln 2 / 7", abs(ev(HEAT + "[2866].perDay") - 2000 * 0.693147 / 7) < 0.1)
+check("the cuirass leads, but its 2 went to one buyer: not hot (one sale isn't enough)",
+      ev(HEAT + "[2866].sales") == 1 and not ev(HEAT + "[2866].hot") and not ev(HEAT + "[2865].hot"))
+add_sales('{ item = 2866, n = 1, cost = 500, sold = 1500, bought = 500, how = "auction", time = %s }' % DAYS(2))
+check("a second buyer: hot, the top fifth of two rounded up; the shoulders aren't",
+      ev(HEAT + "[2866].hot") and ev(HEAT + "[2866].sales") == 2 and ev(HEAT + "[2866].sold") == 3
+      and not ev(HEAT + "[2865].hot"))
+# Five more sellers: the top fifth of seven is two, but the shoulders sold just
+# once this week, so only the cuirass is hot.
+add_sales(*['{ item = %d, n = 1, cost = 0, sold = 10, bought = 0, how = "auction", time = %s }' % (30000 + i, DAYS(1)) for i in range(5)])
+add_sales('{ item = 2867, n = 5, cost = 0, sold = 50000, bought = 0, how = "auction", time = %s }' % DAYS(80))
+check("past 8 half-lives: not read", ev(HEAT + "[2867]") is None)
+check("top fifth, but one sale this week isn't enough", ev(HEAT + "[2866].hot") and not ev(HEAT + "[2865].hot")
+      and not ev(HEAT + "[30000].hot"))
+add_sales('{ item = 2865, n = 1, cost = 100, sold = 1100, bought = 100, how = "auction", time = %s }' % DAYS(3))
+check("a second sale this week: hot", ev(HEAT + "[2865].hot") and ev(HEAT + "[2865].sold") == 2)
+
+# On Best Crafts: a 7d column, orange for hot ones, a tooltip line, a filter.
+run("VendorProfit.BestPanel.Refresh()")
+R = best_row(2866)
+check("7d: items sold at auction this week, in orange for hot ones", ev(R + ".sold:GetText()") == "|cffff80003|r"
+      and ev(best_row(2867) + ".sold:GetText()") == ev("GRAY_FONT_COLOR:WrapTextInColorCode('-')"))
+check("...with a heading between ROI and AH", ev(B + ".soldHeading.label") == "7d"
+      and columns_apart(B, [R + ".roi", R + ".sold", R + ".auctions"]))
+run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
+tip = [l.left for l in ev("GameTooltip.lines").values()]
+check("hovering a hot one says so, with its profit a day, and the week's items and sales",
+      tip[2] == "Hot: about " + ev("VendorProfit.FormatMoney(%d)" % round(ev(HEAT + "[2866].perDay"))) + " profit a day lately."
+      and tip[3] == "Last 7 days at auction: 3 sold in 2 sales")
+run("GameTooltip:Hide()")
+run('VendorProfit.BestPanel.SetFilter("hot", true)')
+check("Hot only: just the hot ones", sorted(ev("VendorProfit.BestPanel.Row(%d).hit.recipe.item" % i) for i in (1, 2)) == [2865, 2866]
+      and len(best()) == 2)
+run(B + '.filterReset:Click()')
+run(B + '.soldHeading:Click()')
+check("sorting by 7d: most sold first, every recipe", ev("VendorProfit.BestPanel.Row(1).hit.recipe.item") in (2865, 2866)
+      and ev("VendorProfit.BestPanel.Row(3).sold:GetText()") == ev("GRAY_FONT_COLOR:WrapTextInColorCode('-')"))
+run('VendorProfitCharDB.bestSort = nil; VendorProfit.BestPanel.Refresh()')
+run("GameTooltip:Hide()")
+check("money per item under half a copper (a craft of 200 worth under 1s) shows as <1c, not 0c",
+      ev("VendorProfit.BestPanel.PerItemMoney(0.3)") == "<" + ev("VendorProfit.FormatMoney(1)")
+      and ev("VendorProfit.BestPanel.PerItemMoney(-0.3)") == ">" + ev("VendorProfit.FormatMoney(-1)")
+      and ev("VendorProfit.BestPanel.PerItemMoney(15.2)") == ev("VendorProfit.FormatMoney(15)"))
+FM = lambda c: ev("VendorProfit.FormatMoney(%d)" % c)
+check("the list's money: two coins at most, gold amounts cut to the silver (never rounded up)",
+      ev("VendorProfit.BestPanel.ListMoney(12094)") == FM(12000) == "|cffffffff1g 20s|r"
+      and ev("VendorProfit.BestPanel.ListMoney(-12094)") == FM(-12000)
+      and ev("VendorProfit.BestPanel.ListMoney(1305099)") == FM(1305000)
+      and ev("VendorProfit.BestPanel.ListMoney(2014)") == FM(2014) == "|cffffffff20s 14c|r"
+      and ev("VendorProfit.BestPanel.ListMoney(10005)") == FM(10000))
+# A craft worth gold: its columns lose the copper, and are sized for that.
+run('__stub.items["item:2866"].sellPrice = 1234567; __stub.PricesChanged(); VendorProfit.BestPanel.Refresh()')
+R = best_row(2866)
+check("...in the rows, and the column sized to fit them",
+      ev(R + ".right:GetText()") == ev("VendorProfit.BestPanel.ListMoney(%d)" % ev(R + ".hit.entry.profit"))
+      and "c|r" not in ev(R + ".right:GetText()") and columns_apart(B, [R + ".investment", R + ".right", R + ".roi"]))
+run('__stub.items["item:2866"].sellPrice = 600; __stub.PricesChanged(); VendorProfit.BestPanel.Refresh()')
+
+# Profit/hr: a craft's profit times the casts that fit in an hour.
+run('__stub.castTimes = { [2670] = 5000, [3328] = 1000 }; __stub.PricesChanged(); VendorProfit.BestPanel.Refresh()')
+R = best_row(2866)
+profit = ev(R + ".hit.entry.profit")
+check("Profit/hr: the cuirass casts in 5s (its bronze bars bought, so no smelting), 720 an hour, at its profit each",
+      ev(R + ".hit.entry.perHour") == profit * 720
+      and ev(R + ".perHour:GetText()") == ev("VendorProfit.BestPanel.ListMoney(%d)" % (profit * 720)))
+check("...a dash for a recipe the game gives no cast time",
+      ev(best_row(2867) + ".perHour:GetText()") == ev("GRAY_FONT_COLOR:WrapTextInColorCode('-')"))
+check("...between Profit and ROI", ev(B + ".perHourHeading.label") == "Profit/hr"
+      and columns_apart(B, [R + ".right", R + ".perHour", R + ".roi"]))
+run(B + '.perHourHeading:Click()')
+check("...and it sorts, highest first: the shoulders, less a craft but cast in 1s, above the cuirass",
+      ev("VendorProfit.BestPanel.Row(1).hit.recipe.item") == 2865 and ev("VendorProfit.BestPanel.Row(2).hit.recipe.item") == 2866
+      and ev("VendorProfit.BestPanel.Row(1).hit.entry.profit") < profit)
+run('VendorProfitCharDB.bestSort = nil; __stub.castTimes = {}; __stub.PricesChanged(); VendorProfit.BestPanel.Refresh()')
 check("no errors from Best Crafts", ev("#__stub.errors") == 0)
 
 # --- Best Crafts with the professions window closed: every saved profession ------
@@ -2604,6 +2934,42 @@ tip = [l.left for l in ev("GameTooltip.lines").values()]
 check("hover: its profession, and that the color is as of the last opening",
       tip[1] == "Blacksmithing" and tip[2] == "Skill-up color as of when you last opened Blacksmithing.")
 run("GameTooltip:Hide()")
+# A recipe making more than one: the columns are per craft; the tooltip says how
+# many it makes and its figures per item.
+row = next(i for i in range(1, 10) if "Bronze Bar" in ev("VendorProfit.BestPanel.Row(%d).left:GetText()" % i))
+R2 = "VendorProfit.BestPanel.Row(%d)" % row
+entry = ev(R2 + ".hit.entry")
+run(R2 + '.hit:GetScript("OnEnter")(' + R2 + '.hit)')
+lines_ = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
+check("making 2 a craft: the tooltip says so, with investment and profit per item",
+      ("Makes 2 per craft", None) in lines_ and entry.profit is not None
+      and ("Investment per item", ev("VendorProfit.FormatMoney(%s)" % repr(entry.cost / 2))) in lines_
+      and ("Profit per item", ev("VendorProfit.FormatMoney(%s)" % repr(entry.profit / 2))) in lines_)
+run("GameTooltip:Hide()")
+# Profit/hr counts every craft on the route: the cuirass's own cast, and the
+# smelting of the bars it's made from, as a share where a smelt makes 2.
+run('__stub.castTimes = { [2657] = 2000, [3304] = 2000, [2659] = 3000, [2670] = 5000 }; __stub.PricesChanged(); VendorProfit.BestPanel.Refresh()')
+row = next(i for i in range(1, 10) if "Cuirass" in ev("VendorProfit.BestPanel.Row(%d).left:GetText()" % i))
+E = "VendorProfit.BestPanel.Row(%d).hit.entry" % row
+CAST = {2657: 2, 3304: 2, 2659: 3, 2670: 5}
+def route_seconds(children, per_top):
+    total, crafted = 0, 0
+    for c in children.values():
+        n = c.node
+        if n.source == "craft":
+            amount = c.perUnit * per_top
+            total += CAST[n.recipe.recipeID] * amount / n.recipe.count
+            sub, subcrafted = route_seconds(n.children or ev("{}"), amount)
+            total, crafted = total + sub, crafted + 1 + subcrafted
+    return total, crafted
+below, crafted = route_seconds(ev(E + ".route.children"), 1)
+check("Profit/hr takes in the crafts below it on the route (smelting the bars): their casts added to its own",
+      crafted > 0 and abs(ev(E + ".seconds") - (5 + below)) < 1e-9
+      and abs(ev(E + ".perHour") - ev(E + ".profit") * 3600 / (5 + below)) < 1e-6)
+run('__stub.castTimes[2659] = nil; __stub.PricesChanged(); VendorProfit.BestPanel.Refresh()')
+check("...and a dash if a craft on the route has no cast time, rather than leaving it out",
+      ev(E + ".perHour") is None and ev("VendorProfit.BestPanel.Row(%d).perHour:GetText()" % row) == ev("GRAY_FONT_COLOR:WrapTextInColorCode('-')"))
+run('__stub.castTimes = {}; __stub.PricesChanged(); VendorProfit.BestPanel.Refresh()')
 run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
 check("Mining unticked: Blacksmithing alone, named in the title", names() == ["|cffff8040Rough Bronze Cuirass|r"]
       and ev(B2 + ".heading:GetText()") == "Best Crafts: Blacksmithing")

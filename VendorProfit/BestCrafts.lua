@@ -48,7 +48,24 @@ local listeners = {}
 function BestCrafts.OnChange(fn)
     listeners[#listeners + 1] = fn
 end
+-- Rankings, kept until something they're worked out from changes: every
+-- Best Crafts redraw used to rank every recipe again, and crafting fires a
+-- burst of events (the cast ending, bags, the profession's list), each
+-- redrawing it, though a craft changes nothing the ranking uses. Kept per
+-- professions and tab; started over when the saved recipes change (the
+-- key has Recipes.Version), prices change (Auctionator's scans, live
+-- lookups, vendors), or after RANK_MAX_AGE in case a price changed with
+-- nothing to say so. Never kept while item info is still loading.
+BestCrafts.RANK_MAX_AGE = 60
+local rankings = {}
+local pricesVersion = 0
+
+function BestCrafts.PricesChanged()
+    pricesVersion = pricesVersion + 1
+end
+
 local function Changed()
+    pricesVersion = pricesVersion + 1
     for _, fn in ipairs(listeners) do
         fn()
     end
@@ -134,8 +151,94 @@ local function FirstUnpriced(children)
     end
 end
 
+-- How long one craft of a recipe takes along its route, in seconds: its own
+-- cast and every craft below it on the route (smelting the bars a cuirass
+-- needs), as a share of a craft where a step makes more than is needed (7
+-- bars from smelts that make 2 is 3.5 smelts). nil if a craft on the route
+-- has no cast time the game gives, rather than leaving it out and
+-- overstating Profit/hr.
+local function RouteSeconds(recipe, route)
+    local seconds = VendorProfit.CastSeconds(recipe.recipeID)
+    if seconds == nil then
+        return nil
+    end
+    -- amount: how many of the child's item one craft at the top needs.
+    local function Add(children, perTop)
+        for _, child in ipairs(children or {}) do
+            local node = child.node
+            if node.source == "craft" then
+                local amount = child.perUnit * perTop
+                local cast = VendorProfit.CastSeconds(node.recipe.recipeID)
+                if cast == nil then
+                    return false
+                end
+                seconds = seconds + cast * amount / node.recipe.count
+                if not Add(node.children, amount) then
+                    return false
+                end
+            end
+        end
+        return true
+    end
+    if not Add(route.children, 1) then
+        return nil
+    end
+    return seconds
+end
+
+-- One recipe priced for ranking: { recipe, cost, route, profit or
+-- unpriced } (see Rank), and whether its item info is still loading. exact:
+-- the recipe as it is, its reagents bought, never crafted (as Auctionator
+-- prices it and the exact Queue button queues it), instead of the cheapest
+-- route.
+local function Price(recipe, by, onLoad, exact)
+    local route = Route.ForRecipe(recipe.item, recipe.reagents, Prices, exact)
+    local cost = math.floor(route.cost + 0.5)
+    local entry = { recipe = recipe, cost = cost, route = route, exact = exact }
+    local loading = false
+    if route.missing then
+        entry.unpriced = { itemID = FirstUnpriced(route.children) }
+    elseif by == "vendor" then
+        local sellPrice = select(11, C_Item.GetItemInfo(recipe.item))
+        if sellPrice == nil then
+            loading = true
+            if onLoad then
+                VendorProfit.RedrawWhenLoaded(recipe.item, onLoad)
+            end
+            entry.unpriced = { output = true }
+        elseif sellPrice > 0 then
+            entry.profit = sellPrice * recipe.count - cost
+        else
+            entry.unpriced = { output = true }
+        end
+    else
+        local _, auction = Prices(recipe.item)
+        if auction then
+            entry.profit = math.floor(auction * recipe.count * VendorProfit.GetAfterAHCut()) - cost
+        else
+            entry.unpriced = { output = true }
+        end
+    end
+    if entry.profit then
+        entry.roi = cost > 0 and entry.profit / cost or nil
+        -- Profit an hour: crafts cast back to back, the ones on the route
+        -- below it included (Profit/hr on Best Crafts).
+        local seconds = RouteSeconds(recipe, route)
+        entry.seconds = seconds
+        entry.perHour = seconds and entry.profit * 3600 / seconds or nil
+    end
+    return entry, loading
+end
+
+-- One recipe priced along its cheapest route, or as the exact recipe (see
+-- Price): Best Crafts' Ctrl view of a row, the other way from the list.
+function BestCrafts.PriceRecipe(recipe, by, onLoad, exact)
+    return (Price(recipe, by, onLoad, exact))
+end
+
 -- Ranks every saved recipe of one or more professions (a key or a list)
--- together. by = "vendor" or "auction".
+-- together. by = "vendor" or "auction"; exact: each as the exact recipe
+-- instead of along its cheapest route.
 -- Returns a list of { recipe, profit, cost, route } best first, then the
 -- recipes with no profit to rank, each with unpriced = why: { itemID = a
 -- reagent with no price anywhere } (its profit can't be trusted), or
@@ -143,35 +246,16 @@ end
 -- makes). Also returns whether some item info is still loading (onLoad, the
 -- same function each time, is called when it arrives; see
 -- VendorProfit.RedrawWhenLoaded).
-function BestCrafts.Rank(professions, by, onLoad)
+function BestCrafts.Rank(professions, by, onLoad, exact)
+    local key = table.concat(Keys(professions), ",") .. "/" .. by .. (exact and "/exact/" or "/") .. Recipes.Version()
+    local kept = rankings[key]
+    if kept and kept.pricesVersion == pricesVersion and GetTime() - kept.time < BestCrafts.RANK_MAX_AGE then
+        return kept.ranked, false
+    end
     local ranked, unranked, loading = {}, {}, false
     for _, recipe in ipairs(RecipesOf(professions)) do
-        local route = Route.ForRecipe(recipe.item, recipe.reagents, Prices)
-        local cost = math.floor(route.cost + 0.5)
-        local entry = { recipe = recipe, cost = cost, route = route }
-        if route.missing then
-            entry.unpriced = { itemID = FirstUnpriced(route.children) }
-        elseif by == "vendor" then
-            local sellPrice = select(11, C_Item.GetItemInfo(recipe.item))
-            if sellPrice == nil then
-                loading = true
-                if onLoad then
-                    VendorProfit.RedrawWhenLoaded(recipe.item, onLoad)
-                end
-                entry.unpriced = { output = true }
-            elseif sellPrice > 0 then
-                entry.profit = sellPrice * recipe.count - cost
-            else
-                entry.unpriced = { output = true }
-            end
-        else
-            local _, auction = Prices(recipe.item)
-            if auction then
-                entry.profit = math.floor(auction * recipe.count * VendorProfit.GetAfterAHCut()) - cost
-            else
-                entry.unpriced = { output = true }
-            end
-        end
+        local entry, itemLoading = Price(recipe, by, onLoad, exact)
+        loading = loading or itemLoading
         if entry.profit then
             ranked[#ranked + 1] = entry
         else
@@ -187,6 +271,11 @@ function BestCrafts.Rank(professions, by, onLoad)
     end)
     for _, entry in ipairs(unranked) do
         ranked[#ranked + 1] = entry
+    end
+    if loading then
+        rankings[key] = nil
+    else
+        rankings[key] = { ranked = ranked, pricesVersion = pricesVersion, time = GetTime() }
     end
     return ranked, loading
 end
@@ -450,3 +539,16 @@ events:SetScript("OnEvent", function(_, event, ...)
     local args = { ... }
     xpcall(function() OnResults(event, args[1]) end, geterrorhandler())
 end)
+
+-- What tells the rankings prices changed: Auctionator's scans (its prices),
+-- vendors (Auctionator's vendor prices, and the ones this addon records:
+-- Merchant.lua).
+if Auctionator.API.v1.RegisterForDBUpdate then
+    Auctionator.API.v1.RegisterForDBUpdate(ADDON_NAME, BestCrafts.PricesChanged)
+end
+VendorProfit.Merchant.OnChange(BestCrafts.PricesChanged)
+local priceEvents = CreateFrame("Frame")
+for _, event in ipairs({ "MERCHANT_SHOW", "MERCHANT_CLOSED" }) do
+    pcall(priceEvents.RegisterEvent, priceEvents, event)
+end
+priceEvents:SetScript("OnEvent", BestCrafts.PricesChanged)

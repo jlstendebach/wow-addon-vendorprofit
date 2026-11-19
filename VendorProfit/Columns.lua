@@ -98,9 +98,11 @@ local function Ends(extents, key, format)
     end
     return samples
 end
-function Columns.Money(extents, key)
+-- format: how the column shows money, if not VendorProfit.FormatMoney.
+function Columns.Money(extents, key, format)
+    format = format or VendorProfit.FormatMoney
     return Ends(extents, key, function(copper)
-        return VendorProfit.FormatMoney((copper < 0 and -1 or 1) * MoneyNines(copper))
+        return format((copper < 0 and -1 or 1) * MoneyNines(copper))
     end)
 end
 function Columns.Percent(extents, key)

@@ -47,6 +47,10 @@ local Shopper = {}
 VendorProfit.Shopper = Shopper
 
 Shopper.SEARCH_TIMEOUT = 10
+-- How long a scan's results are trusted, after the auction house closes too:
+-- an item found with nothing listed stays unavailable, so the plan keeps
+-- crafting it instead of going back to Auctionator's last price for it.
+Shopper.KEEP_SCAN = 60 * 60
 Shopper.SEARCH_RETRIES = 3
 Shopper.MORE_RESULTS_REQUESTS = 3
 Shopper.QUOTE_TIMEOUT = 10
@@ -90,7 +94,8 @@ local scanTotal = 0     -- items in this scan, for "Scanning 2 of 5"
 local scanDone = 0
 local scanning          -- { itemID, tries, moreRequests }; callbacks for an older scan see it changed
 local failed = {}       -- itemIDs whose scan failed this time, so they aren't retried in a loop
-local batch             -- the scan's first, batch lookup: { prices, checked } (see BestCrafts.LookUpItems)
+local batch             -- the scan's first, batch lookup: { prices, checked, time } (see BestCrafts.LookUpItems)
+local buyingBefore = {}  -- itemIDs planned from the auction house when this scan started
 local lookup            -- that lookup while it runs
 local purchase          -- { itemID, quantity, budget, quote, auctionID (single auctions) }
 local unanswered        -- a confirmed purchase that timed out; recorded if it succeeds late
@@ -193,14 +198,25 @@ end
 -- average price of buying `need` of them now (nil if none listed, so the
 -- plan crafts or uses a vendor instead). Items only in the batch lookup
 -- count at their lowest listed price (nil if none listed).
+-- Whether scan results from time are still trusted (KEEP_SCAN).
+local function Fresh(time)
+    return time ~= nil and GetTime() - time < Shopper.KEEP_SCAN
+end
+
+-- An item's scanned listings while they're trusted, or nil.
+local function FreshListing(itemID)
+    local listing = listings[itemID]
+    return listing and Fresh(listing.time) and listing or nil
+end
+
 local function LivePrices(need)
     return function(itemID)
         local vendor, auction = VendorProfit.GetBuyPrices(itemID)
-        local listing = listings[itemID]
+        local listing = FreshListing(itemID)
         if listing then
             local total, _, got = Shopper.Walk(listing, need[itemID] or 1)
             auction = got > 0 and total / got or nil
-        elseif batch and batch.checked[itemID] then
+        elseif batch and Fresh(batch.time) and batch.checked[itemID] then
             auction = batch.prices[itemID]
         end
         return vendor, auction
@@ -252,7 +268,7 @@ function Shopper.Recompute()
 
     local remaining, unscanned, short = 0, {}, {}
     for _, line in ipairs(plan.buyOrder) do
-        local listing = listings[line.itemID]
+        local listing = FreshListing(line.itemID)
         if line.source == "auction" and listing then
             line.total, line.listed = Shopper.Walk(listing, line.quantity)
             if line.listed < line.quantity then
@@ -358,7 +374,21 @@ local function ItemName(itemID)
     return C_Item.GetItemInfo(itemID) or ("item " .. itemID)
 end
 
+-- Notes what the plan buys at auction as a scan starts, to say afterwards
+-- which of it had nothing listed and was planned another way.
+local function RememberBuying()
+    buyingBefore = {}
+    for _, line in ipairs(Shopper.Summary().plan.buyOrder) do
+        if line.source == "auction" then
+            buyingBefore[#buyingBefore + 1] = line.itemID
+        end
+    end
+end
+
 local function FinishScanItem(itemID, listing)
+    if listing then
+        listing.time = GetTime()
+    end
     listings[itemID] = listing
     if listing == nil then
         failed[itemID] = true
@@ -478,17 +508,40 @@ function ScanNext()
             return
         end
         status = "ready"
-        Changed()
+        -- Items with nothing listed drop off the Buy list (crafted instead,
+        -- where you can): say why, so they don't seem to vanish.
+        local notes = {}
+        local names = {}
+        local buying = {}
+        for _, line in ipairs(Shopper.Summary().plan.buyOrder) do
+            if line.source == "auction" then
+                buying[line.itemID] = true
+            end
+        end
+        for _, id in ipairs(buyingBefore) do
+            local listing = listings[id]
+            local none = (listing and #listing.rows == 0)
+                or (listing == nil and batch ~= nil and batch.checked[id] and batch.prices[id] == nil)
+            if none and not buying[id] then
+                names[#names + 1] = ItemName(id)
+            end
+        end
+        if #names > 0 then
+            notes[1] = string.format(L.SCAN_NONE_LISTED, table.concat(names, ", "))
+        end
         -- Buy was clicked before a scan. The first quote can't follow by
         -- itself (the game only gives one for a click), so say it's ready.
         if buyAfterScan then
             buyAfterScan = false
             local nextPurchase = Shopper.NextPurchase()
             if nextPurchase and (Shopper.IsProfitable() or override) then
-                SetMessage(string.format(L.SCANNED_CLICK_BUY, ItemName(nextPurchase.itemID)))
-                Changed()
+                notes[#notes + 1] = string.format(L.SCANNED_CLICK_BUY, ItemName(nextPurchase.itemID))
             end
         end
+        if #notes > 0 then
+            SetMessage(table.concat(notes, " "))
+        end
+        Changed()
         return
     end
 
@@ -536,6 +589,7 @@ function Shopper.ScanMissing()
         scanQueue[#scanQueue + 1] = itemID
     end
     scanTotal, scanDone = #scanQueue, 0
+    RememberBuying()
     status = "scanning"
     buyAfterScan = true
     SetMessage(nil)
@@ -597,6 +651,7 @@ function Shopper.Scan()
     SetMessage(nil)
     scanQueue = {}
     scanTotal, scanDone = 0, 0
+    RememberBuying()
     status = "scanning"
 
     local current = {}
@@ -609,7 +664,7 @@ function Shopper.Scan()
         end
         lookup = nil
         if live then
-            batch = { prices = live.prices, checked = live.checked }
+            batch = { prices = live.prices, checked = live.checked, time = GetTime() }
         end
         if status == "scanning" then
             ScanListings()
@@ -627,6 +682,7 @@ local function Rescan(itemID)
     failed[itemID] = nil
     scanQueue = { itemID }
     scanTotal, scanDone = 1, 0
+    RememberBuying()
     status = "scanning"
     ScanNext()
 end
@@ -1027,10 +1083,10 @@ local function Closed()
     status = "closed"
     buyAfterScan = false
     lastSearched = nil
-    lookup, batch = nil, nil
+    -- The scan's results are kept (see KEEP_SCAN); a new scan replaces them.
+    lookup = nil
     purchase, scanning = nil, nil
     scanQueue = {}
-    listings = {}
     override = false
     SetMessage(nil)
     Shopper.Recompute()

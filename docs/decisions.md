@@ -115,6 +115,15 @@ time" route mode).
   they stay there when the window is taller than the list needs. Applied as you type; ROI compared as shown (whole
   percent); unpriced recipes hidden while either is set; the red X clears
   them with the filters. Confirmed working in game (2026-11-16).
+  **Min profit/hr** (2026-11-18) between them: gold and silver boxes only
+  (copper is noise at an hour's scale, and the row was getting long);
+  recipes with no Profit/hr can't meet it. The window's minimum width now
+  follows the row (labels measured, plus room for the size grip), so the
+  boxes never run past the window when the columns are narrow. The
+  4-digit boxes narrowed from 52 to 47 (a gap showed before the unit);
+  2-digit ones tried at 33 scrolled "99" out of sight in game, so they
+  stay 36. Min profit's copper box was dropped too (Josh): copper is
+  noise next to the rest; copper saved before is left out.
 - **Every profession, window closed**: Best Crafts lists the saved recipes of
   every profession you've opened (each is saved when its window opens), ranked
   together: gold is gold whichever profession made it, and the cross-profession
@@ -124,8 +133,23 @@ time" route mode).
   names the profession when only one is shown. Opening it from a profession's
   title-bar button leaves the ticks alone: the window doesn't change things by
   itself. Live prices are per item; a scan "covers" the professions it looked
-  up, for the "Live prices from" line. Ranking 450 recipes takes about 11 ms
-  in the test harness, so the ranking isn't cached.
+  up, for the "Live prices from" line.
+- **Rankings are cached** (2026-11-18). They weren't at first (about 11 ms
+  for 450 recipes in the test harness), but crafting with Best Crafts open
+  stuttered: each craft fires a burst of events (cast start and stop, bags,
+  money, the profession's list updating, the recipes being saved again),
+  each redrew the tab, and each redraw ranked every recipe again, with
+  price lookups through Auctionator for every item in every tree. A craft
+  changes nothing the ranking uses. Profiled on Josh's saved recipes (299,
+  6 professions): a redraw went from about 6.7 ms to 1.5 ms in the harness;
+  in game the price lookups cost more, so the saving is bigger. Kept per
+  professions and tab, and started over when: the saved recipes change for
+  routes (Recipes.Version; the profession's list is saved again after every
+  craft, but only a recipe, what it makes or what it uses changing counts,
+  not skill-up colors), prices change (Auctionator's DB update callback,
+  live lookups, a vendor opening or closing, recorded vendor prices), or
+  after a minute, in case a price changed with nothing to say so. Never
+  kept while item info is still loading.
 - **Skill-up colors** are only reported for the open profession, so each
   recipe's color is saved when its window is open, and shown for the others
   as of their last opening (possibly out of date). Josh wanted that said: a
@@ -134,7 +158,98 @@ time" route mode).
   professions: / colors as last seen."): the game's menu doesn't wrap and is
   as wide as its widest line, and a one-line note made it far too wide.
 
-- **Columns**: Recipe, Investment, Profit, ROI, AH, Q, then **-** and **+**.
+- **Profit/hr** (2026-11-18), right of Profit: profit per craft x 3600 /
+  the seconds one craft takes along its cheapest route: its own cast plus
+  every craft below it on the route, as a share where a step makes more
+  than is needed (first version counted only the recipe's own cast, which
+  overstated recipes whose route smelts or crafts reagents; Josh caught
+  it). A craft on the route with no cast time gives a dash rather than
+  being left out (VendorProfit.CastSeconds, shared with the Craft step's
+  time). Just the casts, like the Craft step's time: no allowance
+  for the gap between crafts or walking to a station, and no account of
+  how many would sell (7d is beside it for that). Worked out with the
+  ranking (cast times don't change), a dash with no cast time; sorts with
+  those last. Money shown with two coins, like the other money columns.
+- **Two coins in the list** (2026-11-18): the Investment and Profit columns
+  were running out of width, so amounts in gold drop their copper. Cut
+  off, not rounded: Josh would rather underestimate. Best Crafts only (the
+  history tabs keep their copper, at Josh's choice); sorting, filters and
+  minimums use exact amounts; tooltips and the Shopping List (money about
+  to be spent) keep the copper. Silver keeps its two digits after gold.
+- **Per craft, not per item** (2026-11-18): Josh weighed showing the money
+  columns per item (easier to read at a glance; "3000 shells sold" next to
+  per-craft money felt off). Kept per craft: Investment is what you really
+  spend (you can't make 23c worth of Thorium Shells, only 45s 58c), Profit
+  is what a cast earns, and +, Q and the Shopping List all work in crafts;
+  ROI is the same either way. The worry that per item would round to 0c
+  mostly didn't hold for his recipes (shells: 23c and 15c each), only for
+  cheap ammo. 7d and AH stay in items (market numbers: buyers buy items),
+  and "crafts' worth" for 7d was dropped: rounding up made 1 mean a
+  different number of items per recipe, and decimals (0.3 crafts) read
+  badly. Per-item figures and "Makes N per craft" are in the row's
+  tooltip instead, under half a copper shown as "<1c". The hot rule's
+  minimum counts separate auction sales, not items, so one buyer of a
+  stack can't make an item hot. Revisit per item if this still feels
+  wrong in use.
+- **Cheapest / Exact buttons** (2026-11-18): the list's pricing mode, a
+  second pair of red toggle buttons beside Auction / Vendor (how you make
+  it, beside how you sell it: they change the same columns), the search
+  box narrower for them. Considered and passed over: a Filter menu entry
+  (a mode, not a filter: it would muddle the count and the reset X, and
+  be hidden), the bottom row (far from the numbers), one button that
+  flips (a lit pair reads better and matches Auction / Vendor). Ctrl now
+  means "the other way": it shows, queues (Ctrl-click +) and unqueues
+  (Ctrl-click -) whichever mode isn't picked. Rankings are kept per mode.
+- **Ctrl: the exact recipe** (2026-11-18): holding Ctrl with the mouse on a
+  row reprices that row as the exact recipe (Route.ForRecipe with exact:
+  direct reagents bought, never crafted; BestCrafts.Exact), and Ctrl-click
+  + queues it exact. Only the row's numbers change, never its place or
+  whether the filters pass it: Josh asked that it not reorder, and a row
+  jumping or vanishing under the mouse would be worse. The row is found
+  by position (an unclickable frame over each row, checked each frame
+  while Ctrl is held), since no event says the mouse moved between rows
+  over the number columns, which don't take the mouse. The column widths
+  take the exact numbers into account, so they're never cut short. The
+  name gets the Queued list's "(exact)" mark so you can tell which view
+  you're seeing, and the name's tooltip mentions Ctrl. Ctrl-click - takes
+  off the exact entry only; a plain - takes off the newest entry of either
+  kind, as before.
+- **Resizable height** (2026-11-18): a size grip (the chat frame's) in the
+  bottom right corner sets how many rows the list shows, whole rows only
+  (no row cut off), height only (the width follows the columns). Dragging
+  works the rows out from how far the mouse moved, not the game's frame
+  sizing (StartSizing), which would fight the height Panel.Refresh sets.
+  Fewest rows: enough for the side tabs (Panel.MinHeight); most: down to
+  the bottom of the screen. The list is now always that tall, even with
+  fewer recipes (it used to shrink to fit, up to 14): a window you sized
+  shouldn't jump as you search or filter, and the grip shouldn't move out
+  from under the mouse. It always leaves room for the favorites' divider
+  gap, so starring something doesn't change the height either.
+- **Favorites** (2026-11-18): a star before the name. First in a column of
+  its own (a column gap before the names, out past the heading): it looked
+  misaligned. Then by the - and + buttons: Josh preferred it on the left.
+  Now it's the first thing in the name column, where the "Recipe" heading
+  starts, 4px before the name and centered on its line; every name is
+  indented by the star's room whether its star shows or not, so the rows
+  line up. At 14px it looked off-center next to the item icon, so it's
+  the icon's size: the font's height (an inline |T:0|t icon's), in the
+  atlas's own shape. A gold line (the Shopping List divider's color)
+  between the favorites and the rest, only while there are both. Drawn on
+  the boundary between two rows it sat closer to one than the other, so
+  the rows after it move down 7px: with the 2px a row's buttons leave
+  free, that's 4px, the line, 4px. Favorites are listed
+  first, each group (favorites, then the rest) sorted by the chosen column,
+  unpriced favorites after priced ones but above everything else. A bare
+  star, not a red icon button: a third button on every row next to - and +
+  was too much. Empty stars show only while the mouse is on the row, faded
+  (as TradeSkillMaster's crafting list does), so the list isn't 14 rows of
+  outlines; a favorite's star always shows. The texture is the auction
+  house's favorite star atlas (`auctionhouse-icon-favorite`), desaturated
+  when off; the star raid marker if the client lacks that atlas. Saved per
+  character by recipe ID (`bestFavorites`), like the filters. Filters and
+  search still apply: favorites go first, they aren't exempt.
+- **Columns**: Recipe (the favorite star first), Investment, Profit,
+  Profit/hr, ROI, 7d, AH, Q, then **-** and **+**.
   No rank numbers (they took space and meant little once you sort and
   filter). Clicking a recipe's name shows it in the professions window (only
   while it's open); the magnifying-glass button was removed for that.
@@ -148,6 +263,36 @@ time" route mode).
   end, a gray dash for none, sortable. **AH** (your auctions of the item)
   works the same way. Both sort every recipe, priced or not, ties keeping the
   profit order.
+- **Hot crafts** (2026-11-17): Best Crafts showed profit at today's prices
+  but nothing about what actually sells. Josh asked for a "this item is
+  HOT" indicator from a rolling average. Chosen, after trying rules against
+  his real history (664 sales over ~10 days on Josten): **heat** = each
+  auction sale's profit, weight halving every 7 days, added up per item;
+  **hot** = top fifth (rounded up) of items with positive heat that also
+  had 2+ separate auction sales in the last 7 days (first 2+ items: one
+  buyer of a stack of 200 passed it alone, so changed to sales). Why each part:
+  - Exponential decay, not a fixed window: nothing falls off a cliff on
+    day 8, and recent sales count most. 7-day half-life: shorter made one
+    lucky day hot; longer was slow to notice a new seller.
+  - Profit, not units: units made Solid Sharpening Stones (hundreds sold
+    at ~2c profit) the hottest thing; profit is what the tab ranks by.
+  - Auction sales only: a vendor buys anything, so vendor sales say
+    nothing about demand.
+  - Relative (top fifth of your own sellers), not a gold threshold: works
+    for small and big sellers alike, with nothing to set.
+  - At least 2 sales this week: without it a single big sale (a 20g
+    Dragonling) made an item hot.
+  The marker is the count in a new **7d** column (units sold at auction in
+  the last 7 days), in orange for hot ones, not next to the name: names are
+  cut short to fit, so a marker after them could be cut off, and two icons
+  before the name looked cluttered. A flame icon (Fireball's, before the
+  count) was tried first and dropped: Josh found it distracting. Orange
+  (the game's legendary color) rather than a row highlight: it marks the
+  number without competing with the skill-up colors on the names. The tooltip gives the week's count and profit a day lately
+  (heat x ln 2 / 7, the rate that would give that heat if steady). A "Hot
+  only" filter. Worked out from the history, cached until it changes (and
+  hourly, as sales age). Sales past 8 half-lives (under 1/256 weight) aren't
+  read; ones rolled up into daily totals count their day's auction share.
 - **Item info not loaded yet** (the first time a profession's list shows):
   each item is asked for once, and the list redraws once per batch, 0.2s
   after items start arriving (`VendorProfit.RedrawWhenLoaded`, used by every
@@ -171,6 +316,14 @@ time" route mode).
 
 ## Shopping List
 
+- **Craft step time** (2026-11-18): "Craft (63 min)" (no "~": the game's
+  font draws it high on the line, and "about" was longer): the crafts left in
+  the plan times each recipe's cast time (C_Spell.GetSpellInfo(recipeID)
+  .castTime; a recipe's ID is its spell's, which is how TradeSkillMaster
+  times its queue on Forever too), to the nearest minute, at least 1. Just
+  the casts: no allowance for walking between stations or the gap between
+  crafts, which vary too much to guess. Recipes with no cast time aren't
+  counted; with none known, the title is plain "Craft".
 - **Two Queue buttons**: under the Cheapest Route (along that route), and
   under Auctionator's Vendor Profit line for the exact recipe: its reagents
   only bought (or taken from what you have), never crafted, as Auctionator
@@ -248,6 +401,16 @@ time" route mode).
   "won" notification records it.
   Unconfirmed in game: whether a search finds suffixed versions of an item
   ("of the Monkey").
+
+- **A scan outlives the auction house, for an hour**: Mithril Casing with
+  nothing listed was planned as crafted at the auction house (right), but
+  closing it wiped the scan, so the plan went back to Auctionator's last
+  price and put it on the Buy list again, and at the auction house it
+  "disappeared without buying". Now the scan's listings and batch prices
+  are kept after closing for KEEP_SCAN (1 hour), until the next scan
+  replaces them; after that, Auctionator's prices again. And when a scan
+  drops something from the Buy list for having nothing listed, the panel
+  says so.
 
 ### Scanning: sharing the auction house
 

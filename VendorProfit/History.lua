@@ -401,6 +401,95 @@ function History.ItemTotals()
     return DB().items
 end
 
+-- Hot crafts (Best Crafts): what's selling well at auction lately.
+--   * Heat: each auction sale's profit, its weight halving every
+--     HEAT_HALF_LIFE, added up per item. Recent profit counts most, and
+--     nothing ever falls off a cliff the way a fixed window does. Vendor
+--     sales aren't demand (a vendor buys anything), so they don't count.
+--   * Hot: in the top HOT_SHARE (a fifth) of items with positive heat, and
+--     at least HOT_MIN_SALES separate auction sales in the last RECENT.
+--     Ranking against your own sales adapts to however much you sell; the
+--     minimum keeps one buyer from making an item hot. Sales, not items:
+--     one buyer of a stack of 200 shells is still one buyer.
+-- Heat over the half-life's steady state is profit per day: a steady
+-- rate r gives r * HALF_LIFE / ln 2, so rate = heat * ln 2 / half-life.
+History.HEAT_HALF_LIFE = 7 * History.DAY
+History.RECENT = 7 * History.DAY
+History.HOT_SHARE = 0.2
+History.HOT_MIN_SALES = 2
+-- Past 8 half-lives a sale weighs under 1/256: not worth reading.
+local HEAT_HORIZON = 8 * History.HEAT_HALF_LIFE
+
+local heat, heatKey
+
+-- { [itemID] = { heat, sold (items sold at auction in the last RECENT),
+-- sales (how many auction sales those were), perDay (profit a day lately),
+-- hot } }, for items sold at auction within the horizon. Worked out again when the history changes, and hourly as sales age.
+function History.Heat()
+    local now = time()
+    local count = History.SaleCount()
+    local newest = count > 0 and History.Sale(1).time or 0
+    local key = version .. "/" .. count .. "/" .. newest .. "/" .. math.floor(now / 3600)
+    if key == heatKey then
+        return heat
+    end
+    local items = {}
+    local function Add(itemID, profit, n, sales, at)
+        local item = items[itemID]
+        if item == nil then
+            item = { heat = 0, sold = 0, sales = 0 }
+            items[itemID] = item
+        end
+        local age = math.max(now - at, 0)
+        item.heat = item.heat + profit * 0.5 ^ (age / History.HEAT_HALF_LIFE)
+        if age <= History.RECENT then
+            item.sold = item.sold + n
+            item.sales = item.sales + sales
+        end
+    end
+    local since = now - HEAT_HORIZON
+    -- Newest first: the list is in time order, so stop at the horizon.
+    for index = 1, count do
+        local sale = History.Sale(index)
+        if sale.time < since then
+            break
+        end
+        if sale.how == "auction" then
+            Add(sale.item, sale.sold - sale.cost, sale.n, 1, sale.time)
+        end
+    end
+    -- Sales that dropped off the list (only past MAX_SALES): their day's
+    -- auction share, as of midday (the day's sales, vendor and auction
+    -- together, shared out by items).
+    History.EachDaily(since, function(itemID, totals, dayStart)
+        local auction = totals.auction or 0
+        if auction > 0 and totals.n > 0 then
+            local share = auction / totals.n
+            Add(itemID, (totals.sold - totals.cost) * share, auction, (totals.sales or 0) * share,
+                dayStart + History.DAY / 2)
+        end
+    end)
+    local ranked = {}
+    for itemID, item in pairs(items) do
+        item.perDay = item.heat * math.log(2) / (History.HEAT_HALF_LIFE / History.DAY)
+        if item.heat > 0 then
+            ranked[#ranked + 1] = itemID
+        end
+    end
+    table.sort(ranked, function(a, b)
+        if items[a].heat ~= items[b].heat then
+            return items[a].heat > items[b].heat
+        end
+        return a < b
+    end)
+    for place = 1, math.ceil(#ranked * History.HOT_SHARE) do
+        local item = items[ranked[place]]
+        item.hot = item.sales >= History.HOT_MIN_SALES
+    end
+    heat, heatKey = items, key
+    return heat
+end
+
 -- Total profit and how many sales: every sale ever, or (given a time) those
 -- since then on the list.
 function History.Total(since)

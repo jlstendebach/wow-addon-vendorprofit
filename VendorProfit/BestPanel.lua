@@ -40,15 +40,24 @@ local ROW_HEIGHT = 22
 local LIST_TOP = -94
 -- The minimums row, at the bottom of the window, under the notes.
 local MINIMUMS_HEIGHT = 20
-local VISIBLE_ROWS = 14
+-- How many rows the list shows before it scrolls: 14 until you drag the
+-- window's size grip (Create), then what you chose, saved per character.
+local DEFAULT_ROWS = 14
 local SCROLLBAR_WIDTH = 24
 local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
 local LIST_WIDTH = BASE_LIST_WIDTH
 local ICON_BUTTON_WIDTH = 22
+-- Room for the size grip at the end of the bottom row (16, and a gap).
+local GRIP_ROOM = 24
+-- The minimum boxes' widths: 4 digits or 2, each with its unit inside.
+BestPanel.MIN_BOX_WIDE = 47
+BestPanel.MIN_BOX_NARROW = 36
 -- The columns, by key (Columns.lua), laid out for what's listed on each
--- refresh: the recipe name, Investment, Profit, ROI, AH (your auctions of
--- it), Q (crafts queued), then - and + (unqueue and queue a craft). The
--- layout key changes only when the layout does.
+-- refresh: the recipe name (the favorite star inside it, first),
+-- Investment, Profit, Profit/hr, ROI, 7d (sold at auction in the last 7
+-- days, in orange for hot ones), AH (your auctions of it), Q (crafts
+-- queued), then - and + (unqueue and queue a craft). The layout key changes
+-- only when the layout does.
 local col, layoutKey
 -- This tab's entry in the window (Panel.AddPage), for the width.
 local pageDef
@@ -66,6 +75,23 @@ local tab = "auction"     -- auction first: it's what this tab is used for most
 local rows = {}
 local shownList          -- profession, tab and filter the list was last scrolled for
 local filter = ""        -- the search box's text, lowercased
+-- How the list prices crafts: along each one's cheapest route (its
+-- reagents crafted where that's cheaper), or as the exact recipe (its
+-- reagents bought, never crafted, as Auctionator prices it). Saved per
+-- character; the Cheapest and Exact buttons pick it.
+local function Exact()
+    return VendorProfitCharDB ~= nil and VendorProfitCharDB.bestExact == true
+end
+
+local function SetExact(exact)
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    VendorProfitCharDB.bestExact = exact or nil
+    BestPanel.Refresh()
+end
+
+-- The recipe whose row is shown the other way (cheapest route or exact
+-- recipe) while Ctrl is held with the mouse on it; nil for none.
+local exactRecipe
 
 -- The item's icon and name, the name in its skill-up color if given (as the
 -- professions window colors its list).
@@ -87,6 +113,44 @@ local function Gray(text)
     return GRAY_FONT_COLOR:WrapTextInColorCode(text)
 end
 
+-- Money in the list's columns: two coins at most, so gold amounts drop
+-- their copper (1g 20s 94c shows as 1g 20s) and the columns stay narrow.
+-- Cut off, not rounded, so a figure is never more than it really is (Josh
+-- would rather underestimate). Only the shown text: sorting, filters and
+-- the minimums use the exact amount, and tooltips and the Shopping List
+-- keep the copper.
+local function ListMoney(copper)
+    copper = math.floor(copper + 0.5)
+    local size = math.abs(copper)
+    if size >= 10000 then
+        size = size - size % 100
+    end
+    return VendorProfit.FormatMoney(copper < 0 and -size or size)
+end
+BestPanel.ListMoney = ListMoney
+
+-- Hot crafts (History.Heat): their 7d count in orange, the game's legendary
+-- color. An icon was tried and dropped: it pulled the eye from the names.
+local HOT_COLOR = CreateColor(1, 0.5, 0)
+BestPanel.HOT_COLOR = HOT_COLOR
+
+-- How the item has been selling at auction lately: { heat, sold, perDay,
+-- hot }, or nil if it hasn't sold there within the heat's reach.
+local function Heat(itemID)
+    return VendorProfit.History.Heat()[itemID]
+end
+
+-- Sold at auction in the last 7 days.
+local function Sold(itemID)
+    local heat = Heat(itemID)
+    return heat and heat.sold or 0
+end
+
+local function IsHot(itemID)
+    local heat = Heat(itemID)
+    return heat ~= nil and heat.hot == true
+end
+
 -- A count column's text: the number, or a gray dash for none.
 local function Count(n)
     return n > 0 and tostring(n) or Gray("-")
@@ -101,6 +165,87 @@ local function ShowRecipe(recipe)
     Recipes.Show(recipe.recipeID, recipe.profession)
 end
 
+-- Favorite recipes, saved per character: { [recipeID] = true }. They're
+-- listed first, sorted among themselves by the same column.
+local function IsFavorite(recipeID)
+    local db = VendorProfitCharDB
+    return db ~= nil and type(db.bestFavorites) == "table" and db.bestFavorites[recipeID] == true
+end
+
+local function SetFavorite(recipeID, favorite)
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    VendorProfitCharDB.bestFavorites = VendorProfitCharDB.bestFavorites or {}
+    VendorProfitCharDB.bestFavorites[recipeID] = favorite or nil
+    if next(VendorProfitCharDB.bestFavorites) == nil then
+        VendorProfitCharDB.bestFavorites = nil
+    end
+end
+
+-- The star: the auction house's favorite star, or the star raid marker if
+-- this client hasn't that atlas. A favorite's is always shown; the others'
+-- only while the mouse is on the row (as TradeSkillMaster's crafting list
+-- does), faded, so 14 empty stars don't clutter the list.
+local STAR_ATLAS = "auctionhouse-icon-favorite"
+-- The star is the first thing in the name column, where the heading starts,
+-- and the names follow it: every row's left edge lines up with the heading
+-- and the window, whether its star shows or not. It's as tall as the item
+-- icon after it (an inline |T:0|t icon is the font's height), so the two
+-- sit on the same line; set from the font with the first row.
+local STAR_GAP = 4
+local starWidth, starHeight, nameIndent = 12, 12, 16
+local function SizeStar(fontString)
+    local _, fontHeight = fontString:GetFont()
+    starHeight = math.floor((fontHeight or 12) + 0.5)
+    -- Keeps the atlas's own shape.
+    local info = C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(STAR_ATLAS)
+    starWidth = info and info.width and info.height and info.height > 0
+        and math.floor(starHeight * info.width / info.height + 0.5) or starHeight
+    nameIndent = starWidth + STAR_GAP
+end
+
+-- The favorites and the rest are set apart by a gold line with equal room
+-- above and below it. A row's buttons fill its top 20 of 22, so the space
+-- between the two groups is 2 + DIVIDER_GAP: 4 above the line, the line,
+-- 4 below.
+local DIVIDER_GAP = 7
+local DIVIDER_SPACE = 4
+
+-- The window's height besides the list's rows: the controls above it, the
+-- divider's gap (always allowed for, so favorites don't change the
+-- height), and the notes (one line) and minimums under it.
+local function ChromeHeight()
+    return -LIST_TOP + DIVIDER_GAP + 8 + MINIMUMS_HEIGHT + 8 + 12 + PADDING
+end
+
+-- The fewest rows: the window stays tall enough for the side tabs, and a
+-- list shorter than that would leave a gap under it.
+local function MinRows()
+    return math.max(1, math.ceil((Panel.MinHeight() - ChromeHeight()) / ROW_HEIGHT))
+end
+
+local function VisibleRows()
+    local db = VendorProfitCharDB
+    local rows = db and tonumber(db.bestRows) or DEFAULT_ROWS
+    return math.max(math.floor(rows), MinRows())
+end
+
+-- Where the index-th row's top is, the rows after the favorites pushed down
+-- by the gap (favorites: how many lead the list, while a divider shows).
+local function RowTop(index, favorites)
+    local top = -(index - 1) * ROW_HEIGHT
+    if favorites and index > favorites then
+        top = top - DIVIDER_GAP
+    end
+    return top
+end
+local function ShowStar(row)
+    local star = row.favorite
+    local favorite = star.recipe ~= nil and IsFavorite(star.recipe.recipeID)
+    star.icon:SetDesaturated(not favorite)
+    star.icon:SetAlpha(favorite and 1 or 0.5)
+    star:SetAlpha((favorite or row.hovered) and 1 or 0)
+end
+
 -- How many crafts of a recipe the shopping order holds.
 local function Queued(recipeID)
     local n = 0
@@ -113,25 +258,34 @@ local function Queued(recipeID)
 end
 
 -- Adds one craft of a recipe to the shopping order, or five with Shift.
+-- Queued the way the list prices it; Ctrl-click: the other way (exact
+-- recipe, as the exact Queue button under Auctionator's line queues it, or
+-- cheapest route), the same view Ctrl shows on the row.
 local function QueueRecipe(entry)
     local recipe = entry.recipe
     local crafts = VendorProfit.QueueStep()
+    local exact = Exact() ~= (IsControlKeyDown() and true or false)
     Order.AddRecipe({
         itemID = recipe.item, recipeID = recipe.recipeID, profession = recipe.profession,
         count = recipe.count, reagents = recipe.reagents,
         sellPrice = select(11, C_Item.GetItemInfo(recipe.item)),
+        exact = exact,
     }, crafts)
-    print(string.format(L.QUEUED, crafts, C_Item.GetItemInfo(recipe.item) or ("item " .. recipe.item)))
+    local name = C_Item.GetItemInfo(recipe.item) or ("item " .. recipe.item)
+    print(string.format(L.QUEUED, crafts, exact and (name .. " " .. L.QUEUED_EXACT_MARK) or name))
 end
 
 -- Takes one craft of a recipe off the shopping order (five with Shift), and
 -- the recipe once none are left.
+-- Ctrl-click: only from the entry queued the other way from the list.
 local function UnqueueRecipe(entry)
     local step = VendorProfit.QueueStep()
+    local otherOnly = IsControlKeyDown()
+    local other = not Exact()
     local entries = Order.Entries()
     for index = #entries, 1, -1 do
         local queued = entries[index]
-        if queued.recipeID == entry.recipe.recipeID then
+        if queued.recipeID == entry.recipe.recipeID and (not otherOnly or (queued.exact == true) == other) then
             if queued.crafts > step then
                 Order.SetCrafts(index, queued.crafts - step)
             else
@@ -158,13 +312,13 @@ local function Tooltip(button, text)
     button:SetScript("OnLeave", function() GameTooltip:Hide() end)
 end
 
--- Rows live on the scroll child, frame.list, one ROW_HEIGHT apart.
-local function GetRow(index)
+-- Rows live on the scroll child, frame.list, one ROW_HEIGHT apart (top:
+-- RowTop's).
+local function GetRow(index, top)
     local row = rows[index]
     if row == nil then
         local list = frame.list
         row = {}
-        local top = -(index - 1) * ROW_HEIGHT
         local function Column()
             local text = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
             text:SetJustifyH("RIGHT")
@@ -172,6 +326,9 @@ local function GetRow(index)
             return text
         end
         row.left = list:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        if index == 1 then
+            SizeStar(row.left)
+        end
         row.left:SetJustifyH("LEFT")
         row.left:SetWordWrap(false)
         -- Clicking the name shows the recipe in the professions window (while
@@ -184,50 +341,101 @@ local function GetRow(index)
             end
         end)
         row.hit:SetScript("OnEnter", function(self)
+            row.hovered = true
+            ShowStar(row)
             if self.recipe then
-                BestPanel.ShowSalesTooltip(self, row.left, self.recipe.item, self.recipe)
+                BestPanel.ShowSalesTooltip(self, row.left, self.recipe.item, self.recipe, self.entry)
             end
         end)
-        row.hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row.hit:SetScript("OnLeave", function()
+            row.hovered = false
+            ShowStar(row)
+            GameTooltip:Hide()
+        end)
+        -- The favorite star, before the name, centered on its line of text.
+        -- Hidden by alpha, not Hide, so it still hears the mouse and shows
+        -- itself.
+        row.favorite = CreateFrame("Button", nil, list)
+        row.favorite:SetPoint("RIGHT", row.left, "LEFT", -STAR_GAP, 0)
+        row.favorite:SetSize(starWidth, starHeight)
+        row.favorite.icon = row.favorite:CreateTexture(nil, "ARTWORK")
+        row.favorite.icon:SetAllPoints(row.favorite)
+        if C_Texture and C_Texture.GetAtlasInfo and C_Texture.GetAtlasInfo(STAR_ATLAS) then
+            row.favorite.icon:SetAtlas(STAR_ATLAS)
+        else
+            row.favorite.icon:SetTexture("Interface\\TargetingFrame\\UI-RaidTargetingIcon_1")
+        end
+        row.favorite:SetScript("OnClick", function(self)
+            if self.recipe then
+                SetFavorite(self.recipe.recipeID, not IsFavorite(self.recipe.recipeID))
+                BestPanel.Refresh()
+            end
+        end)
+        row.favorite:SetScript("OnEnter", function(self)
+            row.hovered = true
+            ShowStar(row)
+            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+            GameTooltip:SetText(self.recipe and IsFavorite(self.recipe.recipeID) and L.BEST_UNFAVORITE_HELP
+                or L.BEST_FAVORITE_HELP, 1, 1, 1, 1, true)
+            GameTooltip:Show()
+        end)
+        row.favorite:SetScript("OnLeave", function()
+            row.hovered = false
+            ShowStar(row)
+            GameTooltip:Hide()
+        end)
         -- Investment: what one craft's items cost along the cheapest route.
         row.investment = Column()
         row.right = Column()
+        -- Profit an hour, crafting it back to back.
+        row.perHour = Column()
         -- Return on investment: profit as a share of the investment.
         row.roi = Column()
+        -- How many sold at auction in the last 7 days, a flame if hot.
+        row.sold = Column()
         -- How many of what it makes you have up for auction (Auctions.lua).
         row.auctions = Column()
         -- How many crafts the shopping order holds.
         row.queued = Column()
         -- Why a recipe isn't ranked, across the columns it has no number for.
         row.reason = Column()
+        -- The whole row, to tell which row the mouse is on (for Ctrl). Not
+        -- mouse-enabled, so the name, star and buttons still get the mouse.
+        row.area = CreateFrame("Frame", nil, list)
 
         -- Queue: a plus, at the row's end; unqueue: a minus, before it.
         row.queue = SmallButton(list, "+", ICON_BUTTON_WIDTH)
-        row.queue:SetPoint("TOPRIGHT", list, "TOPRIGHT", 0, top)
         Tooltip(row.queue, L.BEST_QUEUE_HELP)
         row.unqueue = SmallButton(list, "-", ICON_BUTTON_WIDTH)
         row.unqueue:SetPoint("RIGHT", row.queue, "LEFT", -4, 0)
         Tooltip(row.unqueue, L.BEST_UNQUEUE_HELP)
         rows[index] = row
     end
-    -- Placed again only when the columns change.
-    if row.layoutKey ~= layoutKey then
-        row.layoutKey = layoutKey
-        local list, top = frame.list, -(index - 1) * ROW_HEIGHT
+    -- Placed again only when the columns or its place change.
+    if row.layoutKey ~= layoutKey or row.top ~= top then
+        row.layoutKey, row.top = layoutKey, top
+        local list = frame.list
         local function At(region, key)
             region:SetWidth(col[key].width)
             region:ClearAllPoints()
             region:SetPoint("TOPRIGHT", list, "TOPRIGHT", col[key].right, top - 4)
         end
-        row.left:SetWidth(col.name.width)
+        row.left:SetWidth(col.name.width - nameIndent)
         row.left:ClearAllPoints()
-        row.left:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left, top - 4)
+        row.left:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left + nameIndent, top - 4)
         row.hit:ClearAllPoints()
-        row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left, top)
-        row.hit:SetSize(col.name.width, ROW_HEIGHT)
+        row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", col.name.left + nameIndent, top)
+        row.hit:SetSize(col.name.width - nameIndent, ROW_HEIGHT)
+        row.queue:ClearAllPoints()
+        row.queue:SetPoint("TOPRIGHT", list, "TOPRIGHT", 0, top)
+        row.area:ClearAllPoints()
+        row.area:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top)
+        row.area:SetSize(LIST_WIDTH, ROW_HEIGHT)
         At(row.investment, "investment")
         At(row.right, "profit")
+        At(row.perHour, "perHour")
         At(row.roi, "roi")
+        At(row.sold, "sold")
         At(row.auctions, "auctions")
         At(row.queued, "queued")
         -- Its width depends on the columns it spans (set in Refresh).
@@ -267,18 +475,22 @@ local function SortValue(entry, key)
         return (C_Item.GetItemInfo(entry.recipe.item) or ""):lower()
     elseif key == "investment" then
         return entry.cost
+    elseif key == "perHour" then
+        return entry.perHour or -math.huge
     elseif key == "roi" then
         return entry.roi or -math.huge
     elseif key == "queued" then
         return Queued(entry.recipe.recipeID)
     elseif key == "auctions" then
         return Auctions.Count(entry.recipe.item)
+    elseif key == "sold" then
+        return Sold(entry.recipe.item)
     end
     return entry.profit
 end
 
 -- Orders the ranked entries by the sort; unranked ones stay last as they are.
-local function SortEntries(entries)
+local function SortGroup(entries)
     local sort = Sort()
     local ranked, unranked = {}, {}
     for _, entry in ipairs(entries) do
@@ -289,7 +501,7 @@ local function SortEntries(entries)
             unranked[#unranked + 1] = entry
         end
     end
-    if sort.key == "queued" or sort.key == "auctions" then
+    if sort.key == "queued" or sort.key == "auctions" or sort.key == "sold" then
         -- Counts: every recipe has one, priced or not; ties keep the ranking.
         local all, place = {}, {}
         for _, entry in ipairs(ranked) do all[#all + 1] = entry end
@@ -323,14 +535,42 @@ local function SortEntries(entries)
     return ranked
 end
 
+-- Favorites first, then the rest, each sorted the same way.
+local function SortEntries(entries)
+    local favorites, others = {}, {}
+    for _, entry in ipairs(entries) do
+        local group = IsFavorite(entry.recipe.recipeID) and favorites or others
+        group[#group + 1] = entry
+    end
+    local sorted = SortGroup(favorites)
+    for _, entry in ipairs(SortGroup(others)) do
+        sorted[#sorted + 1] = entry
+    end
+    return sorted
+end
+
 local FormatROI = VendorProfit.FormatROI
 
 -- What you've made selling an item, over all time: its Best Sellers figures
 -- (Profit History), with the profit and ROIs. Placed like an item's
 -- tooltip: above the row, past the end of its name.
 -- With a recipe (a row's), it also names the recipe's profession and says
--- when its skill-up color is saved rather than live.
-function BestPanel.ShowSalesTooltip(owner, nameText, itemID, recipe)
+-- when its skill-up color is saved rather than live; with the row's entry,
+-- how many one craft makes and its figures per item (the columns are per
+-- craft: what you spend and what a cast earns).
+-- Money per item can be a fraction of a copper (a craft of 200): under half
+-- a copper shows as "<1c", not 0c, which would read as nothing.
+local function PerItemMoney(copper)
+    if copper > 0 and copper < 0.5 then
+        return "<" .. VendorProfit.FormatMoney(1)
+    elseif copper < 0 and copper > -0.5 then
+        return ">" .. VendorProfit.FormatMoney(-1)
+    end
+    return VendorProfit.FormatMoney(copper)
+end
+BestPanel.PerItemMoney = PerItemMoney
+
+function BestPanel.ShowSalesTooltip(owner, nameText, itemID, recipe, entry)
     VendorProfit.SetNameTooltipOwner(owner, nameText)
     GameTooltip:SetText(ItemLabel(itemID))
     if recipe then
@@ -340,6 +580,22 @@ function BestPanel.ShowSalesTooltip(owner, nameText, itemID, recipe)
             GameTooltip:AddLine(string.format(L.BEST_SKILL_SAVED, recipe.profession),
                 GRAY_FONT_COLOR.r, GRAY_FONT_COLOR.g, GRAY_FONT_COLOR.b, true)
         end
+        if recipe.count > 1 then
+            GameTooltip:AddLine(string.format(L.BEST_MAKES, recipe.count), 1, 1, 1)
+            if entry and entry.profit then
+                GameTooltip:AddDoubleLine(L.BEST_INVESTMENT_EACH, PerItemMoney(entry.cost / recipe.count))
+                GameTooltip:AddDoubleLine(L.BEST_PROFIT_EACH, PerItemMoney(entry.profit / recipe.count))
+            end
+        end
+    end
+    local heat = Heat(itemID)
+    if heat and heat.hot then
+        GameTooltip:AddLine(string.format(L.BEST_HOT_TOOLTIP, VendorProfit.FormatMoney(math.floor(heat.perDay + 0.5))),
+            HOT_COLOR.r, HOT_COLOR.g, HOT_COLOR.b, true)
+    end
+    if heat and heat.sold > 0 then
+        GameTooltip:AddLine(string.format(L.BEST_SOLD_RECENT,
+            VendorProfit.HistoryPanel.SoldCount(heat.sold, math.floor(heat.sales + 0.5))), 1, 1, 1)
     end
     local HistoryPanel = VendorProfit.HistoryPanel
     local item = HistoryPanel and HistoryPanel.AllTime(itemID)
@@ -348,6 +604,10 @@ function BestPanel.ShowSalesTooltip(owner, nameText, itemID, recipe)
         HistoryPanel.AddSalesLines(item, true)
     else
         GameTooltip:AddLine(L.BEST_NO_SALES, 1, 1, 1, true)
+    end
+    if recipe then
+        GameTooltip:AddLine(Exact() and L.BEST_CHEAPEST_HINT or L.BEST_EXACT_HINT,
+            GRAY_FONT_COLOR.r, GRAY_FONT_COLOR.g, GRAY_FONT_COLOR.b, true)
     end
     GameTooltip:Show()
 end
@@ -393,7 +653,8 @@ local function Keys(professions)
     return keys
 end
 
--- The filters, saved per character: { profitable, optimal, medium, easy }.
+-- The filters, saved per character: { profitable, hot, optimal, medium,
+-- easy, prof:<key> }.
 Filters = function()
     local db = VendorProfitCharDB
     return db and type(db.bestFilters) == "table" and db.bestFilters or {}
@@ -415,19 +676,30 @@ SetFilter = function(key, value)
     BestPanel.Refresh()
 end
 
--- The minimum profit per craft (copper) and ROI (a whole percentage) typed
--- into the boxes above the list, saved per character; 0 for none. They're
--- boxes rather than Filter menu entries because they take exact amounts.
+-- The minimum profit per craft and an hour (copper, to the silver: there
+-- are no copper boxes) and ROI (a whole percentage) typed into the boxes
+-- under the list, saved per character; 0 for none. They're boxes rather
+-- than Filter menu entries because they take exact amounts.
+-- Returns the minimum profit, ROI and profit an hour (copper).
 local function Minimums()
     local db = VendorProfitCharDB
     local saved = db and type(db.bestMinimums) == "table" and db.bestMinimums or {}
-    return saved.profit or 0, saved.roi or 0
+    -- Copper saved before the copper box went is left out, as the boxes
+    -- can't show it.
+    local profit, perHour = saved.profit or 0, saved.perHour or 0
+    return profit - profit % 100, saved.roi or 0, perHour - perHour % 100
 end
 
-local function SetMinimums(profit, roi)
+BestPanel.Minimums = Minimums
+
+local function SetMinimums(profit, roi, perHour)
     VendorProfitCharDB = VendorProfitCharDB or {}
-    if profit > 0 or roi > 0 then
-        VendorProfitCharDB.bestMinimums = { profit = profit > 0 and profit or nil, roi = roi > 0 and roi or nil }
+    if profit > 0 or roi > 0 or perHour > 0 then
+        VendorProfitCharDB.bestMinimums = {
+            profit = profit > 0 and profit or nil,
+            roi = roi > 0 and roi or nil,
+            perHour = perHour > 0 and perHour or nil,
+        }
     else
         VendorProfitCharDB.bestMinimums = nil
     end
@@ -439,11 +711,12 @@ local function ShowMinimums()
     if frame == nil or frame.minimums == nil then
         return
     end
-    local profit, roi = Minimums()
+    local profit, roi, perHour = Minimums()
     local boxes = frame.minimums
     boxes.gold:SetText(tostring(math.floor(profit / 10000)))
     boxes.silver:SetText(tostring(math.floor(profit / 100) % 100))
-    boxes.copper:SetText(tostring(profit % 100))
+    boxes.hourGold:SetText(tostring(math.floor(perHour / 10000)))
+    boxes.hourSilver:SetText(tostring(math.floor(perHour / 100) % 100))
     boxes.roi:SetText(tostring(roi))
 end
 
@@ -465,8 +738,15 @@ local function PassesFilters(entry)
     if filters.profitable and not (entry.profit and entry.profit > 0) then
         return false
     end
-    local minProfit, minRoi = Minimums()
+    if filters.hot and not IsHot(entry.recipe.item) then
+        return false
+    end
+    local minProfit, minRoi, minPerHour = Minimums()
     if minProfit > 0 and not (entry.profit and entry.profit >= minProfit) then
+        return false
+    end
+    -- A recipe with no Profit/hr (no cast time) can't meet it either.
+    if minPerHour > 0 and not (entry.perHour and entry.perHour >= minPerHour) then
         return false
     end
     if minRoi > 0 and not (entry.profit and entry.roi and math.floor(entry.roi * 100 + 0.5) >= minRoi) then
@@ -478,13 +758,16 @@ local function PassesFilters(entry)
     return true
 end
 
--- The Filter menu: profitable only, the skill-up colors (with a note that
+-- The Filter menu: profitable only, hot only, the skill-up colors (with a note that
 -- they're as of each profession's last opening), then the professions, each
 -- ticked while it's shown.
 FilterMenu = function(_, root)
     root:CreateCheckbox(L.BEST_FILTER_PROFITABLE,
         function() return Filters().profitable == true end,
         function() SetFilter("profitable", not Filters().profitable) end)
+    root:CreateCheckbox(L.BEST_FILTER_HOT,
+        function() return Filters().hot == true end,
+        function() SetFilter("hot", not Filters().hot) end)
     root:CreateTitle(L.BEST_FILTER_SKILL_UP)
     for _, key in ipairs(SKILL_UP_ORDER) do
         local skill = SKILL_UP[key]
@@ -568,6 +851,18 @@ local function Create(page)
     frame.tabs.vendor:SetScript("OnClick", function() SetTab("vendor") end)
     frame.tabs.auction:SetScript("OnClick", function() SetTab("auction") end)
 
+    -- How to make it, beside how to sell it: they change the same columns.
+    frame.modes = {
+        cheapest = SmallButton(frame, L.BEST_MODE_CHEAPEST, 76),
+        exact = SmallButton(frame, L.BEST_MODE_EXACT, 76),
+    }
+    frame.modes.cheapest:SetPoint("LEFT", frame.tabs.vendor, "RIGHT", 14, 0)
+    frame.modes.exact:SetPoint("LEFT", frame.modes.cheapest, "RIGHT", 4, 0)
+    frame.modes.cheapest:SetScript("OnClick", function() SetExact(false) end)
+    frame.modes.exact:SetScript("OnClick", function() SetExact(true) end)
+    Tooltip(frame.modes.cheapest, L.BEST_MODE_CHEAPEST_HELP)
+    Tooltip(frame.modes.exact, L.BEST_MODE_EXACT_HELP)
+
     frame.scan = SmallButton(frame, L.SCAN, 90)
     -- On the heading's line: it's for the whole profession, not the list.
     frame.scan:SetPoint("RIGHT", frame, "TOPRIGHT", -PADDING, -38)
@@ -614,7 +909,7 @@ local function Create(page)
     end
     -- It fills the row between the tabs and Filter (see below).
     search:SetHeight(20)
-    search:SetPoint("LEFT", frame.tabs.vendor, "RIGHT", 14, 0)
+    search:SetPoint("LEFT", frame.modes.exact, "RIGHT", 14, 0)
     search:SetAutoFocus(false)
     -- Hooked, not set, so the template's own placeholder and clear button
     -- keep working.
@@ -629,10 +924,10 @@ local function Create(page)
     search:HookScript("OnEnterPressed", function(self) self:ClearFocus() end)
     frame.search = search
 
-    -- Minimums, on a row under the list (placed in Refresh): profit in
-    -- gold, silver and copper boxes, and ROI, each a number box like the
-    -- search box with its unit inside. 0 is no minimum. Changes apply as you
-    -- type.
+    -- Minimums, on a row under the list (placed in Refresh): profit and
+    -- profit an hour in gold and silver boxes (copper is noise next to the
+    -- rest), and ROI, each a number box like the search box with its unit
+    -- inside. 0 is no minimum. Changes apply as you type.
     local row = CreateFrame("Frame", nil, frame)
     row:SetSize(WIDTH - 2 * PADDING, MINIMUMS_HEIGHT)
     frame.minimums = row
@@ -641,8 +936,9 @@ local function Create(page)
             local function Number(box)
                 return math.floor(tonumber(row[box]:GetText() or "") or 0)
             end
-            local profit = Number("gold") * 10000 + Number("silver") * 100 + Number("copper")
-            SetMinimums(profit, Number("roi"))
+            local profit = Number("gold") * 10000 + Number("silver") * 100
+            local perHour = Number("hourGold") * 10000 + Number("hourSilver") * 100
+            SetMinimums(profit, Number("roi"), perHour)
         end
     end
     local function Help(region, text)
@@ -705,11 +1001,30 @@ local function Create(page)
     end
     local COIN = "Interface\\MoneyFrame\\UI-%sIcon"
     -- Up to 9,999 gold and 9,999%. Boxes are as wide as their digits and
-    -- unit need, and nearly touching (each border reaches 5px outside it).
-    local gold = Box("gold", Text(nil, L.BEST_MIN_PROFIT), 10, 52, 4, { texture = COIN:format("Gold") }, L.BEST_MIN_PROFIT_HELP)
-    local silver = Box("silver", gold, 9, 36, 2, { texture = COIN:format("Silver") }, L.BEST_MIN_PROFIT_HELP)
-    local copper = Box("copper", silver, 9, 36, 2, { texture = COIN:format("Copper") }, L.BEST_MIN_PROFIT_HELP)
-    Box("roi", Text(copper, L.BEST_MIN_ROI, 24), 10, 52, 4, { text = "%" }, L.BEST_MIN_ROI_HELP)
+    -- unit need (4 digits, or 2, then the unit's space), and nearly touching
+    -- (each border reaches 5px outside it). 4-digit boxes were 52, which
+    -- left a gap before the unit; 2-digit ones at 33 scrolled "99" out of
+    -- sight, so they stay 36.
+    local WIDE, NARROW = BestPanel.MIN_BOX_WIDE, BestPanel.MIN_BOX_NARROW
+    local gold = Box("gold", Text(nil, L.BEST_MIN_PROFIT), 10, WIDE, 4, { texture = COIN:format("Gold") }, L.BEST_MIN_PROFIT_HELP)
+    local silver = Box("silver", gold, 9, NARROW, 2, { texture = COIN:format("Silver") }, L.BEST_MIN_PROFIT_HELP)
+    local hourGold = Box("hourGold", Text(silver, L.BEST_MIN_PER_HOUR, 24), 10, WIDE, 4, { texture = COIN:format("Gold") },
+        L.BEST_MIN_PER_HOUR_HELP)
+    local hourSilver = Box("hourSilver", hourGold, 9, NARROW, 2, { texture = COIN:format("Silver") }, L.BEST_MIN_PER_HOUR_HELP)
+    Box("roi", Text(hourSilver, L.BEST_MIN_ROI, 24), 10, WIDE, 4, { text = "%" }, L.BEST_MIN_ROI_HELP)
+    -- The window is at least as wide as the row (and the size grip after
+    -- it), however narrow the columns are.
+    local rowWidth = 0
+    for _, part in ipairs({
+        { Columns.Measure(L.BEST_MIN_PROFIT, "GameFontNormalSmall"), 10, WIDE, 9, NARROW },
+        { 24, Columns.Measure(L.BEST_MIN_PER_HOUR, "GameFontNormalSmall"), 10, WIDE, 9, NARROW },
+        { 24, Columns.Measure(L.BEST_MIN_ROI, "GameFontNormalSmall"), 10, WIDE },
+    }) do
+        for _, width in ipairs(part) do
+            rowWidth = rowWidth + width
+        end
+    end
+    BASE_LIST_WIDTH = math.max(BASE_LIST_WIDTH, rowWidth + GRIP_ROOM - SCROLLBAR_WIDTH)
     ShowMinimums()
 
     -- Filter: a button in the page's own style that opens the game's menu
@@ -761,7 +1076,10 @@ local function Create(page)
     frame.nameHeading = Heading("name", L.BEST_RECIPE)
     frame.investmentHeading = Heading("investment", L.BEST_INVESTMENT)
     frame.profitHeading = Heading("profit", L.BEST_PROFIT)
+    frame.perHourHeading = Heading("perHour", L.BEST_PER_HOUR, L.BEST_PER_HOUR_HELP .. "\n" .. L.BEST_SORT_HELP)
     frame.roiHeading = Heading("roi", L.BEST_ROI)
+    frame.soldHeading = Heading("sold", L.BEST_SOLD_HEADING,
+        L.BEST_SOLD_HELP .. "\n" .. L.BEST_SORT_HELP)
     frame.auctionsHeading = Heading("auctions", L.BEST_AUCTIONS_HEADING,
         L.BEST_AUCTIONS_HELP .. "\n" .. L.BEST_SORT_HELP)
     frame.queuedHeading = Heading("queued", L.BEST_QUEUED_HEADING,
@@ -773,10 +1091,86 @@ local function Create(page)
     frame.list = CreateFrame("Frame", nil, frame.scroll)
     frame.list:SetSize(LIST_WIDTH, ROW_HEIGHT)
     frame.scroll:SetScrollChild(frame.list)
+    -- A line between the favorites and the rest, in the gold of the
+    -- Shopping List's dividers.
+    frame.favoritesDivider = frame.list:CreateTexture(nil, "ARTWORK")
+    frame.favoritesDivider:SetColorTexture(1, 0.82, 0, 0.35)
+    frame.favoritesDivider:SetHeight(1)
+    frame.favoritesDivider:Hide()
 
     frame.status = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
     frame.status:SetJustifyH("LEFT")
     frame.status:SetWidth(WIDTH - 2 * PADDING)
+
+    -- The size grip, in the bottom right corner: drag it up or down to show
+    -- fewer or more rows. Height only (the width follows the columns), a
+    -- whole row at a time so no row is cut off. It works out the rows from
+    -- how far the mouse has moved rather than using the game's frame
+    -- sizing, which would fight the height each refresh sets. Never shorter
+    -- than the side tabs need, nor past the bottom of the screen.
+    local grip = CreateFrame("Button", nil, frame)
+    grip:SetSize(16, 16)
+    grip:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -4, 4)
+    grip:SetNormalTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Up")
+    grip:SetHighlightTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Highlight")
+    grip:SetPushedTexture("Interface\\ChatFrame\\UI-ChatIM-SizeGrabber-Down")
+    local function CursorY()
+        local _, y = GetCursorPosition()
+        return y / frame:GetEffectiveScale()
+    end
+    local function Drag(self)
+        local maxRows = math.max(MinRows(), math.floor((frame:GetTop() - ChromeHeight()) / ROW_HEIGHT))
+        local rows = self.startRows + math.floor((self.startY - CursorY()) / ROW_HEIGHT + 0.5)
+        rows = math.min(math.max(rows, MinRows()), maxRows)
+        if rows ~= VisibleRows() then
+            VendorProfitCharDB = VendorProfitCharDB or {}
+            VendorProfitCharDB.bestRows = rows
+            BestPanel.Refresh()
+        end
+    end
+    grip:SetScript("OnMouseDown", function(self, mouseButton)
+        if mouseButton == "LeftButton" then
+            self.startY, self.startRows = CursorY(), VisibleRows()
+            self:SetScript("OnUpdate", Drag)
+        end
+    end)
+    grip:SetScript("OnMouseUp", function(self)
+        self:SetScript("OnUpdate", nil)
+    end)
+    -- Let go off the window, or the window hidden mid-drag: stop too.
+    grip:SetScript("OnHide", function(self)
+        self:SetScript("OnUpdate", nil)
+    end)
+    Tooltip(grip, L.BEST_RESIZE_HELP)
+    frame.grip = grip
+
+    -- Ctrl on a row shows it as the exact recipe. Checked every frame while
+    -- the tab is up (no event says the mouse moved between rows), but only
+    -- the cheap Ctrl check unless Ctrl is held or a row is showing it.
+    frame:SetScript("OnUpdate", function()
+        BestPanel.UpdateExact()
+    end)
+    frame:HookScript("OnHide", function()
+        exactRecipe = nil
+    end)
+end
+
+-- Which row, if any, should show the exact recipe: the one under the mouse
+-- while Ctrl is held. Redraws when that changes.
+function BestPanel.UpdateExact()
+    local recipeID
+    if IsControlKeyDown() and frame.scroll:IsShown() and frame.scroll:IsMouseOver() then
+        for _, row in ipairs(rows) do
+            if row.entry and row.area:IsMouseOver() then
+                recipeID = row.entry.recipe.recipeID
+                break
+            end
+        end
+    end
+    if recipeID ~= exactRecipe then
+        exactRecipe = recipeID
+        BestPanel.Refresh()
+    end
 end
 
 -- Lays the columns out to fit the entries listed (Columns.lua), and places
@@ -789,16 +1183,20 @@ local function LayOutColumns(ranked)
             Columns.Track(extents, "investment", entry.cost)
         end
         Columns.Track(extents, "profit", entry.profit)
+        Columns.Track(extents, "perHour", entry.perHour)
         Columns.Track(extents, "roi", entry.profit and entry.roi)
+        Columns.Track(extents, "sold", Sold(entry.recipe.item))
         Columns.Track(extents, "auctions", Auctions.Count(entry.recipe.item))
         Columns.Track(extents, "queued", Queued(entry.recipe.recipeID))
     end
     local key
     col, LIST_WIDTH, key = Columns.Layout(BASE_LIST_WIDTH, {
         { key = "name", heading = L.BEST_RECIPE, sorts = true, fill = true },
-        { key = "investment", heading = L.BEST_INVESTMENT, sorts = true, samples = Columns.Money(extents, "investment") },
-        { key = "profit", heading = L.BEST_PROFIT, sorts = true, samples = Columns.Money(extents, "profit") },
+        { key = "investment", heading = L.BEST_INVESTMENT, sorts = true, samples = Columns.Money(extents, "investment", ListMoney) },
+        { key = "profit", heading = L.BEST_PROFIT, sorts = true, samples = Columns.Money(extents, "profit", ListMoney) },
+        { key = "perHour", heading = L.BEST_PER_HOUR, sorts = true, samples = Columns.Money(extents, "perHour", ListMoney) },
         { key = "roi", heading = L.BEST_ROI, sorts = true, samples = Columns.Percent(extents, "roi") },
+        { key = "sold", heading = L.BEST_SOLD_HEADING, sorts = true, samples = Columns.Count(extents, "sold") },
         { key = "auctions", heading = L.BEST_AUCTIONS_HEADING, sorts = true, samples = Columns.Count(extents, "auctions") },
         { key = "queued", heading = L.BEST_QUEUED_HEADING, sorts = true, samples = Columns.Count(extents, "queued") },
         { key = "buttons", width = 2 * ICON_BUTTON_WIDTH + 4 },
@@ -843,8 +1241,8 @@ local function Refresh()
         end
         frame.filter:SetText(on > 0 and string.format(L.BEST_FILTER_ON, on) or L.BEST_FILTER)
         -- The X clears the minimums too.
-        local minProfit, minRoi = Minimums()
-        local any = on > 0 or minProfit > 0 or minRoi > 0
+        local minProfit, minRoi, minPerHour = Minimums()
+        local any = on > 0 or minProfit > 0 or minRoi > 0 or minPerHour > 0
         frame.filterReset:SetEnabled(any)
         frame.filterReset.icon:SetDesaturated(not any)
     end
@@ -852,6 +1250,13 @@ local function Refresh()
     -- Tabs: the selected one stays lit.
     for key, button in pairs(frame.tabs) do
         if key == tab then
+            button:LockHighlight()
+        else
+            button:UnlockHighlight()
+        end
+    end
+    for key, button in pairs(frame.modes) do
+        if (key == "exact") == Exact() then
             button:LockHighlight()
         else
             button:UnlockHighlight()
@@ -913,7 +1318,7 @@ local function Refresh()
 
     local all = {}
     if #keys > 0 then
-        all = SortEntries(BestCrafts.Rank(keys, tab, BestPanel.Refresh))
+        all = SortEntries(BestCrafts.Rank(keys, tab, BestPanel.Refresh, Exact()))
     end
     local ranked, unknownSkillUp = {}, false
     for _, entry in ipairs(all) do
@@ -926,18 +1331,51 @@ local function Refresh()
             ranked[#ranked + 1] = entry
         end
     end
-    LayOutColumns(ranked)
+    -- What each row shows: its entry, or with Ctrl held on it, the exact
+    -- recipe's. Only the numbers change: the row keeps its place, and the
+    -- filters still go by the cheapest route.
+    local shownEntries = {}
     for index, entry in ipairs(ranked) do
-        local row = GetRow(index)
+        if entry.recipe.recipeID == exactRecipe then
+            shownEntries[index] = BestCrafts.PriceRecipe(entry.recipe, tab, BestPanel.Refresh, not Exact())
+            shownEntries[index].other = true
+        else
+            shownEntries[index] = entry
+        end
+    end
+    LayOutColumns(shownEntries)
+    -- How many favorites lead the list, while there are others after them
+    -- to set them apart from (nil otherwise).
+    local favorites = 0
+    for _, entry in ipairs(ranked) do
+        if IsFavorite(entry.recipe.recipeID) then
+            favorites = favorites + 1
+        end
+    end
+    if favorites == 0 or favorites == #ranked then
+        favorites = nil
+    end
+    for index, ranking in ipairs(ranked) do
+        local entry = shownEntries[index]
+        local row = GetRow(index, RowTop(index, favorites))
         local reason
-        row.left:SetText(ItemLabel(entry.recipe.item, entry.skillUp))
+        local label = ItemLabel(entry.recipe.item, ranking.skillUp)
+        -- Shown the other way (Ctrl): marked which.
+        if entry.other then
+            label = label .. " " .. Gray(entry.exact and L.QUEUED_EXACT_MARK or L.BEST_CHEAPEST_MARK)
+        end
+        row.left:SetText(label)
+        row.entry = ranking
         local queued = Queued(entry.recipe.recipeID)
         row.queued:SetText(Count(queued))
         row.auctions:SetText(Count(Auctions.Count(entry.recipe.item)))
+        local sold = Sold(entry.recipe.item)
+        row.sold:SetText(IsHot(entry.recipe.item) and HOT_COLOR:WrapTextInColorCode(sold) or Count(sold))
         row.roi:SetText("")
         if entry.profit then
-            row.investment:SetText(VendorProfit.FormatMoney(entry.cost))
-            row.right:SetText(VendorProfit.FormatMoney(entry.profit))
+            row.investment:SetText(ListMoney(entry.cost))
+            row.right:SetText(ListMoney(entry.profit))
+            row.perHour:SetText(entry.perHour and ListMoney(entry.perHour) or Gray("-"))
             row.roi:SetText(FormatROI(entry.roi))
         else
             local unpriced = entry.unpriced
@@ -951,8 +1389,9 @@ local function Refresh()
             -- The investment is known when only the sale price is missing;
             -- the reason takes the columns without a number.
             row.right:SetText("")
+            row.perHour:SetText("")
             if unpriced.output then
-                row.investment:SetText(VendorProfit.FormatMoney(entry.cost))
+                row.investment:SetText(ListMoney(entry.cost))
                 row.reason:SetWidth(Columns.Span(col, "profit", "roi"))
             else
                 row.investment:SetText("")
@@ -963,37 +1402,62 @@ local function Refresh()
         row.left:Show()
         row.investment:Show()
         row.right:Show()
+        row.perHour:Show()
         row.roi:Show()
         row.queued:Show()
+        row.sold:Show()
         row.auctions:Show()
         row.reason:Show()
         row.hit.recipe = entry.recipe
+        row.hit.entry = entry
         row.hit:Show()
-        row.queue:SetScript("OnClick", function() QueueRecipe(entry) end)
+        row.favorite.recipe = entry.recipe
+        ShowStar(row)
+        row.favorite:Show()
+        row.queue:SetScript("OnClick", function() QueueRecipe(ranking) end)
         row.queue:Show()
-        row.unqueue:SetScript("OnClick", function() UnqueueRecipe(entry) end)
+        row.unqueue:SetScript("OnClick", function() UnqueueRecipe(ranking) end)
         row.unqueue:SetEnabled(queued > 0)
         row.unqueue:Show()
     end
     for index = #ranked + 1, #rows do
         local row = rows[index]
+        row.entry = nil
         row.left:Hide()
         row.investment:Hide()
         row.right:Hide()
+        row.perHour:Hide()
         row.roi:Hide()
         row.queued:Hide()
+        row.sold:Hide()
         row.auctions:Hide()
         row.reason:Hide()
         row.hit.recipe = nil
         row.hit:Hide()
+        row.favorite.recipe = nil
+        row.favorite:Hide()
         row.queue:Hide()
         row.unqueue:Hide()
     end
 
-    -- The list shows up to VISIBLE_ROWS at a time and scrolls for the rest,
-    -- back to the top for another profession or tab.
-    local listHeight = math.max(math.min(#ranked, VISIBLE_ROWS), 1) * ROW_HEIGHT
-    frame.list:SetHeight(math.max(#ranked, 1) * ROW_HEIGHT)
+    -- The divider, under the last favorite, while there are others below.
+    local divider = frame.favoritesDivider
+    divider:ClearAllPoints()
+    if favorites then
+        local y = RowTop(favorites, favorites) - ROW_HEIGHT + 2 - DIVIDER_SPACE
+        divider:SetPoint("TOPLEFT", frame.list, "TOPLEFT", 0, y)
+        divider:SetPoint("TOPRIGHT", frame.list, "TOPRIGHT", 0, y)
+        divider:Show()
+    else
+        divider:Hide()
+    end
+
+    -- The list is VisibleRows tall, however many are listed (so the window
+    -- doesn't jump as you search or filter), and scrolls for the rest, back
+    -- to the top for another profession or tab.
+    local gap = favorites and DIVIDER_GAP or 0
+    local listHeight = VisibleRows() * ROW_HEIGHT + DIVIDER_GAP
+    frame.list:SetHeight(math.max(#ranked, 1) * ROW_HEIGHT + gap)
     frame.scroll:SetSize(LIST_WIDTH, listHeight)
     frame.scroll:SetShown(#ranked > 0)
     local listKey = table.concat(keys, ",") .. "/" .. tab .. "/" .. filter
@@ -1001,7 +1465,7 @@ local function Refresh()
         shownList = listKey
         frame.scroll:SetVerticalScroll(0)
     end
-    local y = #ranked > 0 and LIST_TOP - listHeight or LIST_TOP
+    local y = LIST_TOP - listHeight
 
     -- Status: why the list is empty, where prices are from, and messages.
     local lines = {}
