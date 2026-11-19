@@ -119,7 +119,9 @@ time" route mode).
   (copper is noise at an hour's scale, and the row was getting long);
   recipes with no Profit/hr can't meet it. The window's minimum width now
   follows the row (labels measured, plus room for the size grip), so the
-  boxes never run past the window when the columns are narrow.
+  boxes never run past the window when the columns are narrow. Boxes
+  narrowed then from 52 and 36 to 47 and 33: there was a visible gap
+  between the digits and the unit.
 - **Every profession, window closed**: Best Crafts lists the saved recipes of
   every profession you've opened (each is saved when its window opens), ranked
   together: gold is gold whichever profession made it, and the cross-profession

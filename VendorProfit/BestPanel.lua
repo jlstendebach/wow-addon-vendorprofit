@@ -49,6 +49,9 @@ local LIST_WIDTH = BASE_LIST_WIDTH
 local ICON_BUTTON_WIDTH = 22
 -- Room for the size grip at the end of the bottom row (16, and a gap).
 local GRIP_ROOM = 24
+-- The minimum boxes' widths: 4 digits or 2, each with its unit inside.
+BestPanel.MIN_BOX_WIDE = 47
+BestPanel.MIN_BOX_NARROW = 33
 -- The columns, by key (Columns.lua), laid out for what's listed on each
 -- refresh: the recipe name (the favorite star inside it, first),
 -- Investment, Profit, Profit/hr, ROI, 7d (sold at auction in the last 7
@@ -993,22 +996,25 @@ local function Create(page)
     end
     local COIN = "Interface\\MoneyFrame\\UI-%sIcon"
     -- Up to 9,999 gold and 9,999%. Boxes are as wide as their digits and
-    -- unit need, and nearly touching (each border reaches 5px outside it).
-    local gold = Box("gold", Text(nil, L.BEST_MIN_PROFIT), 10, 52, 4, { texture = COIN:format("Gold") }, L.BEST_MIN_PROFIT_HELP)
-    local silver = Box("silver", gold, 9, 36, 2, { texture = COIN:format("Silver") }, L.BEST_MIN_PROFIT_HELP)
-    local copper = Box("copper", silver, 9, 36, 2, { texture = COIN:format("Copper") }, L.BEST_MIN_PROFIT_HELP)
+    -- unit need (4 digits, or 2, then the unit's space), and nearly touching
+    -- (each border reaches 5px outside it). They were 52 and 36, which left
+    -- a visible gap between the digits and the unit.
+    local WIDE, NARROW = BestPanel.MIN_BOX_WIDE, BestPanel.MIN_BOX_NARROW
+    local gold = Box("gold", Text(nil, L.BEST_MIN_PROFIT), 10, WIDE, 4, { texture = COIN:format("Gold") }, L.BEST_MIN_PROFIT_HELP)
+    local silver = Box("silver", gold, 9, NARROW, 2, { texture = COIN:format("Silver") }, L.BEST_MIN_PROFIT_HELP)
+    local copper = Box("copper", silver, 9, NARROW, 2, { texture = COIN:format("Copper") }, L.BEST_MIN_PROFIT_HELP)
     -- Profit an hour in gold and silver: copper is noise at an hour's scale.
-    local hourGold = Box("hourGold", Text(copper, L.BEST_MIN_PER_HOUR, 24), 10, 52, 4, { texture = COIN:format("Gold") },
+    local hourGold = Box("hourGold", Text(copper, L.BEST_MIN_PER_HOUR, 24), 10, WIDE, 4, { texture = COIN:format("Gold") },
         L.BEST_MIN_PER_HOUR_HELP)
-    local hourSilver = Box("hourSilver", hourGold, 9, 36, 2, { texture = COIN:format("Silver") }, L.BEST_MIN_PER_HOUR_HELP)
-    Box("roi", Text(hourSilver, L.BEST_MIN_ROI, 24), 10, 52, 4, { text = "%" }, L.BEST_MIN_ROI_HELP)
+    local hourSilver = Box("hourSilver", hourGold, 9, NARROW, 2, { texture = COIN:format("Silver") }, L.BEST_MIN_PER_HOUR_HELP)
+    Box("roi", Text(hourSilver, L.BEST_MIN_ROI, 24), 10, WIDE, 4, { text = "%" }, L.BEST_MIN_ROI_HELP)
     -- The window is at least as wide as the row (and the size grip after
     -- it), however narrow the columns are.
     local rowWidth = 0
     for _, part in ipairs({
-        { Columns.Measure(L.BEST_MIN_PROFIT, "GameFontNormalSmall"), 10, 52, 9, 36, 9, 36 },
-        { 24, Columns.Measure(L.BEST_MIN_PER_HOUR, "GameFontNormalSmall"), 10, 52, 9, 36 },
-        { 24, Columns.Measure(L.BEST_MIN_ROI, "GameFontNormalSmall"), 10, 52 },
+        { Columns.Measure(L.BEST_MIN_PROFIT, "GameFontNormalSmall"), 10, WIDE, 9, NARROW, 9, NARROW },
+        { 24, Columns.Measure(L.BEST_MIN_PER_HOUR, "GameFontNormalSmall"), 10, WIDE, 9, NARROW },
+        { 24, Columns.Measure(L.BEST_MIN_ROI, "GameFontNormalSmall"), 10, WIDE },
     }) do
         for _, width in ipairs(part) do
             rowWidth = rowWidth + width

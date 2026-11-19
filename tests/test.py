@@ -2357,9 +2357,13 @@ check("minimums are saved per character, shown in their boxes next time",
       == ["1", "23", "45", "12", "34", "25"])
 check("the window is wide enough for the bottom row and the size grip, however narrow the columns",
       ev_m("VendorProfitPanel:GetWidth()") - 2 * 16 >=
-      ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_PROFIT, "GameFontNormalSmall")') + 10 + 52 + 9 + 36 + 9 + 36
-      + 24 + ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_PER_HOUR, "GameFontNormalSmall")') + 10 + 52 + 9 + 36
-      + 24 + ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_ROI, "GameFontNormalSmall")') + 10 + 52 + 16)
+      ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_PROFIT, "GameFontNormalSmall")') + 10 + 47 + 9 + 33 + 9 + 33
+      + 24 + ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_PER_HOUR, "GameFontNormalSmall")') + 10 + 47 + 9 + 33
+      + 24 + ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_ROI, "GameFontNormalSmall")') + 10 + 47 + 16)
+check("the minimum boxes as wide as 4 digits (or 2) and their unit",
+      ev_m("VendorProfit.BestPanel.Frame().minimums.gold:GetWidth()") == 47
+      and ev_m("VendorProfit.BestPanel.Frame().minimums.silver:GetWidth()") == 33
+      and ev_m("VendorProfit.BestPanel.Frame().minimums.roi:GetWidth()") == 47)
 # Filters: profitable only, and skill-up colors, from the game's filter dropdown.
 run('__stub.recipes[2670].difficulty = 0; __stub.recipes[3328].difficulty = 1; __stub.recipes[2671].difficulty = 2; __stub.recipes[9102].difficulty = 3')
 run('if __stub.recipe and __stub.recipe.recipeID == 2670 then __stub.recipe.difficulty = 0 end')
