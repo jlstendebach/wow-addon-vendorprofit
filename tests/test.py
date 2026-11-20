@@ -2646,6 +2646,19 @@ run('VendorProfit.History.Bought(4444, 1, 100, "vendor")')
 check("...the history changing without a sale (a purchase, a craft's costs) doesn't", ev("__redraws") == 0)
 run('VendorProfit.History.Sold(4444, 1, 500, "auction")')
 check("...a sale does, once (7d)", ev("__redraws") == 1 and ev("VendorProfit.History.Heat()[4444].sold") == 1)
+# The recipes saved again after a craft (the profession's list updating):
+# only the skill-up colors are read again, and only a change redraws.
+run('__schematics = 0; local f = C_TradeSkillUI.GetRecipeSchematic; C_TradeSkillUI.GetRecipeSchematic = function(...) __schematics = __schematics + 1 return f(...) end')
+run('__stub.Advance(1); __redraws = 0; __schematics = 0; __stub.Fire("TRADE_SKILL_LIST_UPDATE"); __stub.Advance(1)')
+check("after a craft with no skill-up: saved again from the colors alone, and nothing redrawn",
+      ev("__redraws") == 0 and ev("__schematics") == 0 and ev("VendorProfit.Recipes.LastScan()") is not None)
+run('__stub.recipes[2670].difficulty = 0; __stub.recipe.difficulty = 0; __redraws = 0; __stub.Fire("TRADE_SKILL_LIST_UPDATE"); __stub.Advance(1)')
+# (One schematic read is the professions window's own Vendor Profit line
+# redrawing for the selected recipe, not the save.)
+check("...a skill-up changing a color: redrawn once, in the new color", ev("__redraws") == 1 and ev("__schematics") <= 1
+      and "|cffff8040Rough Bronze Cuirass|r" in ev(ROW(row_of(2866)) + ".left:GetText()"))
+run('__stub.recipes[2670].difficulty = nil; __stub.recipe.difficulty = nil; __redraws = 0; __stub.Fire("TRADE_SKILL_SHOW"); __stub.Advance(1)')
+check("opening the window saves in full (what each recipe makes and uses) and redraws", ev("__schematics") > 0 and ev("__redraws") >= 1)
 check("crafting's events redraw Best Crafts without ranking every recipe again",
       not ranked_again('for _, e in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "BAG_UPDATE_DELAYED", "PLAYER_MONEY" }) do __stub.Fire(e, "player") end')
       and len(best()) == 3)

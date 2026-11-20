@@ -160,8 +160,15 @@ time" route mode).
   not a craft's cost bookkeeping; recorded vendor prices; the professions
   window and auction house opening or closing; the recipes saved after a
   craft, once). Only the rows in view are filled in, the rest as they
-  scroll into view. History.Heat() is asked for once per redraw. A craft
-  now costs one redraw of about 3 ms in the harness.
+  scroll into view. History.Heat() is asked for once per redraw. Then the
+  last one went: the recipes saved after a craft (the profession's list
+  updating) are saved "light": recipes already saved keep what they make
+  and use (it doesn't change) and only their skill-up colors are read
+  again, and nothing is redrawn unless a color or recipe changed. Opening
+  the window still saves in full, and redraws (the Professions button
+  waits on that save). A craft that neither raises your skill nor counts
+  down your order now redraws nothing on Best Crafts: under 1.5 ms of
+  work in the harness, down from about 90.
 - **Skill-up colors** are only reported for the open profession, so each
   recipe's color is saved when its window is open, and shown for the others
   as of their last opening (possibly out of date). Josh wanted that said: a
