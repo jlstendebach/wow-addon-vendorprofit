@@ -2448,6 +2448,14 @@ run(B + '.tabs.vendor:Click()')
 # Many recipes: the list shows 14 at a time.
 many = ", ".join('{ recipeID = %d, itemLink = "item:2866", quantityMin = 1, reagents = { { itemID = 2841, quantity = 7 } } }' % (20000 + i) for i in range(20))
 run('__stub.OpenProfession(164, "Blacksmithing", { %s }); __stub.Advance(1)' % many)
+R18 = "VendorProfit.BestPanel.Row(18)"
+check("only the rows in view are filled in (setting hundreds of rows' text on every redraw made crafting stutter)",
+      "Rough Bronze Cuirass" in ev("VendorProfit.BestPanel.Row(1).left:GetText()") and ev(R18 + ".left:GetText()") == ""
+      and ev(R18 + ".entry") is not None)
+run(B + '.scroll:SetVerticalScroll(6 * 22); ' + B + '.scroll.__scripts.OnVerticalScroll(' + B + '.scroll, 6 * 22)')
+check("...the rest as they scroll into view", "Rough Bronze Cuirass" in ev(R18 + ".left:GetText()")
+      and ev(R18 + ".queue:IsShown()"))
+run(B + '.scroll:SetVerticalScroll(0)')
 check("20 recipes: all there, 14 rows tall, the rest scrolls", len(best()) == 20
       and ev(B + ".scroll:GetHeight()") == 14 * 22 + 7 and ev(B + ".list:GetHeight()") == 20 * 22)
 
@@ -2627,6 +2635,17 @@ def ranked_again(action):
     run(action)
     run('VendorProfit.BestPanel.Refresh()')
     return not ev("__ranking == __before")
+run('__redraws = 0; local f = VendorProfit.Panel.Refresh; VendorProfit.Panel.Refresh = function(...) __redraws = __redraws + 1 return f(...) end')
+run('for _, e in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "BAG_UPDATE_DELAYED", "PLAYER_MONEY", "TRADE_SKILL_LIST_UPDATE" }) do __stub.Fire(e, "player") end')
+check("a craft's casts, bags, money and list updates don't redraw Best Crafts at all (they're for the Shopping List)",
+      ev("__redraws") == 0)
+run('VendorProfit.Order.AddRecipe({ itemID = 2866, recipeID = 2670, profession = "Blacksmithing", count = 1, reagents = {} }, 1)')
+check("...the order changing does, once (Q)", ev("__redraws") == 1 and ev(ROW(1) + ".queued:GetText()") == "1")
+run('VendorProfit.Order.Clear(); __redraws = 0')
+run('VendorProfit.History.Bought(4444, 1, 100, "vendor")')
+check("...the history changing without a sale (a purchase, a craft's costs) doesn't", ev("__redraws") == 0)
+run('VendorProfit.History.Sold(4444, 1, 500, "auction")')
+check("...a sale does, once (7d)", ev("__redraws") == 1 and ev("VendorProfit.History.Heat()[4444].sold") == 1)
 check("crafting's events redraw Best Crafts without ranking every recipe again",
       not ranked_again('for _, e in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "BAG_UPDATE_DELAYED", "PLAYER_MONEY" }) do __stub.Fire(e, "player") end')
       and len(best()) == 3)
@@ -3090,8 +3109,10 @@ run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % ",".join(many))
 run('VendorProfit.Panel.Show("best")')
 run('VendorProfit.BestPanel.Refresh(); VendorProfit.BestPanel.Refresh()')
 waiting = lambda: ev("(function() local n = 0 for _, l in pairs(__stub.loadCallbacks) do n = n + #l end return n end)()")
-check("names not sent yet: shown as placeholders, each item asked for once however often it redraws",
-      "item 20000" in ev("VendorProfit.BestPanel.Row(1).left:GetText()") and waiting() == 30)
+# Only the rows in view (14, and one to spare either side) are filled in, so
+# only their items are asked for.
+check("names not sent yet: shown as placeholders, each item in view asked for once however often it redraws",
+      "item 20000" in ev("VendorProfit.BestPanel.Row(1).left:GetText()") and waiting() == 16)
 ranks = ev("__ranks")
 run(";".join('__stub.LoadItem("item:%d")' % (20000 + i) for i in range(30)))
 check("a batch arriving doesn't redraw at once", ev("__ranks") == ranks)

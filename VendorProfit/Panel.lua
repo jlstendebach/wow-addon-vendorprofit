@@ -1357,9 +1357,17 @@ Panel.AddPage({
 -- The window only opens and closes when you open or close it: not at the
 -- auction house, bank or a vendor, and not on Queue. It redraws as they
 -- change while it's open.
-Shopper.OnChange(Panel.Refresh)
-Banker.OnChange(Panel.Refresh)
-Merchant.OnChange(Panel.Refresh)
+-- What the Shopping List shows changing: redrawn only while it's the tab
+-- up. The other tabs listen for what they show (Best Crafts redrawing for
+-- every bag, cast and plan change made crafting stutter).
+local function RefreshIfShopping()
+    if activeTab == "shopping" then
+        Panel.Refresh()
+    end
+end
+Shopper.OnChange(RefreshIfShopping)
+Banker.OnChange(RefreshIfShopping)
+Merchant.OnChange(RefreshIfShopping)
 
 -- Walking up to a crafting station (or away from one) changes what can be
 -- crafted, but the game sends no event for it, so the panel would keep saying
@@ -1403,7 +1411,7 @@ events:SetScript("OnEvent", function(_, event)
             Shopper.Recompute()
         end
     end
-    Panel.Refresh()
+    RefreshIfShopping()
 end)
 
 -- /vprofit stations: each queued step's crafting station and whether the

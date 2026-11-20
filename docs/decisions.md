@@ -150,6 +150,18 @@ time" route mode).
   live lookups, a vendor opening or closing, recorded vendor prices), or
   after a minute, in case a price changed with nothing to say so. Never
   kept while item info is still loading.
+- **Fewer, cheaper redraws** (2026-11-20): crafting still stuttered after
+  the cache: profiled on Josh's 299 recipes, each craft still redrew Best
+  Crafts about 9 times (~10 ms each in the harness, more in game), because
+  the Shopping List's events (casts, bags, money, the profession's list)
+  and its plan changes redrew whichever tab was up, and every redraw set
+  the text of all ~244 rows. Now: those only redraw the Shopping List;
+  Best Crafts redraws for what it shows (the order for Q, sales for 7d,
+  not a craft's cost bookkeeping; recorded vendor prices; the professions
+  window and auction house opening or closing; the recipes saved after a
+  craft, once). Only the rows in view are filled in, the rest as they
+  scroll into view. History.Heat() is asked for once per redraw. A craft
+  now costs one redraw of about 3 ms in the harness.
 - **Skill-up colors** are only reported for the open profession, so each
   recipe's color is saved when its window is open, and shown for the others
   as of their last opening (possibly out of date). Josh wanted that said: a
