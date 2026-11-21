@@ -3229,6 +3229,27 @@ check("older than 90 days: thinned to each hour's last point; recent points kept
       ev('VendorProfitDB.gold["%s"].log' % KEY) == "%d:105;%d:111;%d:117;%d:5000;%d:6000"
       % (old + 50, old + 110, old + 170, MIN0 - 30, MIN0 - 20))
 
+# No realm name at login (the game reported "" once on Forever): the gold was
+# logged as a second "Josten-", counted at his first value all the way back,
+# so the graph showed far more than ever was. Asked again until it comes.
+run5, ev5 = client(CLOCK + '__stub.realm = ""')
+check("no realm at login: nothing recorded yet, no second Josten", ev5('%s.Characters()[1]' % G) is None
+      and ev5('VendorProfitDB.gold["Josten-"]') is None)
+run5('__stub.realm = "Blackwolf"; __stub.Advance(2)')
+check("...recorded under the right realm once the game says it",
+      [c.key for c in ev5('%s.Characters()' % G).values()] == [KEY])
+# The realm never comes: the one this name was last seen on is used.
+run6, ev6 = client(CLOCK + '__stub.realm = ""; VendorProfitDB = { gold = { ["Josten-Blackwolf"] = { name = "Josten", realm = "Blackwolf", log = "%d:500" } } }' % (MIN0 - 60))
+run6('__stub.Advance(31)')
+check("...never: the realm this name was last seen on", [c.key for c in ev6('%s.Characters()' % G).values()] == [KEY]
+      and ev6('%s.ValueAt("%s", __stub.clock)' % (G, KEY)) == 1000000)
+# Gold already logged as "Josten-" is folded into Josten-Blackwolf at login.
+run7, ev7 = client(CLOCK + 'VendorProfitDB = { gold = { ["Josten-Blackwolf"] = { name = "Josten", realm = "Blackwolf", log = "%d:500;%d:900" }, ["Josten-"] = { name = "Josten", realm = "", log = "%d:900;%d:2000" } } }'
+                   % (MIN0 - 60, MIN0 - 50, MIN0 - 40, MIN0 - 30))
+check("gold logged under no realm: folded into the character's own log, the second Josten gone",
+      [c.key for c in ev7('%s.Characters()' % G).values()] == [KEY] and ev7('VendorProfitDB.gold["Josten-"]') is None
+      and ev7('VendorProfitDB.gold["%s"].log' % KEY).startswith("%d:500;%d:900;%d:2000" % (MIN0 - 60, MIN0 - 50, MIN0 - 30)))
+
 # Gold read as 0 just after login is asked again before it's believed.
 run2, ev2 = client(CLOCK + '__stub.money = 0')
 check("0 at login: not believed yet", ev2('%s.Characters()[1]' % G) is None)

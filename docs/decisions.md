@@ -541,6 +541,16 @@ opens.
 
 ## Gold
 
+- **No realm at login** (2026-11-20): one login on Forever reported an
+  empty realm name, so Josten's gold went into a second log, "Josten-".
+  A character counts at its first value before its first point, so the
+  second Josten added his whole balance (234g) to the graph all the way
+  back, and it peaked at 687g that never existed. Now an empty realm is
+  asked for again every second (like the 0 gold at login); after 30 tries
+  the realm that name was last seen on is used if there's only one, and
+  otherwise nothing is recorded. A log already saved under an empty realm
+  is folded into the character's own at its next login.
+
 - **Why it's here**: a graph of your gold over time, like TradeSkillMaster's
   Player Gold, so TSM doesn't have to stay installed just for that. The
   behavior is borrowed (ranges, drag to zoom, hover, green when up and red
