@@ -42,6 +42,8 @@ Poster.DURATION = 1
 Poster.SUSPICIOUS_COUNT = 3
 Poster.SUSPICIOUS_GAP = 0.8
 Poster.SUSPICIOUS_SKIPS = 2
+-- How many of the cheapest prices the Post step shows, for a gut check.
+Poster.LISTED_SHOWN = 4
 
 local SORTS = { { sortOrder = 0, reverseSort = false } } -- by price, cheapest first
 
@@ -53,7 +55,8 @@ local SORTS = { { sortOrder = 0, reverseSort = false } } -- by price, cheapest f
 --   "posting"  waiting for the items to leave your bags
 local status = "closed"
 -- The item being priced or posted: { itemID, tries, commodity, price,
--- skipped (cheap listings passed over), guess (last known price, when
+-- listed (the cheapest few prices, { price, quantity }), skipped (how many
+-- of them were passed over as bait), guess (last known price, when
 -- nothing's listed), cost (per item), armed (below cost, clicked once),
 -- before, quantity (posting) }.
 local current
@@ -175,6 +178,11 @@ local function Priced(rows)
     local item = current
     item.cost = VendorProfit.History.UnitCost(item.itemID)
     local groups = Groups(rows)
+    -- The cheapest few, for a gut check under the price (the Post step).
+    item.listed = {}
+    for index = 1, math.min(#groups, Poster.LISTED_SHOWN) do
+        item.listed[index] = groups[index]
+    end
     if #groups > 0 then
         item.price, item.skipped = Poster.Choose(groups)
     else

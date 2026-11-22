@@ -371,6 +371,12 @@ time" route mode).
   seen = skipped. Below cost after the cut (Profit History's recorded
   cost) needs a second click. The step stays after the order is done.
   Duration index 1 assumed to be Forever's 2 hours (to check in game).
+  For a gut check, the cheapest few prices found (and how many at each,
+  the bait marked) show under the price. Josh asked about bringing up the
+  Sell tab instead: Auctionator replaces it (and this addon only reads
+  Auctionator), and driving the game's own Sell tab from addon code risks
+  blocked-action taint on its Post button, plus an extra search per item;
+  the listing line shows the same from the search already done.
 
 - **Craft step time** (2026-11-18): "Craft (63 min)" (no "~": the game's
   font draws it high on the line, and "about" was longer): the crafts left in

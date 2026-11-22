@@ -955,6 +955,20 @@ local function AddToDo(plan)
             end
             AddRow("note", note, nil, { text = L.POST_SKIP, onClick = Poster.Skip, width = 70,
                 tooltip = string.format(L.POST_SKIP_HELP, ItemName(item.itemID)) })
+            -- The cheapest few prices listed, as the Sell tab would show
+            -- them, for a gut check: from the search already done, so no
+            -- extra calls, and without touching the game's Sell tab.
+            if item.listed and #item.listed > 0 then
+                local parts = {}
+                for index, group in ipairs(item.listed) do
+                    local part = Money(group.price) .. " x" .. group.quantity
+                    if index <= (item.skipped or 0) then
+                        part = part .. " " .. L.POST_LISTED_SKIPPED
+                    end
+                    parts[index] = part
+                end
+                AddRow("note", Gray(string.format(L.POST_LISTED, table.concat(parts, ", "))))
+            end
         end
         local rows = {}
         for _, entry in ipairs(toPost) do

@@ -3187,6 +3187,8 @@ run('__stub.Advance(0.5)')
 check("priced: the 3 at 40c passed over as bait; matching 1s",
       ev("%s.Status()" % P) == "ready" and ev("%s.Current().price" % P) == 100
       and has_line(ev, "Post 200 Test Shells at", "skipping a few suspiciously cheap"))
+check("...with the cheapest prices listed under it for a gut check, the bait marked",
+      has_line(ev, "Listed: " + ev("VendorProfit.FormatMoney(40)") + " x3 (skipped), " + ev("VendorProfit.FormatMoney(100)") + " x600"))
 run(POST + ':Click()')
 posts = lambda: [(p.kind, p.itemID, p.duration, p.quantity, p.price) for p in ev("__stub.ah.posts").values()]
 check("Post: all 200 in one post, the shortest duration, at that price", posts() == [("commodity", 50001, 1, 200, 100)]
