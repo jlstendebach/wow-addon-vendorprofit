@@ -354,6 +354,22 @@ time" route mode).
 
 ## Shopping List
 
+- **Post step** (2026-11-22), Josh's manual posting automated: after Craft,
+  what the order crafted (queued recipes' outputs, noted as each craft
+  completes; not reagents crafted on the way; not recipes queued from the
+  Vendor tab, which order entries now remember) is posted at the lowest
+  listed price, all of it, shortest duration, one click an item (the game
+  only posts in a click; it posts several items that don't stack in one
+  call, as Auctionator's multisell does, so one click for those too: I
+  first said otherwise and Josh corrected it). Price lookups retry after
+  3s (his "sometimes it hangs"). Pricing, his rules: match the lowest;
+  bait = 3 or fewer at a price over 20% below the next, skipped up to
+  twice; nothing listed = Auctionator's last price + a round step of
+  about gold^0.7 (fits his 1->2, 3->5, 10->15, 30->40 exactly); never
+  seen = skipped. Below cost after the cut (Profit History's recorded
+  cost) needs a second click. The step stays after the order is done.
+  Duration index 1 assumed to be Forever's 2 hours (to check in game).
+
 - **Craft step time** (2026-11-18): "Craft (63 min)" (no "~": the game's
   font draws it high on the line, and "about" was longer): the crafts left in
   the plan times each recipe's cast time (C_Spell.GetSpellInfo(recipeID)

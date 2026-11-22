@@ -842,6 +842,53 @@ function stub.PutInBank(bag, slot, itemID, count)
     SetSlot(bag, slot, { itemID = itemID, count = count })
     stub.bank[itemID] = (stub.bank[itemID] or 0) + count
 end
+-- Puts count of an item into a bag slot (and counts it as in the bags).
+function stub.PutInBags(bag, slot, itemID, count)
+    SetSlot(bag, slot, { itemID = itemID, count = count })
+    stub.bags[itemID] = (stub.bags[itemID] or 0) + count
+end
+-- Posting: stub.ah.posts = { { kind, bag, slot, itemID, duration, quantity,
+-- price } }. Unless ah.noPostReply, the items leave the bags a moment later
+-- (BAG_UPDATE_DELAYED, then AUCTION_HOUSE_AUCTION_CREATED); ah.postError
+-- fails the next post with that message instead.
+ItemLocation = {}
+function ItemLocation:CreateFromBagAndSlot(bag, slot) return { bag = bag, slot = slot } end
+stub.ah.posts = {}
+local function Post(kind, location, duration, quantity, price)
+    local s = Slot(location.bag, location.slot)
+    stub.ah.posts[#stub.ah.posts + 1] = { kind = kind, bag = location.bag, slot = location.slot,
+        itemID = s and s.itemID, duration = duration, quantity = quantity, price = price }
+    if stub.ah.noPostReply then return end
+    C_Timer.After(0.1, function()
+        if stub.ah.postError then
+            local text = stub.ah.postError
+            stub.ah.postError = nil
+            stub.Fire("UI_ERROR_MESSAGE", 0, text)
+            return
+        end
+        local id = s.itemID
+        local left = quantity
+        for bag, slots in pairs(stub.containers) do
+            for slot, v in pairs(slots) do
+                if v.itemID == id and left > 0 and bag <= 5 then
+                    local take = math.min(v.count, left)
+                    v.count, left = v.count - take, left - take
+                    if v.count <= 0 then slots[slot] = nil end
+                end
+            end
+        end
+        stub.bags[id] = (stub.bags[id] or 0) - quantity
+        stub.Fire("BAG_UPDATE_DELAYED")
+        stub.Fire("AUCTION_HOUSE_AUCTION_CREATED", 1)
+    end)
+end
+function C_AuctionHouse.PostCommodity(location, duration, quantity, unitPrice)
+    Post("commodity", location, duration, quantity, unitPrice)
+end
+function C_AuctionHouse.PostItem(location, duration, quantity, bid, buyout)
+    Post("item", location, duration, quantity, buyout)
+end
+
 -- Fills a bag slot with something else (to make bags full).
 function stub.FillBags()
     for bag = 0, 4 do for slot = 1, 16 do

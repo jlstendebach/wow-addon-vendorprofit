@@ -222,6 +222,18 @@ local function Recorded(itemID)
     return total
 end
 
+-- What one of an item cost you on average, over the ones with recorded
+-- costs (copper), or nil if none: for posting (Poster.lua) never below it
+-- by accident.
+function History.UnitCost(itemID)
+    local count, total = 0, 0
+    for _, lot in ipairs(DB().stock[itemID] or {}) do
+        count = count + lot.n
+        total = total + lot.n * lot.cost
+    end
+    return count > 0 and total / count or nil
+end
+
 -- Items that went some other way (mailed to an alt, destroyed, used): when
 -- you own fewer of a reagent than have recorded costs, the oldest go.
 -- Crafted items are left alone, since they may be up for auction.

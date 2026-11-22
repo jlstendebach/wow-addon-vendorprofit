@@ -286,6 +286,7 @@ local function QueueRecipe(entry)
         count = recipe.count, reagents = recipe.reagents,
         sellPrice = select(11, C_Item.GetItemInfo(recipe.item)),
         exact = exact,
+        vendor = tab == "vendor",
     }, crafts)
     local name = C_Item.GetItemInfo(recipe.item) or ("item " .. recipe.item)
     print(string.format(L.QUEUED, crafts, exact and (name .. " " .. L.QUEUED_EXACT_MARK) or name))

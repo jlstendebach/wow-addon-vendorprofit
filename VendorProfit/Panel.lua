@@ -14,6 +14,7 @@ local _, ns = ...
 local VendorProfit = ns.VendorProfit
 local Order = VendorProfit.Order
 local Shopper = VendorProfit.Shopper
+local Poster = VendorProfit.Poster
 local Inventory = VendorProfit.Inventory
 local Crafter = VendorProfit.Crafter
 local OpenButton = VendorProfit.OpenButton
@@ -441,6 +442,41 @@ local function BuyClick()
         end
         Shopper.Buy()
     end
+end
+
+-- How many of an item are in your bags.
+local function InBagsCount(itemID)
+    return C_Item.GetItemCount(itemID) or 0
+end
+
+-- The Post step's button: prices the first item, then posts each in turn
+-- (Poster.lua). Below cost it's red, and the first click only arms it.
+local function PostButton()
+    local status, item = Poster.Status(), Poster.Current()
+    local button = { onClick = Poster.Post, enabled = false, width = HEADING_BUTTON_WIDTH, text = L.POST_POST }
+    if status == "closed" then
+        button.text, button.tooltip = L.BUY_OPEN_AH, L.POST_OPEN_AH
+    elseif status == "idle" then
+        button.enabled, button.onClick = true, Poster.Price
+        button.tooltip = string.format(L.POST_PRICE_HELP, ItemName(Poster.Items()[1].itemID))
+    elseif status == "pricing" then
+        button.text, button.tooltip = L.BUY_PRICING, string.format(L.POST_PRICING, ItemName(item.itemID))
+    elseif status == "posting" then
+        button.text, button.tooltip = L.POST_POSTING, L.POST_POSTING_HELP
+    else
+        button.enabled = true
+        button.tooltip = string.format(L.POST_HELP, InBagsCount(item.itemID), ItemName(item.itemID), Money(item.price))
+        if Poster.BelowCost() then
+            button.text = Red(item.armed and L.POST_ANYWAY or L.POST_POST)
+            button.tooltip = string.format(item.armed and L.POST_ANYWAY_HELP or L.POST_BELOW_COST_HELP, Money(item.cost))
+        end
+        -- The game is busy (just after a post) and would drop it.
+        if not Poster.ThrottleReady() then
+            button.enabled, button.tooltip = false, L.BUTTON_AH_BUSY
+            Poster.WatchThrottle()
+        end
+    end
+    return button
 end
 
 -- The To buy heading's button: { text, enabled, tooltip, onClick }, or nil
@@ -876,8 +912,57 @@ local function AddToDo(plan)
     end
 
     shownCraft = nil
-    local craftButton, nextStep, openProfession = CraftButton()
-    local craftRow = Step("craft", CraftTitle(plan.crafts), Count(#plan.crafts, L.TODO_RECIPE, L.TODO_RECIPES), craftButton)
+    local craftRow, openProfession
+    if #plan.crafts > 0 then
+        local craftButton, nextStep
+        craftButton, nextStep, openProfession = CraftButton()
+        craftRow = Step("craft", CraftTitle(plan.crafts), Count(#plan.crafts, L.TODO_RECIPE, L.TODO_RECIPES), craftButton)
+        local items = {}
+        for _, step in ipairs(plan.crafts) do
+            local detail = string.format(step.crafts == 1 and L.CRAFTS_ONE or L.CRAFTS, step.crafts)
+            if step.profession then
+                detail = step.profession .. ", " .. detail
+            end
+            local label = ItemLabel(step.itemID, step.crafts * step.makes)
+            if step == nextStep then
+                label = NORMAL_FONT_COLOR:WrapTextInColorCode(L.NEXT_MARK) .. " " .. label
+                -- The next craft under its step too, so it's seen without
+                -- scrolling.
+                AddRow("row", label, Gray(detail))
+            end
+            items[#items + 1] = { label, Gray(detail) }
+        end
+        groups[#groups + 1] = { title = L.STEP_CRAFT, rows = items }
+    end
+
+    -- Post: what the order crafted, at the auction house (Poster.lua), with
+    -- the price to post at where it can't be missed, and Skip.
+    local toPost = Poster.Items()
+    if #toPost > 0 then
+        Step("post", L.STEP_POST, Count(#toPost, L.TODO_ITEM, L.TODO_ITEMS), PostButton())
+        local item = Poster.Current()
+        if item and item.price and (Poster.Status() == "ready" or Poster.Status() == "posting") then
+            local note = string.format(L.POST_AT, InBagsCount(item.itemID), ItemName(item.itemID), Money(item.price))
+            if item.guess then
+                note = note .. " " .. string.format(L.POST_GUESSED, Money(item.guess))
+            elseif item.skipped and item.skipped > 0 then
+                note = note .. " " .. L.POST_SKIPPED_CHEAP
+            end
+            if Poster.BelowCost() then
+                note = Red(note .. " " .. string.format(L.POST_BELOW_COST, Money(item.cost)))
+            else
+                note = NORMAL_FONT_COLOR:WrapTextInColorCode(note)
+            end
+            AddRow("note", note, nil, { text = L.POST_SKIP, onClick = Poster.Skip, width = 70,
+                tooltip = string.format(L.POST_SKIP_HELP, ItemName(item.itemID)) })
+        end
+        local rows = {}
+        for _, entry in ipairs(toPost) do
+            local price = item and item.itemID == entry.itemID and item.price
+            rows[#rows + 1] = { ItemLabel(entry.itemID, entry.count), price and Money(price) or nil }
+        end
+        groups[#groups + 1] = { title = L.STEP_POST, rows = rows }
+    end
 
     -- A step now where one that's gone was (it finished, and this one moved
     -- up into its place): a click there was likely meant for the old one.
@@ -896,22 +981,6 @@ local function AddToDo(plan)
     stepPlaces = places
     craftCover = openProfession and { button = craftRow.button, profession = openProfession, movedAt = stepMovedAt.craft }
         or nil
-    local items = {}
-    for _, step in ipairs(plan.crafts) do
-        local detail = string.format(step.crafts == 1 and L.CRAFTS_ONE or L.CRAFTS, step.crafts)
-        if step.profession then
-            detail = step.profession .. ", " .. detail
-        end
-        local label = ItemLabel(step.itemID, step.crafts * step.makes)
-        if step == nextStep then
-            label = NORMAL_FONT_COLOR:WrapTextInColorCode(L.NEXT_MARK) .. " " .. label
-            -- The next craft under its step too, so it's seen without
-            -- scrolling.
-            AddRow("row", label, Gray(detail))
-        end
-        items[#items + 1] = { label, Gray(detail) }
-    end
-    groups[#groups + 1] = { title = L.STEP_CRAFT, rows = items }
 
     if detailsOpen then
         AddTodoDetails(groups)
@@ -994,6 +1063,10 @@ local function AddContent()
     AddRow("heading", L.TAB_SHOPPING, nil, #entries > 0 and ScanButton() or nil)
     if #entries == 0 then
         AddRow("note", L.NOTHING_QUEUED)
+        -- The order crafted and done, its items still to post: just that.
+        if #Poster.Items() > 0 then
+            AddToDo(plan)
+        end
         return
     end
     if Section("queued", L.HEAD_QUEUED, #entries) then
@@ -1018,7 +1091,7 @@ end
 
 -- Messages at the end, the panel's height, and the open-profession cover.
 local function FinishLayout()
-    for _, source in ipairs({ Shopper, Banker }) do
+    for _, source in ipairs({ Shopper, Banker, Poster }) do
         local text, isError = source.Message()
         if text then
             AddRow("note", isError and Red(text) or text)
@@ -1366,6 +1439,7 @@ local function RefreshIfShopping()
     end
 end
 Shopper.OnChange(RefreshIfShopping)
+Poster.OnChange(RefreshIfShopping)
 Banker.OnChange(RefreshIfShopping)
 Merchant.OnChange(RefreshIfShopping)
 
