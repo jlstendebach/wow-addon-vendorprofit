@@ -180,6 +180,17 @@ local function SameForRoutes(a, b)
     return true
 end
 
+-- Whether two lists the same for routes (SameForRoutes) have the same
+-- skill-up colors too.
+local function SameColors(a, b)
+    for recipeID, recipe in pairs(b) do
+        if a[recipeID].skillUp ~= recipe.skillUp then
+            return false
+        end
+    end
+    return true
+end
+
 -- Known recipes that make an item.
 -- A saved recipe by its ID (the craft's spell ID), or nil.
 -- What a recipe must be crafted at (Anvil, Forge, Cooking Fire), as the
@@ -374,7 +385,11 @@ function Recipes.ForProfession(key)
 end
 
 -- Saves the open profession's learned recipes. Returns true if it saved.
-function Recipes.Scan()
+-- light: the profession's list updating with the window already open
+-- (after every craft): recipes already saved keep what they make and use
+-- (it doesn't change), and only their skill-up colors are read again; and
+-- if nothing changed, nothing is redrawn. Opening the window saves in full.
+function Recipes.Scan(light)
     if db == nil then
         return false
     end
@@ -398,7 +413,13 @@ function Recipes.Scan()
     local recipes = (not complete and saved and saved.recipes) or {}
     for _, recipeID in ipairs(recipeIDs or NONE) do
         local recipeInfo = C_TradeSkillUI.GetRecipeInfo(recipeID)
-        if recipeInfo and recipeInfo.learned and not recipeInfo.isEnchantingRecipe then
+        local old = light and complete and saved and saved.recipes[recipeID]
+        if old and recipeInfo and recipeInfo.learned then
+            recipes[recipeID] = {
+                item = old.item, count = old.count, reagents = old.reagents, stations = old.stations,
+                skillUp = Recipes.SkillUpFromInfo(recipeInfo),
+            }
+        elseif recipeInfo and recipeInfo.learned and not recipeInfo.isEnchantingRecipe then
             local schematic = C_TradeSkillUI.GetRecipeSchematic(recipeID, false)
             if schematic and schematic.outputItemID then
                 recipes[recipeID] = {
@@ -414,14 +435,19 @@ function Recipes.Scan()
 
     -- The profession's list updates after every craft (skill-ups), so it's
     -- saved again each time; routes only care when a recipe, what it makes
-    -- or what it uses changed.
-    -- (A filtered list is merged into the saved one in place: no telling.)
+    -- or what it uses changed, and Best Crafts also when a skill-up color
+    -- did. (A filtered list is merged into the saved one in place: no
+    -- telling.)
     local unchanged = complete and saved ~= nil and SameForRoutes(saved.recipes, recipes)
+    local colorsSame = unchanged and SameColors(saved.recipes, recipes)
     db.professions[key] = {
         name = info.professionName or tostring(key),
         recipes = recipes,
     }
     lastScan = { key = key, name = db.professions[key].name, time = GetTime() }
+    if light and colorsSame then
+        return true
+    end
     RebuildIndex(unchanged)
     VendorProfit.Refresh()
     -- Best Crafts lists every saved recipe (BestPanel.lua loads later).
@@ -476,15 +502,20 @@ local function ProfessionsChanged()
     end
 end
 
-local scanQueued = false
-local function QueueScan()
+-- full: the window opening (or switching profession), not just its list
+-- updating; a burst of events saves once, in full if any asked for it.
+local scanQueued, scanFull = false, false
+local function QueueScan(full)
+    scanFull = scanFull or full
     if scanQueued then
         return
     end
     scanQueued = true
     C_Timer.After(Recipes.SCAN_DELAY, function()
         scanQueued = false
-        xpcall(Recipes.Scan, geterrorhandler())
+        local light = not scanFull
+        scanFull = false
+        xpcall(function() Recipes.Scan(light) end, geterrorhandler())
     end)
 end
 
@@ -507,6 +538,6 @@ events:SetScript("OnEvent", function(self, event, arg)
     elseif event == "PLAYER_LOGIN" or event == "PLAYER_ENTERING_WORLD" or event == "SKILL_LINES_CHANGED" then
         ProfessionsChanged()
     else
-        QueueScan()
+        QueueScan(event ~= "TRADE_SKILL_LIST_UPDATE")
     end
 end)

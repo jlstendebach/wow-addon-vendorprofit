@@ -177,15 +177,75 @@ local function RecordAtLogin(tries)
     Record(money)
 end
 
-local function Login()
+-- Folds the log saved under key into this character's, then forgets key:
+-- the points of both, in time order (a minute in both: key's, the newer).
+local function MergeInto(key)
+    local from, into = Log(key), Log(playerKey)
+    local byMinute = {}
+    for index, minute in ipairs(into.minutes) do
+        byMinute[minute] = into.copper[index]
+    end
+    for index, minute in ipairs(from.minutes) do
+        byMinute[minute] = from.copper[index]
+    end
+    local minutes = {}
+    for minute in pairs(byMinute) do
+        minutes[#minutes + 1] = minute
+    end
+    table.sort(minutes)
+    local merged = { minutes = {}, copper = {} }
+    for _, minute in ipairs(minutes) do
+        local count = #merged.copper
+        if count == 0 or merged.copper[count] ~= byMinute[minute] then
+            merged.minutes[count + 1], merged.copper[count + 1] = minute, byMinute[minute]
+        end
+    end
+    logs[playerKey] = merged
+    logs[key] = nil
+    DB().gold[key] = nil
+end
+
+-- The game can report no realm name at login ("", seen on Forever): the
+-- gold was then logged under "Josten-", a second Josten, who counted at
+-- his first value all the way back (before its first point a character
+-- counts at that value), inflating the graph by his whole balance. So a
+-- missing realm is asked again every second, and after LOGIN_RETRIES the
+-- realm this name was last seen on is used, if there's just one; with
+-- none, nothing is recorded rather than a second character.
+-- Logs already saved under an empty realm are folded into the character's.
+local function Login(tries)
+    tries = tries or 0
     local name, realm = UnitName("player"), GetRealmName()
-    if name == nil or realm == nil then
+    if name == nil then
         return
+    end
+    if realm == nil or realm == "" then
+        if tries < Gold.LOGIN_RETRIES then
+            C_Timer.After(1, function() Login(tries + 1) end)
+            return
+        end
+        realm = nil
+        for _, entry in pairs(DB().gold) do
+            if entry.name == name and entry.realm and entry.realm ~= "" then
+                if realm ~= nil and realm ~= entry.realm then
+                    return
+                end
+                realm = entry.realm
+            end
+        end
+        if realm == nil then
+            return
+        end
     end
     playerKey = name .. "-" .. realm
     local gold = DB().gold
     gold[playerKey] = gold[playerKey] or {}
     gold[playerKey].name, gold[playerKey].realm = name, realm
+    if gold[name .. "-"] then
+        MergeInto(name .. "-")
+        Gold.Save()
+        Changed()
+    end
     Thin(Log(playerKey), math.floor(time() / MINUTE) - THIN_AFTER)
     RecordAtLogin(0)
 end

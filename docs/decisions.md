@@ -150,6 +150,25 @@ time" route mode).
   live lookups, a vendor opening or closing, recorded vendor prices), or
   after a minute, in case a price changed with nothing to say so. Never
   kept while item info is still loading.
+- **Fewer, cheaper redraws** (2026-11-20): crafting still stuttered after
+  the cache: profiled on Josh's 299 recipes, each craft still redrew Best
+  Crafts about 9 times (~10 ms each in the harness, more in game), because
+  the Shopping List's events (casts, bags, money, the profession's list)
+  and its plan changes redrew whichever tab was up, and every redraw set
+  the text of all ~244 rows. Now: those only redraw the Shopping List;
+  Best Crafts redraws for what it shows (the order for Q, sales for 7d,
+  not a craft's cost bookkeeping; recorded vendor prices; the professions
+  window and auction house opening or closing; the recipes saved after a
+  craft, once). Only the rows in view are filled in, the rest as they
+  scroll into view. History.Heat() is asked for once per redraw. Then the
+  last one went: the recipes saved after a craft (the profession's list
+  updating) are saved "light": recipes already saved keep what they make
+  and use (it doesn't change) and only their skill-up colors are read
+  again, and nothing is redrawn unless a color or recipe changed. Opening
+  the window still saves in full, and redraws (the Professions button
+  waits on that save). A craft that neither raises your skill nor counts
+  down your order now redraws nothing on Best Crafts: under 1.5 ms of
+  work in the harness, down from about 90.
 - **Skill-up colors** are only reported for the open profession, so each
   recipe's color is saved when its window is open, and shown for the others
   as of their last opening (possibly out of date). Josh wanted that said: a
@@ -521,6 +540,16 @@ opens.
   already added up by day aren't in it).
 
 ## Gold
+
+- **No realm at login** (2026-11-20): one login on Forever reported an
+  empty realm name, so Josten's gold went into a second log, "Josten-".
+  A character counts at its first value before its first point, so the
+  second Josten added his whole balance (234g) to the graph all the way
+  back, and it peaked at 687g that never existed. Now an empty realm is
+  asked for again every second (like the 0 gold at login); after 30 tries
+  the realm that name was last seen on is used if there's only one, and
+  otherwise nothing is recorded. A log already saved under an empty realm
+  is folded into the character's own at its next login.
 
 - **Why it's here**: a graph of your gold over time, like TradeSkillMaster's
   Player Gold, so TSM doesn't have to stay installed just for that. The

@@ -2448,6 +2448,14 @@ run(B + '.tabs.vendor:Click()')
 # Many recipes: the list shows 14 at a time.
 many = ", ".join('{ recipeID = %d, itemLink = "item:2866", quantityMin = 1, reagents = { { itemID = 2841, quantity = 7 } } }' % (20000 + i) for i in range(20))
 run('__stub.OpenProfession(164, "Blacksmithing", { %s }); __stub.Advance(1)' % many)
+R18 = "VendorProfit.BestPanel.Row(18)"
+check("only the rows in view are filled in (setting hundreds of rows' text on every redraw made crafting stutter)",
+      "Rough Bronze Cuirass" in ev("VendorProfit.BestPanel.Row(1).left:GetText()") and ev(R18 + ".left:GetText()") == ""
+      and ev(R18 + ".entry") is not None)
+run(B + '.scroll:SetVerticalScroll(6 * 22); ' + B + '.scroll.__scripts.OnVerticalScroll(' + B + '.scroll, 6 * 22)')
+check("...the rest as they scroll into view", "Rough Bronze Cuirass" in ev(R18 + ".left:GetText()")
+      and ev(R18 + ".queue:IsShown()"))
+run(B + '.scroll:SetVerticalScroll(0)')
 check("20 recipes: all there, 14 rows tall, the rest scrolls", len(best()) == 20
       and ev(B + ".scroll:GetHeight()") == 14 * 22 + 7 and ev(B + ".list:GetHeight()") == 20 * 22)
 
@@ -2627,6 +2635,30 @@ def ranked_again(action):
     run(action)
     run('VendorProfit.BestPanel.Refresh()')
     return not ev("__ranking == __before")
+run('__redraws = 0; local f = VendorProfit.Panel.Refresh; VendorProfit.Panel.Refresh = function(...) __redraws = __redraws + 1 return f(...) end')
+run('for _, e in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "BAG_UPDATE_DELAYED", "PLAYER_MONEY", "TRADE_SKILL_LIST_UPDATE" }) do __stub.Fire(e, "player") end')
+check("a craft's casts, bags, money and list updates don't redraw Best Crafts at all (they're for the Shopping List)",
+      ev("__redraws") == 0)
+run('VendorProfit.Order.AddRecipe({ itemID = 2866, recipeID = 2670, profession = "Blacksmithing", count = 1, reagents = {} }, 1)')
+check("...the order changing does, once (Q)", ev("__redraws") == 1 and ev(ROW(1) + ".queued:GetText()") == "1")
+run('VendorProfit.Order.Clear(); __redraws = 0')
+run('VendorProfit.History.Bought(4444, 1, 100, "vendor")')
+check("...the history changing without a sale (a purchase, a craft's costs) doesn't", ev("__redraws") == 0)
+run('VendorProfit.History.Sold(4444, 1, 500, "auction")')
+check("...a sale does, once (7d)", ev("__redraws") == 1 and ev("VendorProfit.History.Heat()[4444].sold") == 1)
+# The recipes saved again after a craft (the profession's list updating):
+# only the skill-up colors are read again, and only a change redraws.
+run('__schematics = 0; local f = C_TradeSkillUI.GetRecipeSchematic; C_TradeSkillUI.GetRecipeSchematic = function(...) __schematics = __schematics + 1 return f(...) end')
+run('__stub.Advance(1); __redraws = 0; __schematics = 0; __stub.Fire("TRADE_SKILL_LIST_UPDATE"); __stub.Advance(1)')
+check("after a craft with no skill-up: saved again from the colors alone, and nothing redrawn",
+      ev("__redraws") == 0 and ev("__schematics") == 0 and ev("VendorProfit.Recipes.LastScan()") is not None)
+run('__stub.recipes[2670].difficulty = 0; __stub.recipe.difficulty = 0; __redraws = 0; __stub.Fire("TRADE_SKILL_LIST_UPDATE"); __stub.Advance(1)')
+# (One schematic read is the professions window's own Vendor Profit line
+# redrawing for the selected recipe, not the save.)
+check("...a skill-up changing a color: redrawn once, in the new color", ev("__redraws") == 1 and ev("__schematics") <= 1
+      and "|cffff8040Rough Bronze Cuirass|r" in ev(ROW(row_of(2866)) + ".left:GetText()"))
+run('__stub.recipes[2670].difficulty = nil; __stub.recipe.difficulty = nil; __redraws = 0; __stub.Fire("TRADE_SKILL_SHOW"); __stub.Advance(1)')
+check("opening the window saves in full (what each recipe makes and uses) and redraws", ev("__schematics") > 0 and ev("__redraws") >= 1)
 check("crafting's events redraw Best Crafts without ranking every recipe again",
       not ranked_again('for _, e in ipairs({ "UNIT_SPELLCAST_START", "UNIT_SPELLCAST_STOP", "BAG_UPDATE_DELAYED", "PLAYER_MONEY" }) do __stub.Fire(e, "player") end')
       and len(best()) == 3)
@@ -3090,8 +3122,10 @@ run('__stub.OpenProfession(164, "Blacksmithing", { %s })' % ",".join(many))
 run('VendorProfit.Panel.Show("best")')
 run('VendorProfit.BestPanel.Refresh(); VendorProfit.BestPanel.Refresh()')
 waiting = lambda: ev("(function() local n = 0 for _, l in pairs(__stub.loadCallbacks) do n = n + #l end return n end)()")
-check("names not sent yet: shown as placeholders, each item asked for once however often it redraws",
-      "item 20000" in ev("VendorProfit.BestPanel.Row(1).left:GetText()") and waiting() == 30)
+# Only the rows in view (14, and one to spare either side) are filled in, so
+# only their items are asked for.
+check("names not sent yet: shown as placeholders, each item in view asked for once however often it redraws",
+      "item 20000" in ev("VendorProfit.BestPanel.Row(1).left:GetText()") and waiting() == 16)
 ranks = ev("__ranks")
 run(";".join('__stub.LoadItem("item:%d")' % (20000 + i) for i in range(30)))
 check("a batch arriving doesn't redraw at once", ev("__ranks") == ranks)
@@ -3194,6 +3228,27 @@ run('__stub.Fire("PLAYER_LOGOUT")')
 check("older than 90 days: thinned to each hour's last point; recent points kept",
       ev('VendorProfitDB.gold["%s"].log' % KEY) == "%d:105;%d:111;%d:117;%d:5000;%d:6000"
       % (old + 50, old + 110, old + 170, MIN0 - 30, MIN0 - 20))
+
+# No realm name at login (the game reported "" once on Forever): the gold was
+# logged as a second "Josten-", counted at his first value all the way back,
+# so the graph showed far more than ever was. Asked again until it comes.
+run5, ev5 = client(CLOCK + '__stub.realm = ""')
+check("no realm at login: nothing recorded yet, no second Josten", ev5('%s.Characters()[1]' % G) is None
+      and ev5('VendorProfitDB.gold["Josten-"]') is None)
+run5('__stub.realm = "Blackwolf"; __stub.Advance(2)')
+check("...recorded under the right realm once the game says it",
+      [c.key for c in ev5('%s.Characters()' % G).values()] == [KEY])
+# The realm never comes: the one this name was last seen on is used.
+run6, ev6 = client(CLOCK + '__stub.realm = ""; VendorProfitDB = { gold = { ["Josten-Blackwolf"] = { name = "Josten", realm = "Blackwolf", log = "%d:500" } } }' % (MIN0 - 60))
+run6('__stub.Advance(31)')
+check("...never: the realm this name was last seen on", [c.key for c in ev6('%s.Characters()' % G).values()] == [KEY]
+      and ev6('%s.ValueAt("%s", __stub.clock)' % (G, KEY)) == 1000000)
+# Gold already logged as "Josten-" is folded into Josten-Blackwolf at login.
+run7, ev7 = client(CLOCK + 'VendorProfitDB = { gold = { ["Josten-Blackwolf"] = { name = "Josten", realm = "Blackwolf", log = "%d:500;%d:900" }, ["Josten-"] = { name = "Josten", realm = "", log = "%d:900;%d:2000" } } }'
+                   % (MIN0 - 60, MIN0 - 50, MIN0 - 40, MIN0 - 30))
+check("gold logged under no realm: folded into the character's own log, the second Josten gone",
+      [c.key for c in ev7('%s.Characters()' % G).values()] == [KEY] and ev7('VendorProfitDB.gold["Josten-"]') is None
+      and ev7('VendorProfitDB.gold["%s"].log' % KEY).startswith("%d:500;%d:900;%d:2000" % (MIN0 - 60, MIN0 - 50, MIN0 - 30)))
 
 # Gold read as 0 just after login is asked again before it's believed.
 run2, ev2 = client(CLOCK + '__stub.money = 0')

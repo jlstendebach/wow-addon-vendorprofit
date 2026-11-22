@@ -73,6 +73,7 @@ local SKILL_UP_ORDER, SKILL_UP, Filters, FiltersActive, SetFilter, ResetFilters,
 local frame              -- the page
 local tab = "auction"     -- auction first: it's what this tab is used for most
 local rows = {}
+local listed, VisibleRange, FillVisible   -- (below, with Refresh)
 local shownList          -- profession, tab and filter the list was last scrolled for
 local filter = ""        -- the search box's text, lowercased
 -- How the list prices crafts: along each one's cheapest route (its
@@ -136,10 +137,23 @@ BestPanel.ListMoney = ListMoney
 local HOT_COLOR = CreateColor(1, 0.5, 0)
 BestPanel.HOT_COLOR = HOT_COLOR
 
+-- History.Heat() for the redraw in progress: asked for once, not for every
+-- row (its cache check isn't free, hundreds of times over).
+local heatMap
+
+-- The sales as of the last redraw: how many, and the newest's time.
+local salesSeen
+local function SalesSeen()
+    local History = VendorProfit.History
+    local count = History.SaleCount()
+    local newest = count > 0 and History.Sale(1)
+    return count .. "/" .. (newest and newest.time or 0)
+end
+
 -- How the item has been selling at auction lately: { heat, sold, perDay,
 -- hot }, or nil if it hasn't sold there within the heat's reach.
 local function Heat(itemID)
-    return VendorProfit.History.Heat()[itemID]
+    return (heatMap or VendorProfit.History.Heat())[itemID]
 end
 
 -- Sold at auction in the last 7 days.
@@ -1102,6 +1116,8 @@ local function Create(page)
     frame.list = CreateFrame("Frame", nil, frame.scroll)
     frame.list:SetSize(LIST_WIDTH, ROW_HEIGHT)
     frame.scroll:SetScrollChild(frame.list)
+    -- Rows are filled in as they come into view.
+    frame.scroll:HookScript("OnVerticalScroll", function() FillVisible() end)
     -- A line between the favorites and the rest, in the gold of the
     -- Shopping List's dividers.
     frame.favoritesDivider = frame.list:CreateTexture(nil, "ARTWORK")
@@ -1175,10 +1191,10 @@ local function HoveredRow()
     if not (frame.scroll:IsShown() and frame.scroll:IsMouseOver()) then
         return nil
     end
-    local first = math.max(1, math.floor(frame.scroll:GetVerticalScroll() / ROW_HEIGHT))
-    for index = first, math.min(#rows, first + VisibleRows() + 1) do
+    local first, last = VisibleRange()
+    for index = first, last do
         local row = rows[index]
-        if row.entry and row.area:IsMouseOver() then
+        if row and row.entry and row.area:IsMouseOver() then
             return row
         end
     end
@@ -1248,6 +1264,95 @@ local function LayOutColumns(ranked)
             heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + col[name].left, LIST_TOP + 16)
         else
             heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + LIST_WIDTH + col[name].right, LIST_TOP + 16)
+        end
+    end
+end
+
+-- What the list holds, for filling rows as they come into view: the
+-- ranked entries, what each row shows (the Ctrl row the other way), and a
+-- version that goes up with every redraw.
+listed = { ranked = {}, shown = {}, version = 0 }
+
+-- Fills in the index-th row's text and buttons (placed already, by
+-- Refresh).
+local function FillRow(index)
+    local ranking, entry = listed.ranked[index], listed.shown[index]
+    local row = rows[index]
+    row.filled = listed.version
+    local reason
+    local label = ItemLabel(entry.recipe.item, ranking.skillUp)
+    -- Shown the other way (Ctrl): marked which.
+    if entry.other then
+        label = label .. " " .. Gray(entry.exact and L.QUEUED_EXACT_MARK or L.BEST_CHEAPEST_MARK)
+    end
+    row.left:SetText(label)
+    local queued = Queued(entry.recipe.recipeID)
+    row.queued:SetText(Count(queued))
+    row.auctions:SetText(Count(Auctions.Count(entry.recipe.item)))
+    local sold = Sold(entry.recipe.item)
+    row.sold:SetText(IsHot(entry.recipe.item) and HOT_COLOR:WrapTextInColorCode(sold) or Count(sold))
+    row.roi:SetText("")
+    if entry.profit then
+        row.investment:SetText(ListMoney(entry.cost))
+        row.right:SetText(ListMoney(entry.profit))
+        row.perHour:SetText(entry.perHour and ListMoney(entry.perHour) or Gray("-"))
+        row.roi:SetText(FormatROI(entry.roi))
+    else
+        local unpriced = entry.unpriced
+        if unpriced.itemID then
+            reason = string.format(L.BEST_NO_PRICE_FOR, C_Item.GetItemInfo(unpriced.itemID) or ("item " .. unpriced.itemID))
+        elseif tab == "vendor" then
+            reason = L.BEST_NO_VENDOR_PRICE
+        else
+            reason = L.BEST_NO_AUCTION_PRICE
+        end
+        -- The investment is known when only the sale price is missing;
+        -- the reason takes the columns without a number.
+        row.right:SetText("")
+        row.perHour:SetText("")
+        if unpriced.output then
+            row.investment:SetText(ListMoney(entry.cost))
+            row.reason:SetWidth(Columns.Span(col, "profit", "roi"))
+        else
+            row.investment:SetText("")
+            row.reason:SetWidth(Columns.Span(col, "investment", "roi"))
+        end
+    end
+    row.reason:SetText(reason and Gray(reason) or "")
+    row.left:Show()
+    row.investment:Show()
+    row.right:Show()
+    row.perHour:Show()
+    row.roi:Show()
+    row.queued:Show()
+    row.sold:Show()
+    row.auctions:Show()
+    row.reason:Show()
+    row.hit.recipe = entry.recipe
+    row.hit.entry = entry
+    row.hit:Show()
+    row.favorite.recipe = entry.recipe
+    ShowStar(row)
+    row.favorite:Show()
+    row.queue:SetScript("OnClick", function() QueueRecipe(ranking) end)
+    row.queue:Show()
+    row.unqueue:SetScript("OnClick", function() UnqueueRecipe(ranking) end)
+    row.unqueue:SetEnabled(queued > 0)
+    row.unqueue:Show()
+end
+
+-- The rows in view: from the scroll position, with one to spare either side.
+VisibleRange = function()
+    local first = math.max(1, math.floor(frame.scroll:GetVerticalScroll() / ROW_HEIGHT))
+    return first, math.min(#listed.ranked, first + VisibleRows() + 1)
+end
+
+-- Fills in the rows in view that haven't been since the last redraw.
+FillVisible = function()
+    local first, last = VisibleRange()
+    for index = first, last do
+        if rows[index].filled ~= listed.version then
+            FillRow(index)
         end
     end
 end
@@ -1388,70 +1493,14 @@ local function Refresh()
     if favorites == 0 or favorites == #ranked then
         favorites = nil
     end
+    -- Every row is placed, but only the ones in view are filled in (and
+    -- the rest as they scroll into view: FillVisible). A long list has
+    -- hundreds of rows, and setting all their text on every redraw made
+    -- crafting stutter.
+    listed = { ranked = ranked, shown = shownEntries, version = listed.version + 1 }
     for index, ranking in ipairs(ranked) do
-        local entry = shownEntries[index]
         local row = GetRow(index, RowTop(index, favorites))
-        local reason
-        local label = ItemLabel(entry.recipe.item, ranking.skillUp)
-        -- Shown the other way (Ctrl): marked which.
-        if entry.other then
-            label = label .. " " .. Gray(entry.exact and L.QUEUED_EXACT_MARK or L.BEST_CHEAPEST_MARK)
-        end
-        row.left:SetText(label)
         row.entry = ranking
-        local queued = Queued(entry.recipe.recipeID)
-        row.queued:SetText(Count(queued))
-        row.auctions:SetText(Count(Auctions.Count(entry.recipe.item)))
-        local sold = Sold(entry.recipe.item)
-        row.sold:SetText(IsHot(entry.recipe.item) and HOT_COLOR:WrapTextInColorCode(sold) or Count(sold))
-        row.roi:SetText("")
-        if entry.profit then
-            row.investment:SetText(ListMoney(entry.cost))
-            row.right:SetText(ListMoney(entry.profit))
-            row.perHour:SetText(entry.perHour and ListMoney(entry.perHour) or Gray("-"))
-            row.roi:SetText(FormatROI(entry.roi))
-        else
-            local unpriced = entry.unpriced
-            if unpriced.itemID then
-                reason = string.format(L.BEST_NO_PRICE_FOR, C_Item.GetItemInfo(unpriced.itemID) or ("item " .. unpriced.itemID))
-            elseif tab == "vendor" then
-                reason = L.BEST_NO_VENDOR_PRICE
-            else
-                reason = L.BEST_NO_AUCTION_PRICE
-            end
-            -- The investment is known when only the sale price is missing;
-            -- the reason takes the columns without a number.
-            row.right:SetText("")
-            row.perHour:SetText("")
-            if unpriced.output then
-                row.investment:SetText(ListMoney(entry.cost))
-                row.reason:SetWidth(Columns.Span(col, "profit", "roi"))
-            else
-                row.investment:SetText("")
-                row.reason:SetWidth(Columns.Span(col, "investment", "roi"))
-            end
-        end
-        row.reason:SetText(reason and Gray(reason) or "")
-        row.left:Show()
-        row.investment:Show()
-        row.right:Show()
-        row.perHour:Show()
-        row.roi:Show()
-        row.queued:Show()
-        row.sold:Show()
-        row.auctions:Show()
-        row.reason:Show()
-        row.hit.recipe = entry.recipe
-        row.hit.entry = entry
-        row.hit:Show()
-        row.favorite.recipe = entry.recipe
-        ShowStar(row)
-        row.favorite:Show()
-        row.queue:SetScript("OnClick", function() QueueRecipe(ranking) end)
-        row.queue:Show()
-        row.unqueue:SetScript("OnClick", function() UnqueueRecipe(ranking) end)
-        row.unqueue:SetEnabled(queued > 0)
-        row.unqueue:Show()
     end
     for index = #ranked + 1, #rows do
         local row = rows[index]
@@ -1502,6 +1551,7 @@ local function Refresh()
         shownList = listKey
         frame.scroll:SetVerticalScroll(0)
     end
+    FillVisible()
     local y = LIST_TOP - listHeight
 
     -- Status: why the list is empty, where prices are from, and messages.
@@ -1556,13 +1606,24 @@ pageDef = {
     label = L.TAB_BEST,
     create = Create,
     width = WIDTH,
-    refresh = function() return Refresh() end,
+    refresh = function()
+        heatMap = VendorProfit.History.Heat()
+        salesSeen = SalesSeen()
+        local height = Refresh()
+        heatMap = nil
+        return height
+    end,
 }
 Panel.AddPage(pageDef)
 
 -- The rows shown, as "left | right" text (for tests and debugging), and the
 -- tab and Scan buttons.
 function BestPanel.Lines()
+    for index in ipairs(listed.ranked) do
+        if rows[index].filled ~= listed.version then
+            FillRow(index)
+        end
+    end
     local lines = {}
     for _, row in ipairs(rows) do
         if row.left:IsShown() then
@@ -1602,10 +1663,24 @@ if Auctionator.API.v1.RegisterForDBUpdate then
     Auctionator.API.v1.RegisterForDBUpdate(ADDON_NAME, BestPanel.Refresh)
 end
 
+-- Redrawn for what it shows: the order (Q), recorded vendor prices, the
+-- professions window opening or closing (closing leaves it open; it says to
+-- open one), and the auction house (Scan). Not for bags, casts or the
+-- profession's list updating: a craft fires all of those, and redrawing
+-- for each made crafting stutter; the recipes saved after a craft redraw
+-- it once (Recipes.lua).
+Order.OnChange(BestPanel.Refresh)
+VendorProfit.Merchant.OnChange(BestPanel.Refresh)
+-- Sales (7d, hot): the history also changes with every craft (its costs),
+-- which 7d doesn't show, so only a sale added or taken back since the last
+-- redraw redraws.
+VendorProfit.History.OnChange(function()
+    if SalesSeen() ~= salesSeen then
+        BestPanel.Refresh()
+    end
+end)
 local events = CreateFrame("Frame")
--- Closing the professions window leaves it open; it says to open one.
-for _, event in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE", "TRADE_SKILL_LIST_UPDATE",
-    "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED", "BAG_UPDATE_DELAYED" }) do
+for _, event in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE", "AUCTION_HOUSE_SHOW", "AUCTION_HOUSE_CLOSED" }) do
     pcall(events.RegisterEvent, events, event)
 end
 events:SetScript("OnEvent", BestPanel.Refresh)
