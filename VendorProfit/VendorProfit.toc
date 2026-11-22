@@ -30,6 +30,7 @@ Gold.lua
 Panel.lua
 MinimapButton.lua
 Columns.lua
+TurnIns.lua
 BestCrafts.lua
 ProfessionCycle.lua
 BestPanel.lua

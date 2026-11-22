@@ -210,6 +210,20 @@ time" route mode).
   minimum counts separate auction sales, not items, so one buyer of a
   stack can't make an item hot. Revisit per item if this still feels
   wrong in use.
+- **Turn-ins** (2026-11-21): Thorium Shells can be handed to an NPC for
+  Thorium Headed Arrows, 200 for 200 (repeatable quests 7342, Ironforge,
+  level 52, and 7341, Orgrimmar, listed as 60). Josh wanted to see when
+  arrows pay as well as or better than shells, to sell both. Priced as a
+  recipe under a "Turn-ins" heading of its own (anyone of the level can
+  do it, so it isn't tied to knowing the shells recipe or to
+  Engineering), with a negative recipe ID (the arrows' item ID) so it
+  can't clash with a spell. Pricing only, on purpose: queuing it would
+  need the Shopping List to plan a quest hand-in and Profit History to
+  carry the shells' cost to the arrows, special cases for one item, so
+  that waits until arrows prove worth making regularly. Profit/hr counts
+  only crafts below it, a dash with none. The tooltip compares crafting
+  the shells for the same 200. A table in TurnIns.lua, so another
+  turn-in is one entry.
 - **Row highlight** (2026-11-19): the row under the mouse is lit with the
   game's list highlight (the quest log's UI-QuestTitleHighlight, added),
   drawn on the list under the text and buttons. Found by the same

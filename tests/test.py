@@ -93,7 +93,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "Auctions.lua", "History.lua", "Gold.lua", "Panel.lua", "MinimapButton.lua", "Columns.lua", "BestCrafts.lua", "ProfessionCycle.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua", "GoldPanel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "Auctions.lua", "History.lua", "Gold.lua", "Panel.lua", "MinimapButton.lua", "Columns.lua", "TurnIns.lua", "BestCrafts.lua", "ProfessionCycle.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua", "GoldPanel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("the .toc keeps the placeholder; releases and deploys stamp the real version", TOC_VERSION == "@project-version@")
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
@@ -3133,6 +3133,66 @@ run('__stub.Advance(0.3)')
 check("...but once, a moment later, with the names", ev("__ranks") == ranks + 1
       and "Thing" in ev("VendorProfit.BestPanel.Row(1).left:GetText()") and waiting() == 0)
 check("no errors loading item names", ev("#__stub.errors") == 0)
+
+# --- Turn-ins: Thorium Shells for Thorium Headed Arrows ----------------------------
+# 200 shells handed in for 200 arrows, priced on Best Crafts like a recipe under
+# its own Turn-ins heading, for anyone of the level. Shells: 200 a craft from 2
+# Thorium Bars (1s each), 3c each at auction; arrows 5c each at auction.
+SHELLS, ARROWS, THORIUM_BAR = 15997, 18042, 12359
+SHELLS_RECIPE = '{ recipeID = 19800, itemLink = "item:15997", quantityMin = 200, reagents = { { itemID = 12359, quantity = 2 } } }'
+TURNIN_SETUP = """
+    __stub.items["item:15997"] = { name = "Thorium Shells", cached = true, sellPrice = 0 }
+    __stub.items["item:18042"] = { name = "Thorium Headed Arrow", cached = true, sellPrice = 0 }
+    __stub.items["item:12359"] = { name = "Thorium Bar", cached = true, sellPrice = 0 }
+    __stub.auctionPrices[15997], __stub.auctionPrices[18042], __stub.auctionPrices[12359] = 3, 5, 100
+    __stub.castTimes = { [19800] = 3000 }
+"""
+def turnin_client(level, faction="Alliance"):
+    run, ev = client('__stub.level, __stub.faction = %d, "%s"' % (level, faction))
+    run(TURNIN_SETUP)
+    run('__stub.OpenProfession(202, "Engineering", { %s }); __stub.Advance(1)' % SHELLS_RECIPE)
+    run('VendorProfit.Panel.Show("best")')
+    return run, ev
+def turnin_row(ev):
+    for i in range(1, 6):
+        r = "VendorProfit.BestPanel.Row(%d)" % i
+        if ev(r + " and " + r + ".entry and " + r + ".entry.recipe.item") == ARROWS:
+            return r
+run, ev = turnin_client(51)
+check("turn-ins: not below the quest's level", turnin_row(ev) is None
+      and all(p.key != "turnins" for p in ev("VendorProfit.BestCrafts.Professions()").values()))
+run, ev = turnin_client(52)
+R = turnin_row(ev)
+check("level 52, Alliance: Thorium Headed Arrow listed, under Turn-ins", R is not None
+      and ev(R + ".entry.recipe.profession") == "Turn-ins" and ev(R + ".entry.recipe.count") == 200
+      and [p.name for p in ev("VendorProfit.BestCrafts.Professions()").values()] == ["Engineering", "Turn-ins"])
+check("cheapest: 200 shells crafted (2 bars, 2s), not bought (6s); 200 arrows at 5c less the cut: 9s 50c, so 7s 50c profit",
+      ev(R + ".entry.cost") == 200 and ev(R + ".entry.profit") == 750)
+check("Profit/hr: the shells' casting only (3s a craft), the turn-in itself none", ev(R + ".entry.perHour") == 750 * 1200)
+check("no + or -: a turn-in can't be queued", not ev(R + ".queue:IsShown()") and not ev(R + ".unqueue:IsShown()"))
+run('__stub.selectedRecipe = nil; ' + R + '.hit:GetScript("OnMouseUp")(' + R + '.hit, "LeftButton")')
+check("clicking its name shows nothing in the professions window", ev("__stub.selectedRecipe") is None)
+run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
+tip = [l.left for l in ev("GameTooltip.lines").values()]
+check("hovering: where to hand them in, and what crafting the shells makes for the same 200",
+      tip[1] == "Turn-ins" and "Hand in 200 Thorium Shells to Artilleryman Sheldonore, Ironforge." in tip
+      and "Thorium Shells: " + ev("VendorProfit.FormatMoney(370)") + " profit per 200" in tip)
+run("GameTooltip:Hide()")
+run('VendorProfit.BestPanel.Frame().modes.exact:Click()')
+R = turnin_row(ev)
+check("Exact: the 200 shells bought (6s), and no Profit/hr: nothing's cast",
+      ev(R + ".entry.cost") == 600 and ev(R + ".entry.profit") == 350 and ev(R + ".entry.perHour") is None
+      and ev(R + ".perHour:GetText()") == ev("GRAY_FONT_COLOR:WrapTextInColorCode('-')"))
+run('VendorProfit.BestPanel.SetFilter("prof:turnins", true)')
+check("Turn-ins unticked in the Filter menu: hidden", turnin_row(ev) is None)
+run, ev = turnin_client(52, "Horde")
+check("Horde: Orgrimmar's turn-in needs level 60", turnin_row(ev) is None)
+run, ev = turnin_client(60, "Horde")
+R = turnin_row(ev)
+run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')
+check("...at 60: handed in to Bounty Hunter Kolark, Orgrimmar",
+      "Hand in 200 Thorium Shells to Bounty Hunter Kolark, Orgrimmar." in [l.left for l in ev("GameTooltip.lines").values()])
+check("no errors from turn-ins", ev("#__stub.errors") == 0)
 
 # --- Minimap button ------------------------------------------------------------------
 import math

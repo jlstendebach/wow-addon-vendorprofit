@@ -354,6 +354,9 @@ stub.money = 1000000
 function GetMoney() return stub.money end
 stub.playerName, stub.realm = "Tester", "Stubrealm"
 function UnitName(unit) if unit == "player" then return stub.playerName end end
+-- Level 1 unless a test says (turn-ins need 52 or 60), Alliance unless it says.
+function UnitLevel(unit) if unit == "player" then return stub.level or 1 end end
+function UnitFactionGroup(unit) if unit == "player" then return stub.faction or "Alliance" end end
 function GetRealmName() return stub.realm end
 function GetTime() return stub.now end
 function time() return 1700000000 end
