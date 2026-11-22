@@ -7,9 +7,9 @@
 --   * The lowest price listed, matched (no undercut), unless it looks like
 --     bait: at most SUSPICIOUS_COUNT items at it and SUSPICIOUS_GAP below
 --     the next price up. Then the next price, up to SUSPICIOUS_SKIPS times.
---   * Nothing listed: the last price Auctionator saw, plus a step that
---     shrinks as the price grows (1g -> 2g, 3g -> 5g, 10g -> 15g,
---     30g -> 40g: Josh's own examples). Never seen: skipped, saying so.
+--   * Nothing listed: the last price Auctionator saw, x gold, posted at
+--     x + min(x, x^0.7) (1g -> 2g, 3g -> 5g, 10g -> 15g, 30g -> 40g: Josh's
+--     own examples). Never seen: skipped, saying so.
 --   * Below what the item cost you (after the auction house's cut): Post
 --     turns red and needs a second click.
 --   * The shortest duration, every item you have in one post. The game
@@ -122,30 +122,20 @@ end
 
 -- Pricing ------------------------------------------------------------------------
 
--- The largest of 1, 2 and 5 times a power of ten that's at most x.
-local function Round125(x)
-    local power = 10 ^ math.floor(math.log10(x))
-    for _, n in ipairs({ 5, 2, 1 }) do
-        if n * power <= x then
-            return n * power
-        end
-    end
-    return power
-end
-
--- A price for an item with nothing listed: its last known price plus a
--- step of about its gold to the power 0.7, as a round number (1, 2, 5,
--- 10...), at most the price itself. That fits Josh's examples exactly:
--- 1g -> 2g, 3g -> 5g, 10g -> 15g, 30g -> 40g. Cut down to whole gold, or
--- whole silver under a gold.
+-- A price for an item with nothing listed, from its last known price x
+-- (in gold): f(x) = x + min(x, x^0.7). The step grows with the price but
+-- more slowly, so it's a smaller share of a dearer item; under 1g, where
+-- x^0.7 would be more than x, it's at most double. Then cut down to whole
+-- gold (whole silver under a gold). It fits Josh's examples exactly:
+-- 1g -> 2g, 3g -> 5g, 10g -> 15g, 30g -> 40g. A smooth formula on purpose,
+-- not a table of price bands.
 function Poster.Guess(last)
     local gold = last / 10000
-    local step = math.min(Round125(gold ^ 0.7), gold)
-    local price = last + step * 10000
+    local price = (gold + math.min(gold, gold ^ 0.7)) * 10000
     if price >= 10000 then
-        return price - price % 10000
+        return math.floor(price / 10000) * 10000
     elseif price >= 100 then
-        return price - price % 100
+        return math.floor(price / 100) * 100
     end
     return math.floor(price)
 end

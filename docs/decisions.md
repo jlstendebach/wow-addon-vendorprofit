@@ -364,8 +364,10 @@ time" route mode).
   first said otherwise and Josh corrected it). Price lookups retry after
   3s (his "sometimes it hangs"). Pricing, his rules: match the lowest;
   bait = 3 or fewer at a price over 20% below the next, skipped up to
-  twice; nothing listed = Auctionator's last price + a round step of
-  about gold^0.7 (fits his 1->2, 3->5, 10->15, 30->40 exactly); never
+  twice; nothing listed = f(x) = x + min(x, x^0.7) in gold, cut to whole
+  gold (fits his 1->2, 3->5, 10->15, 30->40 exactly; Josh wanted a
+  formula, not price bands, and the first version rounded the step to
+  1/2/5 steps, which jumped at band edges, so it's smooth now); never
   seen = skipped. Below cost after the cut (Profit History's recorded
   cost) needs a second click. The step stays after the order is done.
   Duration index 1 assumed to be Forever's 2 hours (to check in game).

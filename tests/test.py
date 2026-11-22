@@ -3138,9 +3138,12 @@ check("no errors loading item names", ev("#__stub.errors") == 0)
 # What the order crafted, posted at the lowest price listed, one click an item.
 P = "VendorProfit.Poster"
 POST = 'VendorProfit.Panel.RowButton("Post")'
-check("prices with nothing listed: last known plus a round step (1g->2g, 3g->5g, 10g->15g, 30g->40g)",
+check("prices with nothing listed: x + min(x, x^0.7) gold, cut to the gold (1g->2g, 3g->5g, 10g->15g, 30g->40g)",
       [ev("%s.Guess(%d)" % (P, g * 10000)) // 10000 for g in (1, 3, 10, 30)] == [2, 5, 15, 40]
-      and ev("%s.Guess(1000)" % P) == 2000)
+      and ev("%s.Guess(1000)" % P) == 2000 and ev("%s.Guess(1000000)" % P) == 1250000)
+# Smooth: no jump between price bands (9g 99s and 10g land a few silver apart, not gold).
+check("...a smooth formula: no jumps between price bands",
+      ev("%s.Guess(100000)" % P) - ev("%s.Guess(99900)" % P) <= 10000)
 groups = lambda *pairs: "{" + ",".join("{ price = %d, quantity = %d }" % p for p in pairs) + "}"
 check("matching the lowest price", ev("(%s.Choose(%s))" % (P, groups((100, 50), (110, 20)))) == 100)
 check("3 or fewer at a price 20% below the next: suspicious, the next one up",
