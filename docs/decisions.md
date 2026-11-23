@@ -377,6 +377,26 @@ time" route mode).
   Auctionator), and driving the game's own Sell tab from addon code risks
   blocked-action taint on its Post button, plus an extra search per item;
   the listing line shows the same from the search already done.
+- **Post Queue** (2026-11-22), Josh's design: "Queued" became **Crafting
+  Queue**, and a **Post Queue** section under it lists what's to post with
+  counts, - and + (five with Shift, 1 up to what's in your bags) and x
+  (off the queue: keep it), replacing the Post step's Skip, which could only
+  skip the item being priced, and only at the auction house. Posting posts
+  the queued count, not everything in your bags. FIFO: new items go last.
+  The listing line moved into To do's box (one row per price) instead of a
+  second scroll box. Saved as postQueue (the first version's toPost set is
+  turned into it, each at what's in the bags).
+- **Reposting what comes back** (2026-11-22): an auction mailed back,
+  expired *or* cancelled (Josh cancels undercut auctions to repost them),
+  is queued again for the count that came back, when its item is taken
+  (TakeInboxItem or AutoLootMailItem, which the mailbox's Open All uses).
+  Any auction, not only ones the addon posted: he reposts everything that
+  comes back, and it needs no record of who posted what; x keeps an item.
+  Matched by the game's own subject text (AUCTION_EXPIRED_MAIL_SUBJECT,
+  AUCTION_REMOVED_MAIL_SUBJECT), English if missing. Reading a mail as
+  it's taken now prefers the inbox as of its last update when the mail
+  there has changed (the emptied one gone and the next moved up: the next
+  isn't being taken).
 
 - **Craft step time** (2026-11-18): "Craft (63 min)" (no "~": the game's
   font draws it high on the line, and "about" was longer): the crafts left in

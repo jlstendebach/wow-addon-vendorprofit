@@ -444,9 +444,14 @@ local function BuyClick()
     end
 end
 
--- How many of an item are in your bags.
-local function InBagsCount(itemID)
-    return C_Item.GetItemCount(itemID) or 0
+-- How many of an item the Post Queue posts now.
+local function PostCount(itemID)
+    for _, item in ipairs(Poster.Items()) do
+        if item.itemID == itemID then
+            return item.count
+        end
+    end
+    return 0
 end
 
 -- The Post step's button: prices the first item, then posts each in turn
@@ -465,7 +470,7 @@ local function PostButton()
         button.text, button.tooltip = L.POST_POSTING, L.POST_POSTING_HELP
     else
         button.enabled = true
-        button.tooltip = string.format(L.POST_HELP, InBagsCount(item.itemID), ItemName(item.itemID), Money(item.price))
+        button.tooltip = string.format(L.POST_HELP, PostCount(item.itemID), ItemName(item.itemID), Money(item.price))
         if Poster.BelowCost() then
             button.text = Red(item.armed and L.POST_ANYWAY or L.POST_POST)
             button.tooltip = string.format(item.armed and L.POST_ANYWAY_HELP or L.POST_BELOW_COST_HELP, Money(item.cost))
@@ -935,14 +940,17 @@ local function AddToDo(plan)
         groups[#groups + 1] = { title = L.STEP_CRAFT, rows = items }
     end
 
-    -- Post: what the order crafted, at the auction house (Poster.lua), with
-    -- the price to post at where it can't be missed, and Skip.
+    -- Post: the Post Queue, at the auction house (Poster.lua), with the
+    -- price to post at where it can't be missed. The box below lists the
+    -- cheapest prices found for it, as the Sell tab would show them, for a
+    -- gut check: from the search already done, so no extra calls, and
+    -- without touching the game's Sell tab.
     local toPost = Poster.Items()
     if #toPost > 0 then
         Step("post", L.STEP_POST, Count(#toPost, L.TODO_ITEM, L.TODO_ITEMS), PostButton())
         local item = Poster.Current()
         if item and item.price and (Poster.Status() == "ready" or Poster.Status() == "posting") then
-            local note = string.format(L.POST_AT, InBagsCount(item.itemID), ItemName(item.itemID), Money(item.price))
+            local note = string.format(L.POST_AT, PostCount(item.itemID), ItemName(item.itemID), Money(item.price))
             if item.guess then
                 note = note .. " " .. string.format(L.POST_GUESSED, Money(item.guess))
             elseif item.skipped and item.skipped > 0 then
@@ -953,29 +961,19 @@ local function AddToDo(plan)
             else
                 note = NORMAL_FONT_COLOR:WrapTextInColorCode(note)
             end
-            AddRow("note", note, nil, { text = L.POST_SKIP, onClick = Poster.Skip, width = 70,
-                tooltip = string.format(L.POST_SKIP_HELP, ItemName(item.itemID)) })
-            -- The cheapest few prices listed, as the Sell tab would show
-            -- them, for a gut check: from the search already done, so no
-            -- extra calls, and without touching the game's Sell tab.
+            AddRow("note", note)
             if item.listed and #item.listed > 0 then
-                local parts = {}
+                local rows = {}
                 for index, group in ipairs(item.listed) do
-                    local part = Money(group.price) .. " x" .. group.quantity
+                    local right = "x" .. group.quantity
                     if index <= (item.skipped or 0) then
-                        part = part .. " " .. L.POST_LISTED_SKIPPED
+                        right = right .. " " .. Gray(L.POST_LISTED_SKIPPED)
                     end
-                    parts[index] = part
+                    rows[index] = { Money(group.price), right }
                 end
-                AddRow("note", Gray(string.format(L.POST_LISTED, table.concat(parts, ", "))))
+                groups[#groups + 1] = { title = L.STEP_POST, rows = rows }
             end
         end
-        local rows = {}
-        for _, entry in ipairs(toPost) do
-            local price = item and item.itemID == entry.itemID and item.price
-            rows[#rows + 1] = { ItemLabel(entry.itemID, entry.count), price and Money(price) or nil }
-        end
-        groups[#groups + 1] = { title = L.STEP_POST, rows = rows }
     end
 
     -- A step now where one that's gone was (it finished, and this one moved
@@ -1067,29 +1065,54 @@ local function AddQueued(index, entry)
     })
 end
 
--- The title (with Scan), then the queued crafts, the order's profit, the To
--- do checklist, and what's already in your bags, for information.
+-- One item in the Post Queue: how many to post (and how many are in your
+-- bags, when more), then x (off the queue: keep them), + and - (five with
+-- Shift), between 1 and what's in your bags.
+local function AddPostQueued(item)
+    local label = ItemLabel(item.itemID, item.count)
+    if item.bags > item.count then
+        label = label .. " " .. Gray(string.format(L.POST_QUEUE_IN_BAGS, item.bags))
+    end
+    AddRow("row", label, nil, nil, {
+        icons = {
+            { texture = CANCEL_TEXTURE, tooltip = string.format(L.POST_QUEUE_REMOVE, ItemName(item.itemID)),
+                onClick = function() Poster.Remove(item.itemID) end },
+            { text = "+", enabled = item.count < item.bags, tooltip = L.POST_QUEUE_MORE, onClick = function()
+                Poster.SetCount(item.itemID, item.count + VendorProfit.QueueStep())
+            end },
+            { text = "-", enabled = item.count > 1, tooltip = L.POST_QUEUE_FEWER, onClick = function()
+                Poster.SetCount(item.itemID, item.count - VendorProfit.QueueStep())
+            end },
+        },
+    })
+end
+
+-- The title (with Scan), then the queued crafts, what's queued to post, the
+-- order's profit, the To do checklist, and what's already in your bags,
+-- for information.
 local function AddContent()
     local s = Shopper.Summary()
     local plan = s.plan
 
     local entries = Order.Entries()
+    local posts = Poster.Items()
     AddRow("heading", L.TAB_SHOPPING, nil, #entries > 0 and ScanButton() or nil)
-    if #entries == 0 then
+    if #entries == 0 and #posts == 0 then
         AddRow("note", L.NOTHING_QUEUED)
-        -- The order crafted and done, its items still to post: just that.
-        if #Poster.Items() > 0 then
-            AddToDo(plan)
-        end
         return
     end
-    if Section("queued", L.HEAD_QUEUED, #entries) then
+    if #entries > 0 and Section("queued", L.HEAD_QUEUED, #entries) then
         for index, entry in ipairs(entries) do
             AddQueued(index, entry)
         end
     end
+    if #posts > 0 and Section("postQueue", L.HEAD_POST_QUEUE, #posts) then
+        for _, item in ipairs(posts) do
+            AddPostQueued(item)
+        end
+    end
 
-    if Section("profit", L.HEAD_PROFIT) then
+    if #entries > 0 and Section("profit", L.HEAD_PROFIT) then
         AddProfit(s)
     end
     local fromBags = AddToDo(plan)

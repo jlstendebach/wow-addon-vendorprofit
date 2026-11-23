@@ -251,7 +251,7 @@ function Order.Crafted(recipeID)
         if entry.recipeID == recipeID then
             entry.crafts = entry.crafts - 1
             if not entry.vendor then
-                VendorProfit.Poster.Crafted(entry.itemID)
+                VendorProfit.Poster.Crafted(entry.itemID, entry.count)
             end
             if entry.crafts <= 0 then
                 table.remove(order.entries, index)

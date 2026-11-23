@@ -1,6 +1,7 @@
--- Posting at the auction house: the Shopping List's Post step. What the
--- order crafted, once it's in your bags, is posted at the lowest price
--- listed, one click an item (all of it at once), the way Josh posts by hand:
+-- Posting at the auction house: the Shopping List's Post Queue and Post
+-- step. Queued items, once in your bags, are posted at the lowest price
+-- listed, one click an item (the queued count at once), the way Josh posts
+-- by hand:
 --
 --   * Price: one search for the item. The answer sometimes never comes, so
 --     after SEARCH_TIMEOUT it's asked again (SEARCH_RETRIES in all).
@@ -12,18 +13,21 @@
 --     own examples). Never seen: skipped, saying so.
 --   * Below what the item cost you (after the auction house's cut): Post
 --     turns red and needs a second click.
---   * The shortest duration, every item you have in one post. The game
---     posts a number of items that don't stack in one go (Auctionator's
---     multisell does the same), so it's one click for those too.
+--   * The shortest duration, the queued count in one post. The game posts a
+--     number of items that don't stack in one go (Auctionator's multisell
+--     does the same), so it's one click for those too.
 --
 -- The game only posts as part of a click, so each post is a click on Post;
 -- the price lookups in between happen by themselves.
 --
--- What to post is noted when the order crafts it (Order.Crafted): the
+-- What's queued to post: what the order crafts (Order.Crafted: the
 -- outputs of queued recipes, not the reagents crafted on the way, and not
--- recipes queued from Best Crafts' Vendor tab (meant for a vendor). Saved
--- per character in VendorProfitCharDB.toPost[itemID] = true until posted or
--- skipped.
+-- recipes queued from Best Crafts' Vendor tab, meant for a vendor), and
+-- auctions that come back by mail, expired or cancelled (History.lua), as
+-- many as made or returned. The Post Queue section changes the counts (up
+-- to what's in your bags) or removes an item (to keep it). Saved per
+-- character in VendorProfitCharDB.postQueue = { { itemID, count }, ... },
+-- first in, first out.
 
 local ADDON_NAME, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -93,33 +97,110 @@ local function ItemName(itemID)
     return C_Item.GetItemInfo(itemID) or ("item " .. itemID)
 end
 
-local function ToPost()
-    VendorProfitCharDB = VendorProfitCharDB or {}
-    VendorProfitCharDB.toPost = VendorProfitCharDB.toPost or {}
-    return VendorProfitCharDB.toPost
-end
-
 local function InBags(itemID)
     return C_Item.GetItemCount(itemID) or 0
 end
 
--- An item the order crafted, to post.
-function Poster.Crafted(itemID)
-    ToPost()[itemID] = true
+-- The queue, in posting order. (An earlier version kept a set of items to
+-- post all of: each is queued at what's in your bags.)
+local function Queue()
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    local db = VendorProfitCharDB
+    if db.postQueue == nil then
+        db.postQueue = {}
+        local old = {}
+        for itemID in pairs(db.toPost or {}) do
+            old[#old + 1] = itemID
+        end
+        table.sort(old)
+        for _, itemID in ipairs(old) do
+            db.postQueue[#db.postQueue + 1] = { itemID = itemID, count = InBags(itemID) }
+        end
+        db.toPost = nil
+    end
+    return db.postQueue
+end
+
+local function Find(itemID)
+    for index, entry in ipairs(Queue()) do
+        if entry.itemID == itemID then
+            return index, entry
+        end
+    end
+end
+
+-- Queues count more of an item to post (at the end if it's new).
+function Poster.Add(itemID, count)
+    if count == nil or count <= 0 then
+        return
+    end
+    local _, entry = Find(itemID)
+    if entry then
+        entry.count = entry.count + count
+    else
+        table.insert(Queue(), { itemID = itemID, count = count })
+    end
     Changed()
 end
 
--- What's waiting to be posted and in your bags: { { itemID, count } },
--- by item ID.
-function Poster.Items()
-    local list = {}
-    for itemID in pairs(ToPost()) do
-        local count = InBags(itemID)
-        if count > 0 then
-            list[#list + 1] = { itemID = itemID, count = count }
+-- What the order crafted: made of the item, to post.
+function Poster.Crafted(itemID, made)
+    Poster.Add(itemID, made or 1)
+end
+
+-- An auction that came back by mail, expired or cancelled: n of the item.
+function Poster.Returned(itemID, n)
+    Poster.Add(itemID, n or 1)
+end
+
+-- Takes count off an item's queued count (after posting them); off the
+-- queue at none.
+local function Take(itemID, count)
+    local index, entry = Find(itemID)
+    if entry then
+        entry.count = entry.count - count
+        if entry.count <= 0 then
+            table.remove(Queue(), index)
         end
     end
-    table.sort(list, function(a, b) return a.itemID < b.itemID end)
+end
+
+-- Forgets an item, to keep it (the Post Queue's x).
+function Poster.Remove(itemID)
+    local index = Find(itemID)
+    if index then
+        table.remove(Queue(), index)
+        if current and current.itemID == itemID and status ~= "posting" then
+            current = nil
+            if status ~= "closed" then
+                status = "idle"
+            end
+        end
+        Changed()
+    end
+end
+
+-- Sets how many of an item to post: at least 1, at most what's in your
+-- bags (the Post Queue's - and +).
+function Poster.SetCount(itemID, count)
+    local _, entry = Find(itemID)
+    if entry then
+        entry.count = math.max(1, math.min(count, InBags(itemID)))
+        Changed()
+    end
+end
+
+-- What's queued and in your bags, in posting order: { { itemID, count (to
+-- post: the queued count, or what's in your bags if fewer), queued, bags } }.
+function Poster.Items()
+    local list = {}
+    for _, entry in ipairs(Queue()) do
+        local bags = InBags(entry.itemID)
+        if bags > 0 then
+            list[#list + 1] = { itemID = entry.itemID, count = math.min(entry.count, bags),
+                queued = entry.count, bags = bags }
+        end
+    end
     return list
 end
 
@@ -189,8 +270,12 @@ local function Priced(rows)
         local last = Auctionator.API.v1.GetAuctionPriceByItemID(ADDON_NAME, item.itemID)
         if last == nil or last <= 0 then
             -- Nothing to go on: left for you to price.
+            -- Off the queue: you'll have to post it yourself.
             SetMessage(string.format(L.POST_NO_PRICE, ItemName(item.itemID)), true)
-            ToPost()[item.itemID] = nil
+            local index = Find(item.itemID)
+            if index then
+                table.remove(Queue(), index)
+            end
             current = nil
             Poster.PriceNext()
             return
@@ -368,15 +453,20 @@ end
 local function Posted()
     local item = current
     SetMessage(string.format(L.POSTED, item.quantity, ItemName(item.itemID), VendorProfit.FormatMoney(item.price)))
-    if InBags(item.itemID) == 0 then
-        ToPost()[item.itemID] = nil
-    end
+    Take(item.itemID, item.quantity)
     current = nil
     Poster.PriceNext()
 end
 
--- Post click: posts every one in your bags at the price shown. Below what
--- it cost you, the first click only arms it.
+-- How many of an item to post now: its queued count, or what's in your
+-- bags if fewer.
+local function ToPostCount(itemID)
+    local _, entry = Find(itemID)
+    return entry and math.min(entry.count, InBags(itemID)) or 0
+end
+
+-- Post click: posts the queued count at the price shown. Below what it
+-- cost you, the first click only arms it.
 function Poster.Post()
     local item = current
     if status ~= "ready" or item == nil then
@@ -388,14 +478,13 @@ function Poster.Post()
         return
     end
     local location = BagLocation(item.itemID)
-    local quantity = InBags(item.itemID)
+    local quantity = ToPostCount(item.itemID)
     if location == nil or quantity == 0 then
-        ToPost()[item.itemID] = nil
         current = nil
         Poster.PriceNext()
         return
     end
-    item.before, item.quantity = quantity, quantity
+    item.before, item.quantity = InBags(item.itemID), quantity
     status = "posting"
     SetMessage(nil)
     if item.commodity then
@@ -416,17 +505,6 @@ function Poster.Post()
         end
     end)
     Changed()
-end
-
--- Skip clicked: leaves the current item off the Post step.
-function Poster.Skip()
-    if current == nil or status == "posting" then
-        return
-    end
-    ToPost()[current.itemID] = nil
-    current = nil
-    SetMessage(nil)
-    Poster.PriceNext()
 end
 
 -- Bags changed while posting: done once all of it has left.

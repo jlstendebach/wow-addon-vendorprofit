@@ -633,14 +633,40 @@ local inbox = {}        -- what each mail held at the last inbox update
 -- even if it reads exactly the same (a purchase arrives as one mail per
 -- stack, all with the same invoice).
 
+-- Whether a mail's subject is the game's for an auction that came back:
+-- "Auction expired: %s" or "Auction cancelled: %s", matched from the
+-- game's own text (so in any language), or the English if it hasn't any.
+local RETURNED_SUBJECTS = {
+    AUCTION_EXPIRED_MAIL_SUBJECT or "Auction expired: %s",
+    AUCTION_REMOVED_MAIL_SUBJECT or "Auction cancelled: %s",
+}
+local function IsReturnedSubject(subject)
+    if type(subject) ~= "string" then
+        return false
+    end
+    for _, text in ipairs(RETURNED_SUBJECTS) do
+        local before, after = text:match("^(.-)%%s(.*)$")
+        if before and #subject > #before + #after and subject:sub(1, #before) == before
+            and subject:sub(#subject - #after + 1) == after then
+            return true
+        end
+    end
+    return false
+end
+
 -- A mail's auction details: { invoiceType, itemName, bid, consignment,
--- count, itemID, n, key }, or nil if it isn't an auction mail.
+-- count, itemID, n, key }, or nil if it isn't an auction mail. An auction
+-- that came back (expired or cancelled) has no invoice: invoiceType
+-- "returned".
 local function ReadMail(index)
     local invoiceType, itemName, _, bid, _, _, consignment, _, _, _, count = GetInboxInvoiceInfo(index)
-    if invoiceType ~= "buyer" and invoiceType ~= "seller" then
-        return nil
-    end
     local _, _, sender, subject, money, _, daysLeft = GetInboxHeaderInfo(index)
+    if invoiceType ~= "buyer" and invoiceType ~= "seller" then
+        if not IsReturnedSubject(subject) then
+            return nil
+        end
+        invoiceType = "returned"
+    end
     local _, itemID, _, n = GetInboxItem(index, 1)
     return {
         invoiceType = invoiceType, itemName = itemName, bid = bid, consignment = consignment,
@@ -671,12 +697,14 @@ local function ItemByName(name)
 end
 
 -- Reads a mail's invoice as it's taken: a purchase when its item is taken,
--- a sale when its money is. Read live, or as it was at the last inbox
--- update if taking it has already emptied it.
+-- a sale when its money is, an auction back when its item is. Read live, or
+-- as it was at the last inbox update if taking it has already emptied it,
+-- or if the mail there now is another (the emptied one gone, the next
+-- moved up into its place: that one isn't being taken).
 local function TakeMail(index, takingItem, takingMoney)
     local mail = ReadMail(index)
     local before = inbox[index]
-    if before and (mail == nil or (mail.key == before.key and takingItem and mail.itemID == nil)) then
+    if before and (mail == nil or mail.key ~= before.key or (takingItem and mail.itemID == nil)) then
         mail = before
     end
     if mail == nil or takenSinceUpdate[index] then
@@ -692,6 +720,12 @@ local function TakeMail(index, takingItem, takingMoney)
             local count = math.max(mail.count or mail.n or 1, 1)
             local n = mail.n or count
             History.Bought(mail.itemID, n, mail.bid * n / count, "auction")
+        end
+    elseif mail.invoiceType == "returned" and takingItem then
+        -- Back from the auction house: queued to post again (Poster.lua).
+        if mail.itemID then
+            takenSinceUpdate[index] = true
+            VendorProfit.Poster.Returned(mail.itemID, mail.n or 1)
         end
     elseif mail.invoiceType == "seller" and takingMoney then
         local itemID = ItemByName(mail.itemName)
