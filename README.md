@@ -41,7 +41,7 @@ wow-addon-vendorprofit/
 
 The folder must stay named `VendorProfit` to match `VendorProfit.toc`.
 
-For development on Windows, `deploy.bat` mirrors the folder into AddOns and stamps the version from git. Run it, then `/reload` in game, or restart WoW if files were added or removed. It expects WoW in `C:\Program Files (x86)\World of Warcraft`; if yours is elsewhere, create a `deploy.local.bat` next to it (git ignores it) with one line:
+For development on Windows, `deploy.bat` mirrors the folder into AddOns and stamps the version from git. It shows the commit it deployed (its short hash and message, and *+ uncommitted changes* when the addon has edits not committed yet), so you can tell deploys apart. Run it, then `/reload` in game, or restart WoW if files were added or removed. It expects WoW in `C:\Program Files (x86)\World of Warcraft`; if yours is elsewhere, create a `deploy.local.bat` next to it (git ignores it) with one line:
 
 ```bat
 set "ADDONS=D:\Games\World of Warcraft\_forever_\Interface\AddOns"
