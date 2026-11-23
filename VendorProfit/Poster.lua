@@ -416,9 +416,12 @@ local function OnItemResults(itemKey)
     for index = 1, count do
         local info = C_AuctionHouse.GetItemSearchResultInfo(itemKey, index)
         -- Buyouts only: an auction that only takes bids has no price to match.
+        -- A row is quantity auctions of one item each, all at buyoutAmount
+        -- (the game groups identical ones), so buyoutAmount is already the
+        -- price of one: dividing it by quantity priced 4 toads at 4.65g each
+        -- as 1.16g.
         if info and info.buyoutAmount and info.buyoutAmount > 0 then
-            local quantity = math.max(info.quantity or 1, 1)
-            rows[#rows + 1] = { price = math.floor(info.buyoutAmount / quantity), quantity = quantity }
+            rows[#rows + 1] = { price = info.buyoutAmount, quantity = math.max(info.quantity or 1, 1) }
         end
     end
     item.commodity = false

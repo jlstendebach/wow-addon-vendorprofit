@@ -764,10 +764,14 @@ C_AuctionHouse = {
                 stub.Fire("UI_ERROR_MESSAGE", 0, text)
                 return
             end
-            local a = table.remove(ah.auctions[foundIn], foundAt)
+            -- A row is quantity auctions of one item each: a bid buys one,
+            -- and the rest stay up under the same ID.
+            local a = ah.auctions[foundIn][foundAt]
+            a.quantity = (a.quantity or 1) - 1
+            if a.quantity <= 0 then table.remove(ah.auctions[foundIn], foundAt) end
             stub.money = stub.money - amount
             local where = ah.toMail and stub.mail or stub.bags
-            where[foundIn] = (where[foundIn] or 0) + (a.quantity or 1)
+            where[foundIn] = (where[foundIn] or 0) + 1
             stub.Fire("AUCTION_HOUSE_SHOW_NOTIFICATION", Enum.AuctionHouseNotification.AuctionWon)
             if not ah.toMail then stub.Fire("BAG_UPDATE_DELAYED") end
         end)

@@ -1014,6 +1014,30 @@ run('__stub.Fire("UI_ERROR_MESSAGE", 0, ERR_ITEM_NOT_FOUND)')
 check("an error while not buying is left alone", ev("VendorProfit.Shopper.Status()") == "ready")
 check("no errors buying single auctions", ev("#__stub.errors") == 0)
 
+# The game groups identical auctions into one row: quantity auctions of one
+# item each, buyoutAmount the price of one (not of the row).
+run, ev = shop_client()
+run('__stub.createCount = 4; __stub.bags[2840] = 20; __stub.auctionPrices[3576] = 80'); run(QUEUE + ':Click()')
+run('''
+    __stub.ah.nonCommodity[3576] = true
+    __stub.ah.auctions[3576] = { { auctionID = 201, buyout = 70, quantity = 3 }, { auctionID = 202, buyout = 90, quantity = 9 } }
+''')
+run('__stub.OpenAH()'); click(run, "scan"); run('__stub.Advance(3)')
+tin = ev("VendorProfit.Shopper.Summary().plan.buy[3576]")
+n = tin.quantity
+check("a row of 3 auctions at 70c: 70c each, not 70c for all 3 (%d needed)" % n, n > 3
+      and tin.total == 3 * 70 + (n - 3) * 90 and tin.listed == n)
+check("Buy offers one of them at 70c", ev(BUY + ".tooltip") == "Buy 1 Tin Bar for |cffffffff70c|r")
+click(run, "buy"); run('__stub.Advance(0.5)')
+check("won: one bought for 70c, two left in the row, still 70c next", ev("__stub.ah.bids[1][2]") == 70
+      and ev("__stub.bags[3576]") == 1 and ev("VendorProfit.Shopper.Listing(3576).rows[1].quantity") == 2
+      and ev(BUY + ".tooltip") == "Buy 1 Tin Bar for |cffffffff70c|r")
+searches = ev("#__stub.ah.searches")
+run('__stub.ah.goneNext = true'); click(run, "buy"); run('__stub.Advance(2)')
+check("'not found' with more in the row: searched again rather than dropping the rest",
+      ev("#__stub.ah.searches") == searches + 1 and ev("VendorProfit.Shopper.Status()") == "ready")
+check("no errors buying grouped auctions", ev("#__stub.errors") == 0)
+
 # --- Queue the exact recipe (under Auctionator's Vendor Profit line) ---------------
 run, ev = shop_client()
 check("exact Queue under the Vendor Profit line, a small gap below it", ev(EXACT + ":IsShown()")
@@ -3194,7 +3218,7 @@ check("just a Post step, nothing priced yet: no empty box under To do",
 run('''
     __stub.ah.listings[50001] = { { unitPrice = 40, quantity = 3 }, { unitPrice = 100, quantity = 600 }, { unitPrice = 105, quantity = 200 } }
     __stub.ah.nonCommodity[50002] = true
-    __stub.ah.auctions[50002] = { { auctionID = 9001, buyout = 50000, quantity = 1 }, { auctionID = 9002, buyout = 52000, quantity = 1 } }
+    __stub.ah.auctions[50002] = { { auctionID = 9001, buyout = 50000, quantity = 4 }, { auctionID = 9002, buyout = 52000, quantity = 1 } }
 ''')
 run('__stub.OpenAH()')
 check("open: Post looks up the first item's price", ev(POST + ":IsEnabled()") and ev(POST + ".__text") == "Post")
@@ -3213,7 +3237,7 @@ posts = lambda: [(p.kind, p.itemID, p.duration, p.quantity, p.price) for p in ev
 check("Post: the queued 200 in one post, the shortest duration, at that price", posts() == [("commodity", 50001, 1, 200, 100)]
       and ev("%s.Status()" % P) == "posting")
 run('__stub.Advance(0.5)')
-check("posted: said so, off the queue (50 stay in the bags), the next item priced by itself (the sword at 5g)",
+check("posted: said so, off the queue (50 stay in the bags), the next item priced by itself (the sword at 5g: a row of 4 auctions at 5g is 5g each)",
       "Posted 200 Test Shells" in " ".join(lines(ev)) and queue() == [(50002, 2)] and ev("__stub.bags[50001]") == 50
       and ev("%s.Current().itemID" % P) == 50002 and ev("%s.Current().price" % P) == 50000)
 run(POST + ':Click(); __stub.Advance(0.5)')

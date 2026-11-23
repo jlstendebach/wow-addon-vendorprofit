@@ -409,6 +409,16 @@ time" route mode).
   it's taken now prefers the inbox as of its last update when the mail
   there has changed (the emptied one gone and the next moved up: the next
   isn't being taken).
+- **Grouped item auctions are priced per item** (2026-11-22): the game
+  shows identical auctions of an item that doesn't stack as one row, quantity
+  auctions of one item each, with buyoutAmount the price of one. Dividing it
+  by quantity (as if the row were one auction of a stack) priced a row of 4
+  Lifelike Mechanical Toads at 4.65g as 1.16g each, in both posting and
+  buying. TradeSkillMaster reads a row the same way (one item each, quantity
+  auctions); Auctionator uses buyoutAmount as the price as is. Buying takes
+  one item a click and leaves the rest of the row; if the row's ID turns out
+  stale ("not found" with more up), it searches again rather than dropping
+  the rest.
 
 - **Craft step time** (2026-11-18): "Craft (63 min)" (no "~": the game's
   font draws it high on the line, and "about" was longer): the crafts left in

@@ -25,10 +25,13 @@
 -- anyway.
 --
 -- Items that don't stack (gear and the like) are sold as separate auctions,
--- each with its own buyout, not pooled. Their scan reads every auction with
--- a buyout (bid-only ones are skipped: the panel never bids), cheapest each
--- first, and one click buys one auction outright at its buyout
--- (C_AuctionHouse.PlaceBid, as Auctionator does). There's no quote to
+-- each with its own buyout, not pooled. The game groups identical ones into
+-- one search result: quantity auctions of one item each, all at buyoutAmount
+-- (TradeSkillMaster reads them the same way), so buyoutAmount is the price
+-- of one item, not of the row. Their scan reads every row with a buyout
+-- (bid-only ones are skipped: the panel never bids), cheapest first, and one
+-- click buys one item outright at its buyout (C_AuctionHouse.PlaceBid, as
+-- Auctionator does). There's no quote to
 -- confirm: an auction's buyout is fixed and already on the button. The game
 -- says "won" when it's bought; if someone else bought it first it says the
 -- item wasn't found, and that auction is dropped so Buy goes on to the next.
@@ -86,8 +89,8 @@ local status = "closed"
 local buyAfterScan = false   -- Buy clicked before scanning: say to click it again once scanned
 local message, messageIsError
 -- itemID -> { commodity = bool, rows = { { unitPrice, quantity }, ... } },
--- cheapest first; rows of items that don't stack are single auctions and
--- also have auctionID and buyout (their total).
+-- cheapest first; rows of items that don't stack are quantity auctions of
+-- one item each and also have auctionID and buyout (the price of one).
 local listings = {}
 local scanQueue = {}    -- itemIDs waiting to be scanned
 local scanTotal = 0     -- items in this scan, for "Scanning 2 of 5"
@@ -139,22 +142,16 @@ end
 -- Listings -------------------------------------------------------------------
 
 -- Walks the cheapest listings for up to quantity. Returns the total cost,
--- how many are listed (at most quantity), and how many that buys: a single
--- auction is bought whole, so it can be more than quantity.
+-- how many are listed (at most quantity), and how many that buys.
 function Shopper.Walk(listing, quantity)
     local total, got = 0, 0
     for _, row in ipairs(listing.rows) do
         if got >= quantity then
             break
         end
-        if row.buyout then
-            total = total + row.buyout
-            got = got + row.quantity
-        else
-            local take = math.min(row.quantity, quantity - got)
-            total = total + take * row.unitPrice
-            got = got + take
-        end
+        local take = math.min(row.quantity, quantity - got)
+        total = total + take * row.unitPrice
+        got = got + take
     end
     return total, math.min(got, quantity), got
 end
@@ -167,13 +164,31 @@ local function ListedQuantity(listing)
     return n
 end
 
--- Takes a single auction out of the listings (bought, or gone).
-local function RemoveAuction(listing, auctionID)
+local function FindAuction(listing, auctionID)
     for index, row in ipairs(listing.rows) do
         if row.auctionID == auctionID then
-            table.remove(listing.rows, index)
-            return
+            return row, index
         end
+    end
+end
+
+-- Takes one item's auction out of the listings (bought): the rest of its
+-- row is still up.
+local function TakeAuction(listing, auctionID)
+    local row, index = FindAuction(listing, auctionID)
+    if row then
+        row.quantity = row.quantity - 1
+        if row.quantity <= 0 then
+            table.remove(listing.rows, index)
+        end
+    end
+end
+
+-- Takes a whole row out of the listings (gone).
+local function RemoveAuction(listing, auctionID)
+    local _, index = FindAuction(listing, auctionID)
+    if index then
+        table.remove(listing.rows, index)
     end
 end
 
@@ -323,7 +338,7 @@ function Shopper.Summary()
 end
 
 -- The next purchase: the first auction item still needed. A stackable item
--- as much as is listed; one that doesn't stack, its cheapest auction.
+-- as much as is listed; one that doesn't stack, one of its cheapest.
 -- Returns { itemID, quantity, budget, auctionID (single auctions) } or nil.
 function Shopper.NextPurchase()
     local s = Shopper.Summary()
@@ -332,7 +347,7 @@ function Shopper.NextPurchase()
         if line.source == "auction" and listing and not listing.commodity and line.quantity > 0 then
             local row = listing.rows[1]
             if row then
-                return { itemID = line.itemID, quantity = row.quantity, budget = row.buyout, auctionID = row.auctionID }
+                return { itemID = line.itemID, quantity = 1, budget = row.buyout, auctionID = row.auctionID }
             end
         elseif line.source == "auction" and listing and listing.commodity and line.quantity > 0 then
             local quantity = math.min(line.quantity, ListedQuantity(listing))
@@ -946,25 +961,19 @@ local function OnCommodityResults(itemID)
     FinishScanItem(itemID, listing)
 end
 
--- Reads the single auctions of an item that doesn't stack: those with a
--- buyout that aren't yours, cheapest each first.
+-- Reads the auctions of an item that doesn't stack: those with a buyout
+-- that aren't yours, cheapest first.
 local function ReadItemResults(itemKey)
     local rows = {}
     for index = 1, C_AuctionHouse.GetNumItemSearchResults(itemKey) do
         local info = C_AuctionHouse.GetItemSearchResultInfo(itemKey, index)
         if info and info.auctionID and info.buyoutAmount and info.buyoutAmount > 0
             and not info.containsOwnerItem and not info.containsAccountItem then
-            local quantity = math.max(info.quantity or 1, 1)
-            rows[#rows + 1] = { auctionID = info.auctionID, buyout = info.buyoutAmount, quantity = quantity,
-                unitPrice = info.buyoutAmount / quantity }
+            rows[#rows + 1] = { auctionID = info.auctionID, buyout = info.buyoutAmount,
+                quantity = math.max(info.quantity or 1, 1), unitPrice = info.buyoutAmount }
         end
     end
-    table.sort(rows, function(a, b)
-        if a.unitPrice ~= b.unitPrice then
-            return a.unitPrice < b.unitPrice
-        end
-        return a.buyout < b.buyout
-    end)
+    table.sort(rows, function(a, b) return a.unitPrice < b.unitPrice end)
     return rows
 end
 
@@ -1016,7 +1025,7 @@ local function OnAuctionWon()
     Order.RecordPurchase(bought.itemID, bought.quantity, bought.quote)
     local listing = listings[bought.itemID]
     if listing then
-        RemoveAuction(listing, bought.auctionID)
+        TakeAuction(listing, bought.auctionID)
     end
     SetMessage(string.format(L.BOUGHT, bought.quantity, ItemName(bought.itemID), VendorProfit.FormatMoney(bought.quote)))
     EndPurchase("ready")
@@ -1040,6 +1049,15 @@ local function OnErrorMessage(_, text)
     local itemID = purchase.itemID
     if text == ERR_ITEM_NOT_FOUND then
         local listing = listings[itemID]
+        local row = listing and FindAuction(listing, purchase.auctionID)
+        if row and row.quantity > 1 then
+            -- A row with more up: its ID may have gone with the one sold, so
+            -- search again for fresh ones rather than dropping the rest.
+            SetMessage(string.format(L.PURCHASE_FAILED, ItemName(itemID)), true)
+            purchase = nil
+            Rescan(itemID)
+            return
+        end
         if listing then
             RemoveAuction(listing, purchase.auctionID)
         end
