@@ -111,11 +111,23 @@ local function Prices(itemID)
 end
 BestCrafts.Prices = Prices
 
--- The saved recipes of one or more professions (a key or a list).
+-- The saved professions, and Turn-ins (TurnIns.lua) when this character
+-- can do one: { key, name }, the professions by name, Turn-ins last.
+function BestCrafts.Professions()
+    local list = Recipes.Professions()
+    if #VendorProfit.TurnIns.Recipes() > 0 then
+        list[#list + 1] = { key = VendorProfit.TurnIns.KEY, name = L.TURN_INS }
+    end
+    return list
+end
+
+-- The saved recipes of one or more professions (a key or a list), Turn-ins'
+-- included.
 local function RecipesOf(professions)
     local list = {}
     for _, key in ipairs(Keys(professions)) do
-        for _, recipe in ipairs(Recipes.ForProfession(key)) do
+        local recipes = key == VendorProfit.TurnIns.KEY and VendorProfit.TurnIns.Recipes() or Recipes.ForProfession(key)
+        for _, recipe in ipairs(recipes) do
             list[#list + 1] = recipe
         end
     end
@@ -158,7 +170,9 @@ end
 -- has no cast time the game gives, rather than leaving it out and
 -- overstating Profit/hr.
 local function RouteSeconds(recipe, route)
-    local seconds = VendorProfit.CastSeconds(recipe.recipeID)
+    -- A turn-in takes no casting: only the crafts below it count, and with
+    -- none (its items bought) there's no rate to give.
+    local seconds = recipe.turnIn and 0 or VendorProfit.CastSeconds(recipe.recipeID)
     if seconds == nil then
         return nil
     end
@@ -180,7 +194,7 @@ local function RouteSeconds(recipe, route)
         end
         return true
     end
-    if not Add(route.children, 1) then
+    if not Add(route.children, 1) or seconds == 0 then
         return nil
     end
     return seconds

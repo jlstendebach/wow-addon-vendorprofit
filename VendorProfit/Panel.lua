@@ -14,6 +14,7 @@ local _, ns = ...
 local VendorProfit = ns.VendorProfit
 local Order = VendorProfit.Order
 local Shopper = VendorProfit.Shopper
+local Poster = VendorProfit.Poster
 local Inventory = VendorProfit.Inventory
 local Crafter = VendorProfit.Crafter
 local OpenButton = VendorProfit.OpenButton
@@ -245,6 +246,15 @@ local function AddDivider(row, title, onClick)
     return row
 end
 
+-- A row's left text gets its share of the width, but never runs under the
+-- right text: a long right side cuts the left short ("...") rather than
+-- the two drawing over each other.
+local RIGHT_GAP = 8
+local function FitLeft(row, share, total, hasRight)
+    local room = hasRight and (total - (row.right:GetStringWidth() or 0) - RIGHT_GAP) or total
+    row.left:SetWidth(math.max(math.min(share, room), 1))
+end
+
 -- kind: "divider" (a centered title between lines), "heading", "row",
 -- "note" or "gap" (space between groups).
 local function AddRow(kind, left, right, button, extras)
@@ -283,13 +293,17 @@ local function AddRow(kind, left, right, button, extras)
     end
     local reserved = buttonWidth > 0 and buttonWidth + 4 or 0
     row.left:SetWordWrap(kind == "note")
-    row.left:SetWidth(kind == "note" and (WIDTH - 2 * PADDING - reserved) or (WIDTH * 0.55))
     row.left:Show()
 
     row.right:ClearAllPoints()
     row.right:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PADDING - reserved, y)
     row.right:SetText(right or "")
     row.right:SetShown(right ~= nil)
+    if kind == "note" then
+        row.left:SetWidth(WIDTH - 2 * PADDING - reserved)
+    else
+        FitLeft(row, WIDTH * 0.55, WIDTH - 2 * PADDING - reserved, right ~= nil)
+    end
 
     row.button:ClearAllPoints()
     if button then
@@ -441,6 +455,46 @@ local function BuyClick()
         end
         Shopper.Buy()
     end
+end
+
+-- How many of an item the Post Queue posts now.
+local function PostCount(itemID)
+    for _, item in ipairs(Poster.Items()) do
+        if item.itemID == itemID then
+            return item.count
+        end
+    end
+    return 0
+end
+
+-- The Post step's button: prices the first item, then posts each in turn
+-- (Poster.lua). Below cost it's red, and the first click only arms it.
+local function PostButton()
+    local status, item = Poster.Status(), Poster.Current()
+    local button = { onClick = Poster.Post, enabled = false, width = HEADING_BUTTON_WIDTH, text = L.POST_POST }
+    if status == "closed" then
+        button.text, button.tooltip = L.BUY_OPEN_AH, L.POST_OPEN_AH
+    elseif status == "idle" then
+        button.enabled, button.onClick = true, Poster.Price
+        button.tooltip = string.format(L.POST_PRICE_HELP, ItemName(Poster.Items()[1].itemID))
+    elseif status == "pricing" then
+        button.text, button.tooltip = L.BUY_PRICING, string.format(L.POST_PRICING, ItemName(item.itemID))
+    elseif status == "posting" then
+        button.text, button.tooltip = L.POST_POSTING, L.POST_POSTING_HELP
+    else
+        button.enabled = true
+        button.tooltip = string.format(L.POST_HELP, PostCount(item.itemID), ItemName(item.itemID), Money(item.price))
+        if Poster.BelowCost() then
+            button.text = Red(item.armed and L.POST_ANYWAY or L.POST_POST)
+            button.tooltip = string.format(item.armed and L.POST_ANYWAY_HELP or L.POST_BELOW_COST_HELP, Money(item.cost))
+        end
+        -- The game is busy (just after a post) and would drop it.
+        if not Poster.ThrottleReady() then
+            button.enabled, button.tooltip = false, L.BUTTON_AH_BUSY
+            Poster.WatchThrottle()
+        end
+    end
+    return button
 end
 
 -- The To buy heading's button: { text, enabled, tooltip, onClick }, or nil
@@ -741,13 +795,13 @@ local function AddTodoDetails(groups)
         row.left:SetFontObject(isTitle and "GameFontNormalSmall" or "GameFontHighlightSmall")
         row.left:ClearAllPoints()
         row.left:SetPoint("TOPLEFT", todoList, "TOPLEFT", 0, top)
-        row.left:SetWidth(listWidth * 0.6)
         row.left:SetText(left)
         row.left:Show()
         row.right:ClearAllPoints()
         row.right:SetPoint("TOPRIGHT", todoList, "TOPRIGHT", 0, top)
         row.right:SetText(right or "")
         row.right:SetShown(right ~= nil)
+        FitLeft(row, listWidth * 0.6, listWidth, right ~= nil)
     end
     for _, group in ipairs(groups) do
         Line(group.title, nil, true)
@@ -876,8 +930,85 @@ local function AddToDo(plan)
     end
 
     shownCraft = nil
-    local craftButton, nextStep, openProfession = CraftButton()
-    local craftRow = Step("craft", CraftTitle(plan.crafts), Count(#plan.crafts, L.TODO_RECIPE, L.TODO_RECIPES), craftButton)
+    local craftRow, openProfession
+    if #plan.crafts > 0 then
+        local craftButton, nextStep
+        craftButton, nextStep, openProfession = CraftButton()
+        craftRow = Step("craft", CraftTitle(plan.crafts), Count(#plan.crafts, L.TODO_RECIPE, L.TODO_RECIPES), craftButton)
+        local items = {}
+        for _, step in ipairs(plan.crafts) do
+            local detail = string.format(step.crafts == 1 and L.CRAFTS_ONE or L.CRAFTS, step.crafts)
+            if step.profession then
+                detail = step.profession .. ", " .. detail
+            end
+            local label = ItemLabel(step.itemID, step.crafts * step.makes)
+            if step == nextStep then
+                label = NORMAL_FONT_COLOR:WrapTextInColorCode(L.NEXT_MARK) .. " " .. label
+                -- The next craft under its step too, so it's seen without
+                -- scrolling.
+                AddRow("row", label, Gray(detail))
+            end
+            items[#items + 1] = { label, Gray(detail) }
+        end
+        groups[#groups + 1] = { title = L.STEP_CRAFT, rows = items }
+    end
+
+    -- Hand in: queued turn-ins (TurnIns.lua), what to hand to whom. No
+    -- button: an addon can't hand in a quest. Handing it in counts it down.
+    -- Under the step, what to bring and to whom; in the box, like a craft,
+    -- what it makes and where, how many times (the whole sentence on one
+    -- line ran past the box's edge).
+    if #plan.handIns > 0 then
+        local times = 0
+        for _, handIn in ipairs(plan.handIns) do
+            times = times + handIn.crafts
+        end
+        Step("handin", L.STEP_HAND_IN, Count(times, L.TODO_HAND_IN, L.TODO_HAND_INS))
+        local rows = {}
+        for _, handIn in ipairs(plan.handIns) do
+            local turnIn = handIn.turnIn
+            AddRow("row", ItemLabel(turnIn.give, turnIn.count * handIn.crafts), Gray(turnIn.npc .. ", " .. turnIn.place))
+            local times = handIn.crafts == 1 and L.TODO_HAND_IN or string.format(L.TODO_HAND_INS, handIn.crafts)
+            rows[#rows + 1] = { ItemLabel(handIn.itemID, handIn.makes * handIn.crafts), Gray(turnIn.place .. ", " .. times) }
+        end
+        groups[#groups + 1] = { title = L.STEP_HAND_IN, rows = rows }
+    end
+
+    -- Post: the Post Queue, at the auction house (Poster.lua), with the
+    -- price to post at where it can't be missed. The box below lists the
+    -- cheapest prices found for it, as the Sell tab would show them, for a
+    -- gut check: from the search already done, so no extra calls, and
+    -- without touching the game's Sell tab.
+    local toPost = Poster.Items()
+    if #toPost > 0 then
+        Step("post", L.STEP_POST, Count(#toPost, L.TODO_ITEM, L.TODO_ITEMS), PostButton())
+        local item = Poster.Current()
+        if item and item.price and (Poster.Status() == "ready" or Poster.Status() == "posting") then
+            local note = string.format(L.POST_AT, PostCount(item.itemID), ItemName(item.itemID), Money(item.price))
+            if item.guess then
+                note = note .. " " .. string.format(L.POST_GUESSED, Money(item.guess))
+            elseif item.skipped and item.skipped > 0 then
+                note = note .. " " .. L.POST_SKIPPED_CHEAP
+            end
+            if Poster.BelowCost() then
+                note = Red(note .. " " .. string.format(L.POST_BELOW_COST, Money(item.cost)))
+            else
+                note = NORMAL_FONT_COLOR:WrapTextInColorCode(note)
+            end
+            AddRow("note", note)
+            if item.listed and #item.listed > 0 then
+                local rows = {}
+                for index, group in ipairs(item.listed) do
+                    local right = "x" .. group.quantity
+                    if index <= (item.skipped or 0) then
+                        right = right .. " " .. Gray(L.POST_LISTED_SKIPPED)
+                    end
+                    rows[index] = { Money(group.price), right }
+                end
+                groups[#groups + 1] = { title = L.STEP_POST, rows = rows }
+            end
+        end
+    end
 
     -- A step now where one that's gone was (it finished, and this one moved
     -- up into its place): a click there was likely meant for the old one.
@@ -896,24 +1027,10 @@ local function AddToDo(plan)
     stepPlaces = places
     craftCover = openProfession and { button = craftRow.button, profession = openProfession, movedAt = stepMovedAt.craft }
         or nil
-    local items = {}
-    for _, step in ipairs(plan.crafts) do
-        local detail = string.format(step.crafts == 1 and L.CRAFTS_ONE or L.CRAFTS, step.crafts)
-        if step.profession then
-            detail = step.profession .. ", " .. detail
-        end
-        local label = ItemLabel(step.itemID, step.crafts * step.makes)
-        if step == nextStep then
-            label = NORMAL_FONT_COLOR:WrapTextInColorCode(L.NEXT_MARK) .. " " .. label
-            -- The next craft under its step too, so it's seen without
-            -- scrolling.
-            AddRow("row", label, Gray(detail))
-        end
-        items[#items + 1] = { label, Gray(detail) }
-    end
-    groups[#groups + 1] = { title = L.STEP_CRAFT, rows = items }
 
-    if detailsOpen then
+    -- The box only with something in it: with just a Post step not priced
+    -- yet (nothing to list), an empty box squashed its scroll bar.
+    if detailsOpen and #groups > 0 then
         AddTodoDetails(groups)
     end
     return fromBags
@@ -964,10 +1081,15 @@ local function AddQueued(index, entry)
     if entry.exact then
         label = label .. " " .. Gray(L.QUEUED_EXACT_MARK)
     end
+    -- A turn-in (TurnIns.lua): handed in, not crafted, so no recipe to show.
+    local turnIn = entry.recipeID < 0
+    if turnIn then
+        label = label .. " " .. Gray(L.QUEUED_TURN_IN_MARK)
+    end
     AddRow("row", label, nil, nil, {
         tooltip = QueuedTooltip(entry),
         -- Clicking the item shows its recipe in the professions window.
-        onClick = function() VendorProfit.Recipes.Show(entry.recipeID, entry.profession) end,
+        onClick = not turnIn and function() VendorProfit.Recipes.Show(entry.recipeID, entry.profession) end or nil,
         -- Right to left: cancel, +, -.
         icons = {
             { texture = CANCEL_TEXTURE, tooltip = L.QUEUED_REMOVE, onClick = function() Order.Remove(index) end },
@@ -984,25 +1106,54 @@ local function AddQueued(index, entry)
     })
 end
 
--- The title (with Scan), then the queued crafts, the order's profit, the To
--- do checklist, and what's already in your bags, for information.
+-- One item in the Post Queue: how many to post (and how many are in your
+-- bags, when more), then x (off the queue: keep them), + and - (five with
+-- Shift), between 1 and what's in your bags.
+local function AddPostQueued(item)
+    local label = ItemLabel(item.itemID, item.count)
+    if item.bags > item.count then
+        label = label .. " " .. Gray(string.format(L.POST_QUEUE_IN_BAGS, item.bags))
+    end
+    AddRow("row", label, nil, nil, {
+        icons = {
+            { texture = CANCEL_TEXTURE, tooltip = string.format(L.POST_QUEUE_REMOVE, ItemName(item.itemID)),
+                onClick = function() Poster.Remove(item.itemID) end },
+            { text = "+", enabled = item.count < item.bags, tooltip = L.POST_QUEUE_MORE, onClick = function()
+                Poster.SetCount(item.itemID, item.count + VendorProfit.QueueStep())
+            end },
+            { text = "-", enabled = item.count > 1, tooltip = L.POST_QUEUE_FEWER, onClick = function()
+                Poster.SetCount(item.itemID, item.count - VendorProfit.QueueStep())
+            end },
+        },
+    })
+end
+
+-- The title (with Scan), then the queued crafts, what's queued to post, the
+-- order's profit, the To do checklist, and what's already in your bags,
+-- for information.
 local function AddContent()
     local s = Shopper.Summary()
     local plan = s.plan
 
     local entries = Order.Entries()
+    local posts = Poster.Items()
     AddRow("heading", L.TAB_SHOPPING, nil, #entries > 0 and ScanButton() or nil)
-    if #entries == 0 then
+    if #entries == 0 and #posts == 0 then
         AddRow("note", L.NOTHING_QUEUED)
         return
     end
-    if Section("queued", L.HEAD_QUEUED, #entries) then
+    if #entries > 0 and Section("queued", L.HEAD_QUEUED, #entries) then
         for index, entry in ipairs(entries) do
             AddQueued(index, entry)
         end
     end
+    if #posts > 0 and Section("postQueue", L.HEAD_POST_QUEUE, #posts) then
+        for _, item in ipairs(posts) do
+            AddPostQueued(item)
+        end
+    end
 
-    if Section("profit", L.HEAD_PROFIT) then
+    if #entries > 0 and Section("profit", L.HEAD_PROFIT) then
         AddProfit(s)
     end
     local fromBags = AddToDo(plan)
@@ -1018,7 +1169,7 @@ end
 
 -- Messages at the end, the panel's height, and the open-profession cover.
 local function FinishLayout()
-    for _, source in ipairs({ Shopper, Banker }) do
+    for _, source in ipairs({ Shopper, Banker, Poster }) do
         local text, isError = source.Message()
         if text then
             AddRow("note", isError and Red(text) or text)
@@ -1323,12 +1474,14 @@ function Panel.FindButton(text)
     end
 end
 
--- The first shown row whose left text contains text: its regions (left,
--- right, button, icons, hit: the text's hover and click area). For tests and debugging.
-function Panel.FindRow(text)
+-- The first shown row whose left text contains text (and right text right,
+-- if given): its regions (left, right, button, icons, hit: the text's hover
+-- and click area). For tests and debugging.
+function Panel.FindRow(text, right)
     for index = 1, usedRows do
         local row = rows[index]
-        if row.left:IsShown() and (row.left:GetText() or ""):find(text, 1, true) then
+        if row.left:IsShown() and (row.left:GetText() or ""):find(text, 1, true)
+            and (right == nil or (row.right:IsShown() and (row.right:GetText() or ""):find(right, 1, true))) then
             return row
         end
     end
@@ -1366,6 +1519,7 @@ local function RefreshIfShopping()
     end
 end
 Shopper.OnChange(RefreshIfShopping)
+Poster.OnChange(RefreshIfShopping)
 Banker.OnChange(RefreshIfShopping)
 Merchant.OnChange(RefreshIfShopping)
 

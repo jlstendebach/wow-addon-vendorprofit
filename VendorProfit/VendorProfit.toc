@@ -20,6 +20,7 @@ Order.lua
 QueueButton.lua
 SearchButton.lua
 Shopper.lua
+Poster.lua
 Crafter.lua
 OpenButton.lua
 Banker.lua
@@ -30,6 +31,7 @@ Gold.lua
 Panel.lua
 MinimapButton.lua
 Columns.lua
+TurnIns.lua
 BestCrafts.lua
 ProfessionCycle.lua
 BestPanel.lua

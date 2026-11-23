@@ -52,6 +52,7 @@ set "VERSION="
 for /f "delims=" %%v in ('powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\stamp-version.ps1" -Toc "%TARGET%\VendorProfit.toc"') do set "VERSION=%%v"
 if not defined VERSION goto :stampfailed
 echo   %GREEN%+%OFF% %DIM%Version  %OFF% %GOLD%%BOLD%%VERSION%%OFF%
+call :commit
 echo   %GREEN%+%OFF% %DIM%Folder   %OFF% %TARGET%
 echo.
 if defined RESTART goto :restart
@@ -94,6 +95,28 @@ echo   %FAILBADGE% FAILED %OFF%  Copied, but couldn't stamp the version into:
 echo             %TARGET%\VendorProfit.toc
 echo.
 exit /b 1
+
+rem Which commit was deployed, to tell deploys apart: its short hash and
+rem message, and a note when the addon has changes not committed yet (they
+rem were copied too). Printed with delayed expansion so a message with & or
+rem > in it is shown, not run; it's switched on only here, after the message
+rem was read, so a ! in it (feat!:) survives.
+:commit
+set "HASH="
+set "SUBJECT="
+for /f "tokens=1* delims= " %%a in ('git -C "%~dp0." log -1 "--format=%%h %%s" 2^>nul') do (
+    set "HASH=%%a"
+    set "SUBJECT=%%b"
+)
+if not defined HASH exit /b
+set "DIRTY=0"
+for /f %%n in ('git -C "%~dp0." status --porcelain -- VendorProfit 2^>nul ^| find /c /v ""') do set "DIRTY=%%n"
+set "UNCOMMITTED="
+if not "%DIRTY%"=="0" set "UNCOMMITTED= %GOLD%+ uncommitted changes%OFF%"
+setlocal EnableDelayedExpansion
+echo   %GREEN%+%OFF% %DIM%Commit   %OFF% %DIM%!HASH!%OFF% !SUBJECT!!UNCOMMITTED!
+endlocal
+exit /b
 
 rem cmd understands ANSI color codes on Windows 10 and later.
 :colors

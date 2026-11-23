@@ -18,6 +18,8 @@
 --   buyOrder      the buy entries in the order they were first needed
 --   crafts        { itemID, recipeID, profession, crafts, makes, depth, reagents }
 --                 deepest first, so each step's reagents come before it
+--   handIns       turn-ins queued (TurnIns.lua): { itemID, recipeID, crafts,
+--                 makes, turnIn }, handed in rather than crafted
 --   uses[itemID]  how many of what you have the plan uses (not counting spares
 --                 its own crafts make)
 --   revenue       vendor sale value of everything queued
@@ -36,7 +38,7 @@ VendorProfit.Plan = Plan
 -- exact (its reagents bought as they are, never crafted) }.
 function Plan.Build(entries, available, getBuyPrices)
     local plan = {
-        buy = {}, buyOrder = {}, crafts = {}, uses = {},
+        buy = {}, buyOrder = {}, crafts = {}, handIns = {}, uses = {},
         revenue = 0, ownedValue = 0, missing = false,
     }
     local pool = {}
@@ -119,7 +121,13 @@ function Plan.Build(entries, available, getBuyPrices)
 
     for _, entry in ipairs(entries) do
         local route = Route.ForRecipe(entry.itemID, entry.reagents, getBuyPrices, entry.exact)
-        AddCraft(entry.itemID, entry.recipeID, entry.profession, entry.crafts, entry.count, 0, entry.reagents)
+        local turnIn = (entry.recipeID or 0) < 0 and VendorProfit.TurnIns.Get(entry.recipeID)
+        if turnIn then
+            plan.handIns[#plan.handIns + 1] = { itemID = entry.itemID, recipeID = entry.recipeID,
+                crafts = entry.crafts, makes = entry.count, turnIn = turnIn.turnIn }
+        else
+            AddCraft(entry.itemID, entry.recipeID, entry.profession, entry.crafts, entry.count, 0, entry.reagents)
+        end
         for _, child in ipairs(route.children) do
             Require(child.node, child.quantity * entry.crafts, 1)
         end

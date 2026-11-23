@@ -354,6 +354,9 @@ stub.money = 1000000
 function GetMoney() return stub.money end
 stub.playerName, stub.realm = "Tester", "Stubrealm"
 function UnitName(unit) if unit == "player" then return stub.playerName end end
+-- Level 1 unless a test says (turn-ins need 52 or 60), Alliance unless it says.
+function UnitLevel(unit) if unit == "player" then return stub.level or 1 end end
+function UnitFactionGroup(unit) if unit == "player" then return stub.faction or "Alliance" end end
 function GetRealmName() return stub.realm end
 function GetTime() return stub.now end
 function time() return 1700000000 end
@@ -761,10 +764,14 @@ C_AuctionHouse = {
                 stub.Fire("UI_ERROR_MESSAGE", 0, text)
                 return
             end
-            local a = table.remove(ah.auctions[foundIn], foundAt)
+            -- A row is quantity auctions of one item each: a bid buys one,
+            -- and the rest stay up under the same ID.
+            local a = ah.auctions[foundIn][foundAt]
+            a.quantity = (a.quantity or 1) - 1
+            if a.quantity <= 0 then table.remove(ah.auctions[foundIn], foundAt) end
             stub.money = stub.money - amount
             local where = ah.toMail and stub.mail or stub.bags
-            where[foundIn] = (where[foundIn] or 0) + (a.quantity or 1)
+            where[foundIn] = (where[foundIn] or 0) + 1
             stub.Fire("AUCTION_HOUSE_SHOW_NOTIFICATION", Enum.AuctionHouseNotification.AuctionWon)
             if not ah.toMail then stub.Fire("BAG_UPDATE_DELAYED") end
         end)
@@ -839,6 +846,53 @@ function stub.PutInBank(bag, slot, itemID, count)
     SetSlot(bag, slot, { itemID = itemID, count = count })
     stub.bank[itemID] = (stub.bank[itemID] or 0) + count
 end
+-- Puts count of an item into a bag slot (and counts it as in the bags).
+function stub.PutInBags(bag, slot, itemID, count)
+    SetSlot(bag, slot, { itemID = itemID, count = count })
+    stub.bags[itemID] = (stub.bags[itemID] or 0) + count
+end
+-- Posting: stub.ah.posts = { { kind, bag, slot, itemID, duration, quantity,
+-- price } }. Unless ah.noPostReply, the items leave the bags a moment later
+-- (BAG_UPDATE_DELAYED, then AUCTION_HOUSE_AUCTION_CREATED); ah.postError
+-- fails the next post with that message instead.
+ItemLocation = {}
+function ItemLocation:CreateFromBagAndSlot(bag, slot) return { bag = bag, slot = slot } end
+stub.ah.posts = {}
+local function Post(kind, location, duration, quantity, price)
+    local s = Slot(location.bag, location.slot)
+    stub.ah.posts[#stub.ah.posts + 1] = { kind = kind, bag = location.bag, slot = location.slot,
+        itemID = s and s.itemID, duration = duration, quantity = quantity, price = price }
+    if stub.ah.noPostReply then return end
+    C_Timer.After(0.1, function()
+        if stub.ah.postError then
+            local text = stub.ah.postError
+            stub.ah.postError = nil
+            stub.Fire("UI_ERROR_MESSAGE", 0, text)
+            return
+        end
+        local id = s.itemID
+        local left = quantity
+        for bag, slots in pairs(stub.containers) do
+            for slot, v in pairs(slots) do
+                if v.itemID == id and left > 0 and bag <= 5 then
+                    local take = math.min(v.count, left)
+                    v.count, left = v.count - take, left - take
+                    if v.count <= 0 then slots[slot] = nil end
+                end
+            end
+        end
+        stub.bags[id] = (stub.bags[id] or 0) - quantity
+        stub.Fire("BAG_UPDATE_DELAYED")
+        stub.Fire("AUCTION_HOUSE_AUCTION_CREATED", 1)
+    end)
+end
+function C_AuctionHouse.PostCommodity(location, duration, quantity, unitPrice)
+    Post("commodity", location, duration, quantity, unitPrice)
+end
+function C_AuctionHouse.PostItem(location, duration, quantity, bid, buyout)
+    Post("item", location, duration, quantity, buyout)
+end
+
 -- Fills a bag slot with something else (to make bags full).
 function stub.FillBags()
     for bag = 0, 4 do for slot = 1, 16 do

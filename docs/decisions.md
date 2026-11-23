@@ -210,6 +210,32 @@ time" route mode).
   minimum counts separate auction sales, not items, so one buyer of a
   stack can't make an item hot. Revisit per item if this still feels
   wrong in use.
+- **Turn-ins** (2026-11-21): Thorium Shells can be handed to an NPC for
+  Thorium Headed Arrows, 200 for 200 (repeatable quests 7342, Ironforge,
+  level 52, and 7341, Orgrimmar, listed as 60). Josh wanted to see when
+  arrows pay as well as or better than shells, to sell both. Priced as a
+  recipe under a "Turn-ins" heading of its own (anyone of the level can
+  do it, so it isn't tied to knowing the shells recipe or to
+  Engineering), with a negative recipe ID (the arrows' item ID) so it
+  can't clash with a spell. Pricing only, on purpose: queuing it would
+  need the Shopping List to plan a quest hand-in and Profit History to
+  carry the shells' cost to the arrows, special cases for one item, so
+  that waited (see "Turn-ins queued" below). Profit/hr counts
+  only crafts below it, a dash with none. The tooltip compares crafting
+  the shells for the same 200. A table in TurnIns.lua, so another
+  turn-in is one entry.
+- **Turn-ins queued** (2026-11-22): Josh queued Thorium Shells meaning
+  arrows, so the shells went into the Post Queue and the arrows had no
+  cost. Now the arrows row has + and -: the order holds the turn-in like a
+  recipe (its negative recipe ID), Plan puts it in plan.handIns instead of
+  crafts (so the Craft button and Crafter never see it), To do shows a
+  Hand in step after Craft with no button (addons can't hand in quests),
+  and QUEST_TURNED_IN with the quest's ID counts the order down (queuing
+  the arrows to post) and passes the shells' cost to the arrows through
+  History.Crafted, as a craft's. Not queued, a hand-in still passes the
+  cost on and swaps shells waiting in the Post Queue for arrows. Shells
+  crafted on the way aren't queued to post (only the order's own outputs
+  are).
 - **Row highlight** (2026-11-19): the row under the mouse is lit with the
   game's list highlight (the quest log's UI-QuestTitleHighlight, added),
   drawn on the list under the text and buttons. Found by the same
@@ -339,6 +365,60 @@ time" route mode).
   It was 200 once and kicked the player to the login screen.
 
 ## Shopping List
+
+- **Post step** (2026-11-22), Josh's manual posting automated: after Craft,
+  what the order crafted (queued recipes' outputs, noted as each craft
+  completes; not reagents crafted on the way; not recipes queued from the
+  Vendor tab, which order entries now remember) is posted at the lowest
+  listed price, all of it, shortest duration, one click an item (the game
+  only posts in a click; it posts several items that don't stack in one
+  call, as Auctionator's multisell does, so one click for those too: I
+  first said otherwise and Josh corrected it). Price lookups retry after
+  3s (his "sometimes it hangs"). Pricing, his rules: match the lowest;
+  bait = 3 or fewer at a price over 20% below the next, skipped up to
+  twice; nothing listed = f(x) = x + min(x, x^0.7) in gold, cut to whole
+  gold (fits his 1->2, 3->5, 10->15, 30->40 exactly; Josh wanted a
+  formula, not price bands, and the first version rounded the step to
+  1/2/5 steps, which jumped at band edges, so it's smooth now); never
+  seen = skipped. Below cost after the cut (Profit History's recorded
+  cost) needs a second click. The step stays after the order is done.
+  Duration index 1 assumed to be Forever's 2 hours (to check in game).
+  For a gut check, the cheapest few prices found (and how many at each,
+  the bait marked) show under the price. Josh asked about bringing up the
+  Sell tab instead: Auctionator replaces it (and this addon only reads
+  Auctionator), and driving the game's own Sell tab from addon code risks
+  blocked-action taint on its Post button, plus an extra search per item;
+  the listing line shows the same from the search already done.
+- **Post Queue** (2026-11-22), Josh's design: "Queued" became **Crafting
+  Queue**, and a **Post Queue** section under it lists what's to post with
+  counts, - and + (five with Shift, 1 up to what's in your bags) and x
+  (off the queue: keep it), replacing the Post step's Skip, which could only
+  skip the item being priced, and only at the auction house. Posting posts
+  the queued count, not everything in your bags. FIFO: new items go last.
+  The listing line moved into To do's box (one row per price) instead of a
+  second scroll box. Saved as postQueue (the first version's toPost set is
+  turned into it, each at what's in the bags).
+- **Reposting what comes back** (2026-11-22): an auction mailed back,
+  expired *or* cancelled (Josh cancels undercut auctions to repost them),
+  is queued again for the count that came back, when its item is taken
+  (TakeInboxItem or AutoLootMailItem, which the mailbox's Open All uses).
+  Any auction, not only ones the addon posted: he reposts everything that
+  comes back, and it needs no record of who posted what; x keeps an item.
+  Matched by the game's own subject text (AUCTION_EXPIRED_MAIL_SUBJECT,
+  AUCTION_REMOVED_MAIL_SUBJECT), English if missing. Reading a mail as
+  it's taken now prefers the inbox as of its last update when the mail
+  there has changed (the emptied one gone and the next moved up: the next
+  isn't being taken).
+- **Grouped item auctions are priced per item** (2026-11-22): the game
+  shows identical auctions of an item that doesn't stack as one row, quantity
+  auctions of one item each, with buyoutAmount the price of one. Dividing it
+  by quantity (as if the row were one auction of a stack) priced a row of 4
+  Lifelike Mechanical Toads at 4.65g as 1.16g each, in both posting and
+  buying. TradeSkillMaster reads a row the same way (one item each, quantity
+  auctions); Auctionator uses buyoutAmount as the price as is. Buying takes
+  one item a click and leaves the rest of the row; if the row's ID turns out
+  stale ("not found" with more up), it searches again rather than dropping
+  the rest.
 
 - **Craft step time** (2026-11-18): "Craft (63 min)" (no "~": the game's
   font draws it high on the line, and "about" was longer): the crafts left in

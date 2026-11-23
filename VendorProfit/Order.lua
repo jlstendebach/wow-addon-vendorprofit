@@ -73,6 +73,8 @@ function Order.AddRecipe(fields, crafts)
     for _, entry in ipairs(order.entries) do
         if entry.recipeID == fields.recipeID and entry.exact == exact then
             entry.crafts = entry.crafts + crafts
+            -- Queued for the auction house too: post it.
+            entry.vendor = entry.vendor and fields.vendor and true or nil
             Changed()
             return entry
         end
@@ -86,6 +88,8 @@ function Order.AddRecipe(fields, crafts)
         reagents = fields.reagents,
         sellPrice = fields.sellPrice,
         exact = exact,
+        -- Queued from Best Crafts' Vendor tab: for a vendor, not to post.
+        vendor = fields.vendor and true or nil,
     }
     order.entries[#order.entries + 1] = entry
     Changed()
@@ -246,6 +250,9 @@ function Order.Crafted(recipeID)
     for index, entry in ipairs(order.entries) do
         if entry.recipeID == recipeID then
             entry.crafts = entry.crafts - 1
+            if not entry.vendor then
+                VendorProfit.Poster.Crafted(entry.itemID, entry.count)
+            end
             if entry.crafts <= 0 then
                 table.remove(order.entries, index)
             end

@@ -286,6 +286,7 @@ local function QueueRecipe(entry)
         count = recipe.count, reagents = recipe.reagents,
         sellPrice = select(11, C_Item.GetItemInfo(recipe.item)),
         exact = exact,
+        vendor = tab == "vendor",
     }, crafts)
     local name = C_Item.GetItemInfo(recipe.item) or ("item " .. recipe.item)
     print(string.format(L.QUEUED, crafts, exact and (name .. " " .. L.QUEUED_EXACT_MARK) or name))
@@ -352,7 +353,7 @@ local function GetRow(index, top)
         row.hit = CreateFrame("Frame", nil, list)
         row.hit:EnableMouse(true)
         row.hit:SetScript("OnMouseUp", function(self, mouseButton)
-            if mouseButton == "LeftButton" and self.recipe and ProfessionsWindowOpen() then
+            if mouseButton == "LeftButton" and self.recipe and not self.recipe.turnIn and ProfessionsWindowOpen() then
                 ShowRecipe(self.recipe)
             end
         end)
@@ -595,6 +596,25 @@ local function PerItemMoney(copper)
 end
 BestPanel.PerItemMoney = PerItemMoney
 
+-- A turn-in's lines: where to hand it in, and what crafting what it takes
+-- makes for the same amount (Thorium Shells, per 200), priced the way the
+-- list is, so the two can be compared on the spot. Left out if this
+-- character can't craft it.
+local function TurnInLines(recipe)
+    local turnIn = recipe.turnIn
+    local giveName = C_Item.GetItemInfo(turnIn.give) or ("item " .. turnIn.give)
+    GameTooltip:AddLine(string.format(L.BEST_TURN_IN, turnIn.count, giveName, turnIn.npc, turnIn.place), 1, 1, 1, true)
+    local maker = Recipes.ForItem(turnIn.give)[1]
+    if maker then
+        local priced = BestCrafts.PriceRecipe(maker, tab, nil, Exact())
+        if priced.profit then
+            local profit = priced.profit * turnIn.count / maker.count
+            GameTooltip:AddLine(string.format(L.BEST_TURN_IN_VERSUS, giveName, VendorProfit.FormatMoney(profit), turnIn.count),
+                1, 1, 1)
+        end
+    end
+end
+
 function BestPanel.ShowSalesTooltip(owner, nameText, itemID, recipe, entry)
     VendorProfit.SetNameTooltipOwner(owner, nameText)
     GameTooltip:SetText(ItemLabel(itemID))
@@ -604,6 +624,9 @@ function BestPanel.ShowSalesTooltip(owner, nameText, itemID, recipe, entry)
         if skillUp and saved then
             GameTooltip:AddLine(string.format(L.BEST_SKILL_SAVED, recipe.profession),
                 GRAY_FONT_COLOR.r, GRAY_FONT_COLOR.g, GRAY_FONT_COLOR.b, true)
+        end
+        if recipe.turnIn then
+            TurnInLines(recipe)
         end
         if recipe.count > 1 then
             GameTooltip:AddLine(string.format(L.BEST_MAKES, recipe.count), 1, 1, 1)
@@ -662,7 +685,7 @@ end
 local function ShownProfessions()
     local filters = Filters()
     local shown = {}
-    for _, profession in ipairs(Recipes.Professions()) do
+    for _, profession in ipairs(BestCrafts.Professions()) do
         if not filters[ProfessionFilterKey(profession.key)] then
             shown[#shown + 1] = profession
         end
@@ -805,7 +828,7 @@ FilterMenu = function(_, root)
     for line in L.BEST_SKILL_SAVED_NOTE:gmatch("[^\n]+") do
         root:CreateTitle(GRAY_FONT_COLOR:WrapTextInColorCode(line))
     end
-    local professions = Recipes.Professions()
+    local professions = BestCrafts.Professions()
     if #professions > 0 then
         root:CreateTitle(L.BEST_FILTER_PROFESSIONS)
         for _, profession in ipairs(professions) do
@@ -1335,9 +1358,9 @@ local function FillRow(index)
     ShowStar(row)
     row.favorite:Show()
     row.queue:SetScript("OnClick", function() QueueRecipe(ranking) end)
-    row.queue:Show()
     row.unqueue:SetScript("OnClick", function() UnqueueRecipe(ranking) end)
     row.unqueue:SetEnabled(queued > 0)
+    row.queue:Show()
     row.unqueue:Show()
 end
 
@@ -1461,7 +1484,8 @@ local function Refresh()
     local ranked, unknownSkillUp = {}, false
     for _, entry in ipairs(all) do
         entry.skillUp, entry.skillUpSaved = Recipes.SkillUp(entry.recipe, openKey)
-        if entry.skillUp == nil then
+        -- A turn-in never has a color: nothing to open its profession for.
+        if entry.skillUp == nil and not entry.recipe.turnIn then
             unknownSkillUp = true
         end
         local name = (C_Item.GetItemInfo(entry.recipe.item) or ""):lower()
