@@ -1015,7 +1015,9 @@ local function AddToDo(plan)
     craftCover = openProfession and { button = craftRow.button, profession = openProfession, movedAt = stepMovedAt.craft }
         or nil
 
-    if detailsOpen then
+    -- The box only with something in it: with just a Post step not priced
+    -- yet (nothing to list), an empty box squashed its scroll bar.
+    if detailsOpen and #groups > 0 then
         AddTodoDetails(groups)
     end
     return fromBags
