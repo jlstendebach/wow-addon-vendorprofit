@@ -302,7 +302,8 @@ end
 
 -- A craft of a saved recipe: its reagents' costs go into what it makes.
 function History.Crafted(recipeID)
-    local recipe = Recipes.Get(recipeID)
+    -- A turn-in handed in (TurnIns.lua) counts as a craft too.
+    local recipe = Recipes.Get(recipeID) or (recipeID < 0 and VendorProfit.TurnIns.Get(recipeID)) or nil
     if recipe == nil or not recipe.item then
         return
     end

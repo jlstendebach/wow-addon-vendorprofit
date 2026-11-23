@@ -1360,9 +1360,8 @@ local function FillRow(index)
     row.queue:SetScript("OnClick", function() QueueRecipe(ranking) end)
     row.unqueue:SetScript("OnClick", function() UnqueueRecipe(ranking) end)
     row.unqueue:SetEnabled(queued > 0)
-    -- A turn-in can't be queued: the Shopping List can't hand in a quest.
-    row.queue:SetShown(not entry.recipe.turnIn)
-    row.unqueue:SetShown(not entry.recipe.turnIn)
+    row.queue:Show()
+    row.unqueue:Show()
 end
 
 -- The rows in view: from the scroll position, with one to spare either side.

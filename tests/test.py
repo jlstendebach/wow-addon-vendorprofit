@@ -482,7 +482,7 @@ def lines(ev):
 
 DIVIDERS = {"Crafting Queue", "Post Queue", "Profit", "To do", "Already in your bags"}
 # To do's details, in their scroll box: each step's title, then its items.
-DETAILS = {"Buy", "Collect from mailbox", "Take from bank", "Craft", "Post"}
+DETAILS = {"Buy", "Collect from mailbox", "Take from bank", "Craft", "Hand in", "Post"}
 HEADINGS = {"Shopping List"} | DIVIDERS | DETAILS
 STEP = re.compile(r"^\d+\. (.*)$")
 
@@ -3333,7 +3333,45 @@ check("level 52, Alliance: Thorium Headed Arrow listed, under Turn-ins", R is no
 check("cheapest: 200 shells crafted (2 bars, 2s), not bought (6s); 200 arrows at 5c less the cut: 9s 50c, so 7s 50c profit",
       ev(R + ".entry.cost") == 200 and ev(R + ".entry.profit") == 750)
 check("Profit/hr: the shells' casting only (3s a craft), the turn-in itself none", ev(R + ".entry.perHour") == 750 * 1200)
-check("no + or -: a turn-in can't be queued", not ev(R + ".queue:IsShown()") and not ev(R + ".unqueue:IsShown()"))
+# Queued like a recipe: the plan works out the shells, To do says where to
+# hand them in, and handing in counts it down.
+run(R + '.queue:Click()')
+E = "VendorProfit.Order.Entries()[1]"
+check("+ queues the arrows like a recipe", ev(E + ".recipeID") == -ARROWS and ev(E + ".itemID") == ARROWS
+      and ev(E + ".count") == 200 and ev(E + ".profession") == "Turn-ins")
+plan = ev("VendorProfit.Shopper.Summary().plan")
+check("the plan: the shells crafted (cheaper), the bars bought, and one hand-in, not a craft",
+      [(c.itemID, c.crafts) for c in plan.crafts.values()] == [(SHELLS, 1)]
+      and [(h.itemID, h.crafts) for h in plan.handIns.values()] == [(ARROWS, 1)]
+      and [(b.itemID, b.quantity) for b in plan.buyOrder.values()] == [(THORIUM_BAR, 2)])
+run('VendorProfit.Panel.Show("shopping")')
+check("Crafting Queue: marked as a turn-in", has_line(ev, "Thorium Headed Arrow x200", "(turn-in)"))
+check("To do: Buy, Craft (the shells, 1 recipe), then Hand in",
+      [h for h in headings(ev) if re.match(r"^\d\.", h)] == ["1. Buy | |cff8080801 item|r", "2. Craft (1 min) | |cff8080801 recipe|r",
+       "3. Hand in | |cff8080801 time|r"])
+check("...where and to whom, under the step and in the box; no button (an addon can't hand in a quest)",
+      "200 Thorium Shells to Artilleryman Sheldonore, Ironforge" in lines(ev)
+      and section(ev, "Hand in") == ["|Ticon18042:0|t Thorium Headed Arrow x200 | |cff808080200 Thorium Shells to Artilleryman Sheldonore, Ironforge|r"]
+      and ev('VendorProfit.Panel.RowButton("Hand in")') is None)
+# Crafting the shells: a step on the way, not posted.
+run('__stub.bags[12359] = 2; __stub.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 19800); __stub.bags[12359] = 0; __stub.bags[15997] = 200')
+check("crafting the shells on the way: not queued to post (only the order's arrows are)",
+      len(ev("VendorProfitCharDB.postQueue or {}")) == 0 and ev("VendorProfitCharDB.history.stock[15997][1].n") == 200)
+shell_cost = ev("VendorProfitCharDB.history.stock[15997][1].cost")
+run('__stub.bags[15997] = 0; __stub.bags[18042] = 200; __stub.Fire("QUEST_TURNED_IN", 7342, 0, 0)')
+check("handing in (the quest's ID): the order counts down, the 200 arrows queued to post",
+      ev("VendorProfit.Order.IsEmpty()") and [(e.itemID, e.count) for e in ev("VendorProfitCharDB.postQueue").values()] == [(ARROWS, 200)])
+check("...and the shells' cost passed on to the arrows, as a craft's", ev("VendorProfitCharDB.history.stock[15997]") is None
+      or len(ev("VendorProfitCharDB.history.stock[15997]")) == 0)
+check("...each arrow costing what a shell did", abs(ev("VendorProfitCharDB.history.stock[18042][1].cost") - shell_cost) < 1e-9
+      and ev("VendorProfitCharDB.history.stock[18042][1].n") == 200)
+# Handed in without queuing the arrows: shells waiting to post become arrows.
+run('VendorProfitCharDB.postQueue = { { itemID = 15997, count = 300 } }; __stub.Fire("QUEST_TURNED_IN", 7342, 0, 0)')
+check("handed in without queuing it: the shells waiting to post swapped for arrows",
+      [(e.itemID, e.count) for e in ev("VendorProfitCharDB.postQueue").values()] == [(SHELLS, 100), (ARROWS, 200)])
+run('__stub.Fire("QUEST_TURNED_IN", 12345, 0, 0)')
+check("another quest: nothing", [(e.itemID, e.count) for e in ev("VendorProfitCharDB.postQueue").values()] == [(SHELLS, 100), (ARROWS, 200)])
+run('VendorProfitCharDB.postQueue = {}; VendorProfit.Panel.Show("best")')
 run('__stub.selectedRecipe = nil; ' + R + '.hit:GetScript("OnMouseUp")(' + R + '.hit, "LeftButton")')
 check("clicking its name shows nothing in the professions window", ev("__stub.selectedRecipe") is None)
 run(R + '.hit:GetScript("OnEnter")(' + R + '.hit)')

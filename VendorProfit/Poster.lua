@@ -165,6 +165,17 @@ local function Take(itemID, count)
     end
 end
 
+-- Swaps up to count of one item waiting to be posted for another (handed
+-- in for it: Thorium Shells for arrows), at the end of the queue.
+function Poster.Swap(fromItem, toItem, count)
+    local _, entry = Find(fromItem)
+    if entry then
+        local n = math.min(entry.count, count)
+        Take(fromItem, n)
+        Poster.Add(toItem, n)
+    end
+end
+
 -- Forgets an item, to keep it (the Post Queue's x).
 function Poster.Remove(itemID)
     local index = Find(itemID)

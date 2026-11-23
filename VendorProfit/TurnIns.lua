@@ -4,9 +4,14 @@
 --
 -- Each is priced as a recipe that makes `made` of `get` from `count` of
 -- `give`, under its own "Turn-ins" heading (not a profession: anyone can do
--- them). They're only priced, never queued: the Shopping List can't hand in
--- a quest. The recipe ID is the output's item ID made negative, so it can't
--- clash with a real recipe (a spell ID) and still sorts as a number.
+-- them). It can be queued like a recipe: the Shopping List plans what it
+-- takes (the shells, bought or crafted) and shows a Hand in step (an addon
+-- can't hand in a quest for you). Handing it in is noticed by the quest's
+-- ID (QUEST_TURNED_IN): the order counts down, the items go into the Post
+-- Queue, and what was handed in passes its cost on to them, as a craft
+-- does (History.lua). The recipe ID is the output's item ID made negative,
+-- so it can't clash with a real recipe (a spell ID) and still sorts as a
+-- number.
 --
 -- The repeatable quests, per faction, from the wiki (warcraft.wiki.gg):
 -- "Arrows Are For Sissies" (7342), Artilleryman Sheldonore in Ironforge,
@@ -55,3 +60,45 @@ function TurnIns.Recipes()
     end
     return list
 end
+
+-- A turn-in as a recipe, by its recipe ID, for this character's faction
+-- (whatever its level: for what's already queued or handed in), or nil.
+function TurnIns.Get(recipeID)
+    local faction = UnitFactionGroup and UnitFactionGroup("player")
+    for _, turnIn in ipairs(TurnIns.LIST) do
+        local side = faction and turnIn[faction]
+        if side and -turnIn.get == recipeID then
+            return {
+                recipeID = recipeID,
+                item = turnIn.get,
+                count = turnIn.made,
+                reagents = { { items = { turnIn.give }, quantity = turnIn.count } },
+                profession = L.TURN_INS,
+                professionKey = TurnIns.KEY,
+                turnIn = { give = turnIn.give, count = turnIn.count, npc = side.npc, place = side.place },
+            }
+        end
+    end
+end
+
+-- A turn-in handed in: its cost passed on (as a craft's), and the order
+-- counted down (which queues the items to post). Not queued, the items
+-- handed in that were waiting to be posted are swapped for what came back.
+function TurnIns.TurnedIn(turnIn)
+    local recipeID = -turnIn.get
+    VendorProfit.History.Crafted(recipeID)
+    if not VendorProfit.Order.Crafted(recipeID) then
+        VendorProfit.Poster.Swap(turnIn.give, turnIn.get, turnIn.count)
+    end
+end
+
+local events = CreateFrame("Frame")
+pcall(events.RegisterEvent, events, "QUEST_TURNED_IN")
+events:SetScript("OnEvent", function(_, _, questID)
+    for _, turnIn in ipairs(TurnIns.LIST) do
+        if (turnIn.Alliance and turnIn.Alliance.quest == questID) or (turnIn.Horde and turnIn.Horde.quest == questID) then
+            xpcall(function() TurnIns.TurnedIn(turnIn) end, geterrorhandler())
+            return
+        end
+    end
+end)

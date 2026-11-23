@@ -220,10 +220,22 @@ time" route mode).
   can't clash with a spell. Pricing only, on purpose: queuing it would
   need the Shopping List to plan a quest hand-in and Profit History to
   carry the shells' cost to the arrows, special cases for one item, so
-  that waits until arrows prove worth making regularly. Profit/hr counts
+  that waited (see "Turn-ins queued" below). Profit/hr counts
   only crafts below it, a dash with none. The tooltip compares crafting
   the shells for the same 200. A table in TurnIns.lua, so another
   turn-in is one entry.
+- **Turn-ins queued** (2026-11-22): Josh queued Thorium Shells meaning
+  arrows, so the shells went into the Post Queue and the arrows had no
+  cost. Now the arrows row has + and -: the order holds the turn-in like a
+  recipe (its negative recipe ID), Plan puts it in plan.handIns instead of
+  crafts (so the Craft button and Crafter never see it), To do shows a
+  Hand in step after Craft with no button (addons can't hand in quests),
+  and QUEST_TURNED_IN with the quest's ID counts the order down (queuing
+  the arrows to post) and passes the shells' cost to the arrows through
+  History.Crafted, as a craft's. Not queued, a hand-in still passes the
+  cost on and swaps shells waiting in the Post Queue for arrows. Shells
+  crafted on the way aren't queued to post (only the order's own outputs
+  are).
 - **Row highlight** (2026-11-19): the row under the mouse is lit with the
   game's list highlight (the quest log's UI-QuestTitleHighlight, added),
   drawn on the list under the text and buttons. Found by the same

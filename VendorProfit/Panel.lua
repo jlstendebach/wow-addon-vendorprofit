@@ -940,6 +940,27 @@ local function AddToDo(plan)
         groups[#groups + 1] = { title = L.STEP_CRAFT, rows = items }
     end
 
+    -- Hand in: queued turn-ins (TurnIns.lua), what to hand to whom. No
+    -- button: an addon can't hand in a quest. Handing it in counts it down.
+    if #plan.handIns > 0 then
+        local times = 0
+        for _, handIn in ipairs(plan.handIns) do
+            times = times + handIn.crafts
+        end
+        Step("handin", L.STEP_HAND_IN, Count(times, L.TODO_HAND_IN, L.TODO_HAND_INS))
+        local rows = {}
+        for _, handIn in ipairs(plan.handIns) do
+            local turnIn = handIn.turnIn
+            local text = string.format(L.HAND_IN_AT, turnIn.count * handIn.crafts, ItemName(turnIn.give), turnIn.npc, turnIn.place)
+            if handIn.crafts > 1 then
+                text = text .. " " .. Gray(string.format(L.HAND_IN_TIMES, handIn.crafts))
+            end
+            AddRow("row", text)
+            rows[#rows + 1] = { ItemLabel(handIn.itemID, handIn.makes * handIn.crafts), Gray(text) }
+        end
+        groups[#groups + 1] = { title = L.STEP_HAND_IN, rows = rows }
+    end
+
     -- Post: the Post Queue, at the auction house (Poster.lua), with the
     -- price to post at where it can't be missed. The box below lists the
     -- cheapest prices found for it, as the Sell tab would show them, for a
@@ -1045,10 +1066,15 @@ local function AddQueued(index, entry)
     if entry.exact then
         label = label .. " " .. Gray(L.QUEUED_EXACT_MARK)
     end
+    -- A turn-in (TurnIns.lua): handed in, not crafted, so no recipe to show.
+    local turnIn = entry.recipeID < 0
+    if turnIn then
+        label = label .. " " .. Gray(L.QUEUED_TURN_IN_MARK)
+    end
     AddRow("row", label, nil, nil, {
         tooltip = QueuedTooltip(entry),
         -- Clicking the item shows its recipe in the professions window.
-        onClick = function() VendorProfit.Recipes.Show(entry.recipeID, entry.profession) end,
+        onClick = not turnIn and function() VendorProfit.Recipes.Show(entry.recipeID, entry.profession) end or nil,
         -- Right to left: cancel, +, -.
         icons = {
             { texture = CANCEL_TEXTURE, tooltip = L.QUEUED_REMOVE, onClick = function() Order.Remove(index) end },
