@@ -246,6 +246,15 @@ local function AddDivider(row, title, onClick)
     return row
 end
 
+-- A row's left text gets its share of the width, but never runs under the
+-- right text: a long right side cuts the left short ("...") rather than
+-- the two drawing over each other.
+local RIGHT_GAP = 8
+local function FitLeft(row, share, total, hasRight)
+    local room = hasRight and (total - (row.right:GetStringWidth() or 0) - RIGHT_GAP) or total
+    row.left:SetWidth(math.max(math.min(share, room), 1))
+end
+
 -- kind: "divider" (a centered title between lines), "heading", "row",
 -- "note" or "gap" (space between groups).
 local function AddRow(kind, left, right, button, extras)
@@ -284,13 +293,17 @@ local function AddRow(kind, left, right, button, extras)
     end
     local reserved = buttonWidth > 0 and buttonWidth + 4 or 0
     row.left:SetWordWrap(kind == "note")
-    row.left:SetWidth(kind == "note" and (WIDTH - 2 * PADDING - reserved) or (WIDTH * 0.55))
     row.left:Show()
 
     row.right:ClearAllPoints()
     row.right:SetPoint("TOPRIGHT", content, "TOPRIGHT", -PADDING - reserved, y)
     row.right:SetText(right or "")
     row.right:SetShown(right ~= nil)
+    if kind == "note" then
+        row.left:SetWidth(WIDTH - 2 * PADDING - reserved)
+    else
+        FitLeft(row, WIDTH * 0.55, WIDTH - 2 * PADDING - reserved, right ~= nil)
+    end
 
     row.button:ClearAllPoints()
     if button then
@@ -782,13 +795,13 @@ local function AddTodoDetails(groups)
         row.left:SetFontObject(isTitle and "GameFontNormalSmall" or "GameFontHighlightSmall")
         row.left:ClearAllPoints()
         row.left:SetPoint("TOPLEFT", todoList, "TOPLEFT", 0, top)
-        row.left:SetWidth(listWidth * 0.6)
         row.left:SetText(left)
         row.left:Show()
         row.right:ClearAllPoints()
         row.right:SetPoint("TOPRIGHT", todoList, "TOPRIGHT", 0, top)
         row.right:SetText(right or "")
         row.right:SetShown(right ~= nil)
+        FitLeft(row, listWidth * 0.6, listWidth, right ~= nil)
     end
     for _, group in ipairs(groups) do
         Line(group.title, nil, true)
@@ -942,6 +955,9 @@ local function AddToDo(plan)
 
     -- Hand in: queued turn-ins (TurnIns.lua), what to hand to whom. No
     -- button: an addon can't hand in a quest. Handing it in counts it down.
+    -- Under the step, what to bring and to whom; in the box, like a craft,
+    -- what it makes and where, how many times (the whole sentence on one
+    -- line ran past the box's edge).
     if #plan.handIns > 0 then
         local times = 0
         for _, handIn in ipairs(plan.handIns) do
@@ -951,12 +967,9 @@ local function AddToDo(plan)
         local rows = {}
         for _, handIn in ipairs(plan.handIns) do
             local turnIn = handIn.turnIn
-            local text = string.format(L.HAND_IN_AT, turnIn.count * handIn.crafts, ItemName(turnIn.give), turnIn.npc, turnIn.place)
-            if handIn.crafts > 1 then
-                text = text .. " " .. Gray(string.format(L.HAND_IN_TIMES, handIn.crafts))
-            end
-            AddRow("row", text)
-            rows[#rows + 1] = { ItemLabel(handIn.itemID, handIn.makes * handIn.crafts), Gray(text) }
+            AddRow("row", ItemLabel(turnIn.give, turnIn.count * handIn.crafts), Gray(turnIn.npc .. ", " .. turnIn.place))
+            local times = handIn.crafts == 1 and L.TODO_HAND_IN or string.format(L.TODO_HAND_INS, handIn.crafts)
+            rows[#rows + 1] = { ItemLabel(handIn.itemID, handIn.makes * handIn.crafts), Gray(turnIn.place .. ", " .. times) }
         end
         groups[#groups + 1] = { title = L.STEP_HAND_IN, rows = rows }
     end
@@ -1461,12 +1474,14 @@ function Panel.FindButton(text)
     end
 end
 
--- The first shown row whose left text contains text: its regions (left,
--- right, button, icons, hit: the text's hover and click area). For tests and debugging.
-function Panel.FindRow(text)
+-- The first shown row whose left text contains text (and right text right,
+-- if given): its regions (left, right, button, icons, hit: the text's hover
+-- and click area). For tests and debugging.
+function Panel.FindRow(text, right)
     for index = 1, usedRows do
         local row = rows[index]
-        if row.left:IsShown() and (row.left:GetText() or ""):find(text, 1, true) then
+        if row.left:IsShown() and (row.left:GetText() or ""):find(text, 1, true)
+            and (right == nil or (row.right:IsShown() and (row.right:GetText() or ""):find(right, 1, true))) then
             return row
         end
     end

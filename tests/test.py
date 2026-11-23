@@ -3375,10 +3375,14 @@ check("Crafting Queue: marked as a turn-in", has_line(ev, "Thorium Headed Arrow 
 check("To do: Buy, Craft (the shells, 1 recipe), then Hand in",
       [h for h in headings(ev) if re.match(r"^\d\.", h)] == ["1. Buy | |cff8080801 item|r", "2. Craft (1 min) | |cff8080801 recipe|r",
        "3. Hand in | |cff8080801 time|r"])
-check("...where and to whom, under the step and in the box; no button (an addon can't hand in a quest)",
-      "200 Thorium Shells to Artilleryman Sheldonore, Ironforge" in lines(ev)
-      and section(ev, "Hand in") == ["|Ticon18042:0|t Thorium Headed Arrow x200 | |cff808080200 Thorium Shells to Artilleryman Sheldonore, Ironforge|r"]
+check("...under the step what to bring and to whom; in the box, like a craft, what it makes, where and how many times; no button",
+      has_line(ev, "Thorium Shells x200", "Artilleryman Sheldonore, Ironforge")
+      and section(ev, "Hand in") == ["|Ticon18042:0|t Thorium Headed Arrow x200 | |cff808080Ironforge, 1 time|r"]
       and ev('VendorProfit.Panel.RowButton("Hand in")') is None)
+check("a long right side cuts the left short instead of running under it", ev('''(function()
+    local row = VendorProfit.Panel.FindRow("Thorium Shells x200", "Artilleryman")
+    return row.left:GetWidth() + row.right:GetStringWidth() <= 380 - 2 * 16 and row.left:GetWidth() < 380 * 0.55
+end)()'''))
 # Crafting the shells: a step on the way, not posted.
 run('__stub.bags[12359] = 2; __stub.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 19800); __stub.bags[12359] = 0; __stub.bags[15997] = 200')
 check("crafting the shells on the way: not queued to post (only the order's arrows are)",
