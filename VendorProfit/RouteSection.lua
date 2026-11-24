@@ -216,6 +216,16 @@ local function CreateSeparator(frame, anchor)
         end
         separator[side .. "Line"] = line
     end
+    -- Its lines one pixel tall whenever it shows or the scale changes (see
+    -- VendorProfit.HairLine).
+    local function Fit()
+        VendorProfit.HairLine(separator.LeftLine)
+        VendorProfit.HairLine(separator.RightLine)
+    end
+    separator:SetScript("OnShow", Fit)
+    pcall(separator.RegisterEvent, separator, "UI_SCALE_CHANGED")
+    pcall(separator.RegisterEvent, separator, "DISPLAY_SIZE_CHANGED")
+    separator:SetScript("OnEvent", Fit)
     separator:Hide()
     return separator
 end

@@ -348,6 +348,14 @@ C_AddOns = { GetAddOnMetadata = function(addon, key) return stub.metadata[addon]
 -- Atlases the client has (C_Texture.GetAtlasInfo).
 stub.atlases = { ["auctionhouse-icon-favorite"] = { width = 13, height = 12 } }
 C_Texture = { GetAtlasInfo = function(atlas) return stub.atlases[atlas] end }
+-- Sizes in whole screen pixels: here just recorded (__pixelHeight) and set
+-- as given, the stub having no screen.
+PixelUtil = {
+    SetHeight = function(region, height, minPixels)
+        region.__pixelHeight = { height, minPixels }
+        region:SetHeight(height)
+    end,
+}
 C_Timer = { After = function(seconds, fn) stub.timers[#stub.timers + 1] = { at = stub.now + seconds, fn = fn } end }
 SlashCmdList = {}
 stub.money = 1000000

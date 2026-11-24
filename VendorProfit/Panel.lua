@@ -229,6 +229,8 @@ local function AddDivider(row, title, onClick)
     row.right:Hide()
     row.button:Hide()
     local left, right = row.lines[1], row.lines[2]
+    VendorProfit.HairLine(left)
+    VendorProfit.HairLine(right)
     left:ClearAllPoints()
     left:SetPoint("LEFT", content, "TOPLEFT", PADDING, y - 6)
     left:SetPoint("RIGHT", row.left, "LEFT", -6, 0)

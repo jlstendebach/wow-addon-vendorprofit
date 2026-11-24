@@ -772,6 +772,16 @@ check("remembered per character", ev("VendorProfitCharDB.collapsed.bags") == Tru
 run(BAGS + '.hit:GetScript("OnMouseUp")(' + BAGS + '.hit, "LeftButton")')
 check("click again: back open", has_line(ev, "Bronze Bar x12") and ev("VendorProfitCharDB.collapsed.bags") is None)
 
+# Divider lines one screen pixel tall (PixelUtil), set again when the UI scale
+# or screen size changes: a line 1 high could round to no pixels and vanish.
+LINES = 'VendorProfit.Panel.FindRow("To do").lines'
+check("divider lines sized in whole pixels, at least one",
+      ev("(function() local l = %s; return l[1].__pixelHeight[2] == 1 and l[2].__pixelHeight[2] == 1 end)()" % LINES))
+run("(function() local l = %s; l[1].__pixelHeight, l[2].__pixelHeight = nil, nil end)()" % LINES)
+run('__stub.Fire("UI_SCALE_CHANGED")')
+check("...sized again when the UI scale changes",
+      ev("(function() local l = VendorProfit.Panel.FindRow('To do').lines; return l[1].__pixelHeight ~= nil and l[2].__pixelHeight ~= nil end)()"))
+
 # Every section folds the same way.
 def fold(name):
     row = 'VendorProfit.Panel.FindRow("%s")' % name

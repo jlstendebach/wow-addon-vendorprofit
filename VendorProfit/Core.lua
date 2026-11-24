@@ -555,6 +555,20 @@ VendorProfit.COINS = {
     copper = "|TInterface\\MoneyFrame\\UI-CopperIcon:0:0:2:0|t",
 }
 
+-- Makes a thin line (a texture 1 high) exactly one screen pixel tall at its
+-- current scale. The game rounds a texture's edges to whole pixels, so at a
+-- UI scale where 1 is less than a pixel (a smaller window or resolution), a
+-- line 1 high could round to no pixels at all and vanish, depending on where
+-- it fell: some dividers drew, others didn't. Called again whenever it's
+-- laid out, since the scale can change (the panel redraws when it does).
+function VendorProfit.HairLine(texture)
+    if PixelUtil and PixelUtil.SetHeight then
+        PixelUtil.SetHeight(texture, 1, 1)
+    else
+        texture:SetHeight(1)
+    end
+end
+
 -- Money as coins, like the game's own money text, except that silver and
 -- copper are always two digits after a larger coin: 5s 07c, not 5s 7c, so it
 -- can't be misread as 5s 70c. Coins that are zero are left out, except silver

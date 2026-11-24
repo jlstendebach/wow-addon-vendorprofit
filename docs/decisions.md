@@ -15,6 +15,12 @@ time" route mode).
   (MenuUtil) for dropdowns. Borrowed game widgets that looked out of place
   (the game's filter dropdown, Scan off on its own) were replaced with the
   addon's own style.
+- **Thin lines are one screen pixel** (2026-11-23): the dividers, the
+  favorites line, the Cheapest Route separator and the gold graph's grid
+  are sized with PixelUtil to one whole pixel at the current scale, set
+  again when the UI scale or screen size changes. Set 1 high, a line could
+  round to no pixels at a scale where 1 is less than a pixel (windowed, a
+  smaller resolution) and vanish, some dividers drawing and others not.
 - **One window, pages as side tabs** (Shopping List, Best Crafts, Profit
   History, Purchase History, Gold). A minimum height keeps every side tab on
   the window.
