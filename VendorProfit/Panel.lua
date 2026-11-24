@@ -38,7 +38,7 @@ local HEADING_BUTTON_WIDTH = 120
 -- none: a Post step not priced yet), and at most this many before it
 -- scrolls, so a big order doesn't run the window off the screen. Folding
 -- To do hides it.
-Panel.TODO_MIN_ROWS = 6
+Panel.TODO_MIN_ROWS = 3
 Panel.TODO_ROWS = 12
 -- The box is a little darker than the window, its items and scroll bar
 -- inset by TODO_PADDING; the bar is SCROLLBAR_WIDTH wide, TODO_PADDING

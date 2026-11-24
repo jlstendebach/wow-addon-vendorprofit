@@ -426,9 +426,9 @@ time" route mode).
   do's box, titled *Listed now: <item>*: posting often starts before the
   other steps are done, and the plain "Post" title didn't say which item the
   prices were for without looking up out of the box.
-  To do's box is as tall as its rows, now at least 6 (it could be one or
-  two, which looked cramped) and still at most 12. Josh tried a fixed 12
-  first and preferred it growing with the order.
+  To do's box is as tall as its rows, now at least 3 (it could be one or
+  two, which looked cramped) and still at most 12. Josh tried a fixed 12,
+  then a minimum of 6, and settled on 3.
 - **Grouped item auctions are priced per item** (2026-11-22): the game
   shows identical auctions of an item that doesn't stack as one row, quantity
   auctions of one item each, with buyoutAmount the price of one. Dividing it
