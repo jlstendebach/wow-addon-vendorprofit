@@ -33,7 +33,10 @@ local ROW_HEIGHT = 15
 local HEADING_HEIGHT = 20
 
 local HEADING_BUTTON_WIDTH = 120
--- To do's details scroll in a box at most this many rows tall.
+-- To do's details scroll in a box always this many rows tall, however
+-- many there are: a box that grew and shrank with the order moved
+-- everything under it, and was cramped with only a row or two. Folding To
+-- do hides it.
 Panel.TODO_ROWS = 12
 -- The box is a little darker than the window, its items and scroll bar
 -- inset by TODO_PADDING; the bar is SCROLLBAR_WIDTH wide, TODO_PADDING
@@ -813,7 +816,7 @@ local function AddTodoDetails(groups)
         todoRows[index].left:Hide()
         todoRows[index].right:Hide()
     end
-    local shown = math.min(todoUsed, Panel.TODO_ROWS)
+    local shown = Panel.TODO_ROWS
     todoList:SetHeight(math.max(todoUsed, 1) * ROW_HEIGHT)
     y = y - 4
     local back = todoScroll.back
@@ -1034,9 +1037,9 @@ local function AddToDo(plan)
     if detailsOpen and number == 0 then
         AddRow("note", L.EMPTY_TODO)
     end
-    -- The box only with something in it: with just a Post step not priced
-    -- yet (nothing to list), an empty box squashed its scroll bar.
-    if detailsOpen and #groups > 0 then
+    -- The box whenever there's a step, empty or not (just a Post step not
+    -- priced yet has nothing to list): it's always the same size.
+    if detailsOpen and number > 0 then
         AddTodoDetails(groups)
     end
     return fromBags
