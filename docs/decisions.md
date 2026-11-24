@@ -409,6 +409,14 @@ time" route mode).
   it's taken now prefers the inbox as of its last update when the mail
   there has changed (the emptied one gone and the next moved up: the next
   isn't being taken).
+- **A post's timeout counts quiet time** (2026-11-23): a multisell of
+  things that don't stack posts one auction at a time, and can take longer
+  than the 15 seconds a post had to finish from the click. Cut short, the
+  part posted so far came off the queue, the item came up again for the
+  rest, the rest left the bags while it was priced, and it said to post 0
+  (a click moved on). Now it gives up only after 15 seconds with nothing
+  leaving the bags. Likewise an error message mid-post (it may not be about
+  the post) no longer strands it: if the rest leaves anyway, it's posted.
 - **Grouped item auctions are priced per item** (2026-11-22): the game
   shows identical auctions of an item that doesn't stack as one row, quantity
   auctions of one item each, with buyoutAmount the price of one. Dividing it

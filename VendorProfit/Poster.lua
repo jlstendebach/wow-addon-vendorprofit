@@ -62,7 +62,7 @@ local status = "closed"
 -- listed (the cheapest few prices, { price, quantity }), skipped (how many
 -- of them were passed over as bait), guess (last known price, when
 -- nothing's listed), cost (per item), armed (below cost, clicked once),
--- before, quantity (posting) }.
+-- before, quantity, left, progress (posting) }.
 local current
 local message, messageIsError
 
@@ -472,6 +472,31 @@ local function Posted()
     Poster.PriceNext()
 end
 
+-- No reply to a post: given up on after POST_TIMEOUT with nothing leaving
+-- the bags. Counted from the last item to leave, not from the click: a
+-- multisell of things that don't stack posts one auction at a time and can
+-- take longer than that. Timing out on the click cut it short: the part
+-- posted so far was taken off the queue, the item came up again for the
+-- rest, which left the bags while it was priced, and it said to post 0.
+local function WatchPost(item, wait)
+    C_Timer.After(wait, function()
+        if current ~= item or status ~= "posting" then
+            return
+        end
+        local quiet = GetTime() - item.progress
+        if quiet < Poster.POST_TIMEOUT then
+            WatchPost(item, Poster.POST_TIMEOUT - quiet)
+        elseif InBags(item.itemID) < item.before then
+            item.quantity = item.before - InBags(item.itemID)
+            Posted()
+        else
+            SetMessage(string.format(L.POST_NO_REPLY, ItemName(item.itemID)), true)
+            status = "ready"
+            Changed()
+        end
+    end)
+end
+
 -- How many of an item to post now: its queued count, or what's in your
 -- bags if fewer.
 local function ToPostCount(itemID)
@@ -499,6 +524,7 @@ function Poster.Post()
         return
     end
     item.before, item.quantity = InBags(item.itemID), quantity
+    item.left, item.progress = item.before, GetTime()
     status = "posting"
     SetMessage(nil)
     if item.commodity then
@@ -506,25 +532,24 @@ function Poster.Post()
     else
         C_AuctionHouse.PostItem(location, Poster.DURATION, quantity, nil, item.price)
     end
-    C_Timer.After(Poster.POST_TIMEOUT, function()
-        if current == item and status == "posting" then
-            if InBags(item.itemID) < item.before then
-                item.quantity = item.before - InBags(item.itemID)
-                Posted()
-            else
-                SetMessage(string.format(L.POST_NO_REPLY, ItemName(item.itemID)), true)
-                status = "ready"
-                Changed()
-            end
-        end
-    end)
+    WatchPost(item, Poster.POST_TIMEOUT)
     Changed()
 end
 
--- Bags changed while posting: done once all of it has left.
+-- Bags changed while posting: done once all of it has left. A post that
+-- stopped early (an error, which may not even be about the post) is done
+-- too if the rest leaves after all: otherwise it stayed on the item with
+-- none left to post ("Post 0"), needing a click to move on.
 local function CheckPosted()
     local item = current
-    if status == "posting" and item and InBags(item.itemID) <= item.before - item.quantity then
+    if item == nil or item.before == nil or (status ~= "posting" and status ~= "ready") then
+        return
+    end
+    local bags = InBags(item.itemID)
+    if bags < item.left then
+        item.left, item.progress = bags, GetTime()
+    end
+    if bags <= item.before - item.quantity then
         Posted()
     end
 end

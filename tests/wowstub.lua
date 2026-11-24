@@ -854,7 +854,8 @@ end
 -- Posting: stub.ah.posts = { { kind, bag, slot, itemID, duration, quantity,
 -- price } }. Unless ah.noPostReply, the items leave the bags a moment later
 -- (BAG_UPDATE_DELAYED, then AUCTION_HOUSE_AUCTION_CREATED); ah.postError
--- fails the next post with that message instead.
+-- fails the next post with that message instead. With ah.postStep, they
+-- leave one at a time, that many seconds apart, as a multisell does.
 ItemLocation = {}
 function ItemLocation:CreateFromBagAndSlot(bag, slot) return { bag = bag, slot = slot } end
 stub.ah.posts = {}
@@ -871,19 +872,30 @@ local function Post(kind, location, duration, quantity, price)
             return
         end
         local id = s.itemID
-        local left = quantity
-        for bag, slots in pairs(stub.containers) do
-            for slot, v in pairs(slots) do
-                if v.itemID == id and left > 0 and bag <= 5 then
-                    local take = math.min(v.count, left)
-                    v.count, left = v.count - take, left - take
-                    if v.count <= 0 then slots[slot] = nil end
+        local function Leave(n)
+            local left = n
+            for bag, slots in pairs(stub.containers) do
+                for slot, v in pairs(slots) do
+                    if v.itemID == id and left > 0 and bag <= 5 then
+                        local take = math.min(v.count, left)
+                        v.count, left = v.count - take, left - take
+                        if v.count <= 0 then slots[slot] = nil end
+                    end
                 end
             end
+            stub.bags[id] = (stub.bags[id] or 0) - n
+            stub.Fire("BAG_UPDATE_DELAYED")
+            stub.Fire("AUCTION_HOUSE_AUCTION_CREATED", 1)
         end
-        stub.bags[id] = (stub.bags[id] or 0) - quantity
-        stub.Fire("BAG_UPDATE_DELAYED")
-        stub.Fire("AUCTION_HOUSE_AUCTION_CREATED", 1)
+        local step = stub.ah.postStep
+        if step == nil then
+            Leave(quantity)
+            return
+        end
+        Leave(1)
+        for i = 2, quantity do
+            C_Timer.After((i - 1) * step, function() Leave(1) end)
+        end
     end)
 end
 function C_AuctionHouse.PostCommodity(location, duration, quantity, unitPrice)

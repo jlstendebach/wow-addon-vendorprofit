@@ -3318,6 +3318,53 @@ check("a post the game refuses: says why, Post offered again", has_line(ev, "Cou
       and ev("%s.Status()" % P) == "ready")
 run('__stub.CloseAH()')
 check("auction house closed: what's left stays queued", queue() == [(50007, 5)] and ev("%s.Status()" % P) == "closed")
+# A slow post: a multisell of things that don't stack posts one auction at a
+# time, and can take longer than the 15 seconds a post is given to answer.
+run('''
+    VendorProfitCharDB.postQueue = {}
+    __stub.items["item:50012"] = { name = "Slow Sword", cached = true, sellPrice = 1 }
+    __stub.PutInBags(0, 9, 50012, 5)
+    __stub.ah.nonCommodity[50012] = true
+    __stub.ah.auctions[50012] = { { auctionID = 9101, buyout = 40000, quantity = 2 } }
+    VendorProfit.Poster.Crafted(50012, 5)
+    __stub.ah.postStep = 6
+''')
+run('__stub.OpenAH()')
+run(POST + ':Click(); __stub.Advance(0.5)')
+run(POST + ':Click(); __stub.Advance(16)')
+check("a slow multisell, still going after 15 seconds: still posting, not cut short", ev("%s.Status()" % P) == "posting"
+      and queue() == [(50012, 5)] and ev("__stub.bags[50012]") == 2)
+run('__stub.Advance(30)')
+check("...done once all 5 have left: posted as one, off the queue, not offered again to post 0",
+      "Posted 5 Slow Sword" in " ".join(lines(ev)) and queue() == [] and ev("%s.Status()" % P) == "idle"
+      and not any(h.startswith("1. Post") for h in headings(ev)))
+# A stray error mid-post (it may not even be about the post): if the rest
+# leaves anyway, that's the post done.
+run('''
+    __stub.PutInBags(0, 9, 50012, 3)
+    VendorProfit.Poster.Crafted(50012, 3)
+    __stub.ah.postStep = 1
+''')
+run(POST + ':Click(); __stub.Advance(0.5)')
+run(POST + ':Click(); __stub.Advance(0.15); __stub.Fire("UI_ERROR_MESSAGE", 0, "You can\'t do that yet.")')
+check("an error mid-post: says so", ev("%s.Status()" % P) == "ready" and has_line(ev, "Couldn't post Slow Sword"))
+run('__stub.Advance(3)')
+check("...the rest left anyway: posted, off the queue, on to the next", queue() == [] and ev("%s.Status()" % P) == "idle"
+      and "Posted 3 Slow Sword" in " ".join(lines(ev)))
+# No reply at all: given up on after 15 quiet seconds.
+run('''
+    __stub.ah.postStep = nil
+    __stub.ah.noPostReply = true
+    __stub.PutInBags(0, 9, 50012, 2)
+    VendorProfit.Poster.Crafted(50012, 2)
+''')
+run(POST + ':Click(); __stub.Advance(0.5)')
+run(POST + ':Click(); __stub.Advance(14)')
+check("no reply: still waiting at 14 seconds", ev("%s.Status()" % P) == "posting")
+run('__stub.Advance(2)')
+check("...says so at 15, Post offered again, still queued", ev("%s.Status()" % P) == "ready"
+      and has_line(ev, "No word that Slow Sword posted") and queue() == [(50012, 2)])
+run('__stub.ah.noPostReply = false; __stub.CloseAH()')
 # Saved data from before the Post Queue: a set of items to post all of.
 run2, ev2 = client('VendorProfitCharDB = { toPost = { [50011] = true } }; __stub.bags[50011] = 7')
 check("an older save's items to post: queued at what's in the bags", [(e.itemID, e.count) for e in ev2("(function() VendorProfit.Poster.Items() return VendorProfitCharDB.postQueue end)()").values()] == [(50011, 7)]
