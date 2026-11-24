@@ -426,11 +426,11 @@ time" route mode).
   do's box, titled *Listed now: <item>*: posting often starts before the
   other steps are done, and the plain "Post" title didn't say which item the
   prices were for without looking up out of the box.
-  To do's box is as tall as its rows, now at least 3 (it could be one or
-  two, which looked cramped) and still at most 12. Josh tried a fixed 12,
-  then a minimum of 6, and settled on 3. What looked odd in a short box was
-  the scroll bar (its arrows nearly meeting, no room for the thumb), so it
-  only shows when there's something to scroll, which is only at 12 rows.
+  To do's box: Josh tried a fixed 12 rows, then a minimum of 6, then 3.
+  What looked odd in a short box was the scroll bar (its arrows nearly
+  meeting, no room for the thumb), so it now only shows when there's
+  something to scroll, which is only at 12 rows, and the box is just as
+  tall as its rows again (gone with nothing in it), up to 12.
 - **Grouped item auctions are priced per item** (2026-11-22): the game
   shows identical auctions of an item that doesn't stack as one row, quantity
   auctions of one item each, with buyoutAmount the price of one. Dividing it

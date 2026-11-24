@@ -33,12 +33,10 @@ local ROW_HEIGHT = 15
 local HEADING_HEIGHT = 20
 
 local HEADING_BUTTON_WIDTH = 120
--- To do's details scroll in a box as tall as its rows, between these:
--- at least a few rows, so it isn't cramped with only a row or two (or
--- none: a Post step not priced yet), and at most this many before it
--- scrolls, so a big order doesn't run the window off the screen. The
--- scroll bar only shows when it scrolls. Folding To do hides it.
-Panel.TODO_MIN_ROWS = 3
+-- To do's details are in a box as tall as its rows, up to this many; past
+-- that it scrolls, so a big order doesn't run the window off the screen.
+-- The scroll bar only shows when it scrolls, and the box only when it has
+-- something in it. Folding To do hides it.
 Panel.TODO_ROWS = 12
 -- The box is a little darker than the window, its items and scroll bar
 -- inset by TODO_PADDING; the bar is SCROLLBAR_WIDTH wide, TODO_PADDING
@@ -827,7 +825,7 @@ local function AddTodoDetails(groups)
         todoRows[index].left:Hide()
         todoRows[index].right:Hide()
     end
-    local shown = math.max(Panel.TODO_MIN_ROWS, math.min(todoUsed, Panel.TODO_ROWS))
+    local shown = math.min(todoUsed, Panel.TODO_ROWS)
     todoList:SetHeight(math.max(todoUsed, 1) * ROW_HEIGHT)
     y = y - 4
     local back = todoScroll.back
@@ -1054,9 +1052,9 @@ local function AddToDo(plan)
     if detailsOpen and number == 0 then
         AddRow("note", L.EMPTY_TODO)
     end
-    -- The box whenever there's a step, empty or not (just a Post step not
-    -- priced yet has nothing to list), never smaller than TODO_MIN_ROWS.
-    if detailsOpen and number > 0 then
+    -- The box only with something in it (just a Post step not priced yet
+    -- has nothing to list).
+    if detailsOpen and #groups > 0 then
         AddTodoDetails(groups)
     end
     return fromBags

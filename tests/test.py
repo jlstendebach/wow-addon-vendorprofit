@@ -3224,9 +3224,8 @@ check("...never fewer than one: x takes it off", queue()[1] == (50002, 1) and no
 run(icon("Test Sword", 2) + ':Click()')
 run('local r = VendorProfit.Panel.FindRow("Test Shells"); for i = 1, 45 do VendorProfit.Poster.SetCount(50001, 200) end')
 check("auction house closed: Post says to open it", ev(POST + ".__text") == "Open AH" and not ev(POST + ":IsEnabled()"))
-check("just a Post step, nothing priced yet: the box still there, empty, at its smallest (3 rows)",
-      ev("VendorProfit.Panel.TodoScroll():IsShown() and VendorProfit.Panel.TodoScroll().back:IsShown()")
-      and ev("VendorProfit.Panel.TodoScroll():GetHeight()") == 3 * 15)
+check("just a Post step, nothing priced yet: no box, with nothing to put in it",
+      ev("VendorProfit.Panel.TodoScroll() == nil or not (VendorProfit.Panel.TodoScroll():IsShown() or VendorProfit.Panel.TodoScroll().back:IsShown())"))
 # Shells: 3 at 40c (bait), then 100c; the sword: 2 auctions at 5g.
 run('''
     __stub.ah.listings[50001] = { { unitPrice = 40, quantity = 3 }, { unitPrice = 100, quantity = 600 }, { unitPrice = 105, quantity = 200 } }
