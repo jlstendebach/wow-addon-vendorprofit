@@ -775,8 +775,9 @@ check("click again: back open", has_line(ev, "Bronze Bar x12") and ev("VendorPro
 # Divider lines one screen pixel tall (PixelUtil), set again when the UI scale
 # or screen size changes: a line 1 high could round to no pixels and vanish.
 LINES = 'VendorProfit.Panel.FindRow("To do").lines'
-check("divider lines sized in whole pixels, at least one",
-      ev("(function() local l = %s; return l[1].__pixelHeight[2] == 1 and l[2].__pixelHeight[2] == 1 end)()" % LINES))
+check("divider lines sized in whole pixels, at least one, and never rounded away to none",
+      ev("(function() local l = %s; return l[1].__pixelHeight[2] == 1 and l[2].__pixelHeight[2] == 1 end)()" % LINES)
+      and ev("(function() local l = %s; return l[1].__snap == false and l[2].__snap == false and l[1].__texelBias == 0 end)()" % LINES))
 run("(function() local l = %s; l[1].__pixelHeight, l[2].__pixelHeight = nil, nil end)()" % LINES)
 run('__stub.Fire("UI_SCALE_CHANGED")')
 check("...sized again when the UI scale changes",

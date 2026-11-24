@@ -27,6 +27,11 @@ time" route mode).
   a fraction of a pixel apart, or on a title not measured again yet. Both
   ends of both lines are now on the page at one height, either side of the
   title's measured width.
+  Still vanishing after that, so pixel snapping is turned off for these
+  lines too (SetSnapToPixelGrid false, texel bias 0, as for the gold
+  graph's line): in a resized window the game's idea of one pixel can be
+  off, and a line it can't snap to a whole pixel is now blended rather
+  than dropped.
 - **One window, pages as side tabs** (Shopping List, Best Crafts, Profit
   History, Purchase History, Gold). A minimum height keeps every side tab on
   the window.

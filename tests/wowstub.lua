@@ -230,6 +230,8 @@ function FrameMethods:CreateTexture()
     t.GetHeight = function(tex) return tex.__h or 0 end
     t.SetTexture = function(tex, path) tex.__texture = path end
     t.SetBlendMode = function(tex, mode) tex.__blend = mode end
+    t.SetSnapToPixelGrid = function(tex, snap) tex.__snap = snap end
+    t.SetTexelSnappingBias = function(tex, bias) tex.__texelBias = bias end
     t.SetVertexColor = function(tex, ...) tex.__vertexColor = { ... } end
     t.SetTexCoord = function(tex, ...) tex.__texCoord = { ... } end
     t.SetAtlas = function(tex, atlas) tex.__atlas = atlas end

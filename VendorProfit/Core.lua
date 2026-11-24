@@ -555,17 +555,25 @@ VendorProfit.COINS = {
     copper = "|TInterface\\MoneyFrame\\UI-CopperIcon:0:0:2:0|t",
 }
 
--- Makes a thin line (a texture 1 high) exactly one screen pixel tall at its
--- current scale. The game rounds a texture's edges to whole pixels, so at a
--- UI scale where 1 is less than a pixel (a smaller window or resolution), a
--- line 1 high could round to no pixels at all and vanish, depending on where
--- it fell: some dividers drew, others didn't. Called again whenever it's
--- laid out, since the scale can change (the panel redraws when it does).
+-- Makes a thin line (a texture 1 high) always draw. The game rounds a
+-- texture's edges to whole screen pixels, so at a UI scale where 1 is less
+-- than a pixel (a smaller window or resolution), a line could round to no
+-- pixels at all and vanish, depending on where it fell: some dividers drew,
+-- others didn't. Sized to one pixel (PixelUtil) wasn't enough in a resized
+-- window, where the game's idea of a pixel can be off, so the rounding is
+-- also turned off for it: a line between two pixel rows is blended across
+-- them, a touch softer, rather than dropped (as the gold graph's line is).
+-- Called again whenever it's laid out, since the scale can change (the
+-- panel redraws when it does).
 function VendorProfit.HairLine(texture)
     if PixelUtil and PixelUtil.SetHeight then
         PixelUtil.SetHeight(texture, 1, 1)
     else
         texture:SetHeight(1)
+    end
+    if texture.SetSnapToPixelGrid then
+        texture:SetSnapToPixelGrid(false)
+        texture:SetTexelSnappingBias(0)
     end
 end
 
