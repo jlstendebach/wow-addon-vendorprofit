@@ -15,6 +15,23 @@ time" route mode).
   (MenuUtil) for dropdowns. Borrowed game widgets that looked out of place
   (the game's filter dropdown, Scan off on its own) were replaced with the
   addon's own style.
+- **Thin lines are one screen pixel** (2026-11-23): the dividers, the
+  favorites line, the Cheapest Route separator and the gold graph's grid
+  are sized with PixelUtil to one whole pixel at the current scale, set
+  again when the UI scale or screen size changes. Set 1 high, a line could
+  round to no pixels at a scale where 1 is less than a pixel (windowed, a
+  smaller resolution) and vanish, some dividers drawing and others not.
+  That alone didn't stop the Shopping List's divider lines vanishing after
+  a resolution change: each line had one end on the page and the other on
+  the title's side (its middle, from its font), so its two ends could sit
+  a fraction of a pixel apart, or on a title not measured again yet. Both
+  ends of both lines are now on the page at one height, either side of the
+  title's measured width.
+  Still vanishing after that, so pixel snapping is turned off for these
+  lines too (SetSnapToPixelGrid false, texel bias 0, as for the gold
+  graph's line): in a resized window the game's idea of one pixel can be
+  off, and a line it can't snap to a whole pixel is now blended rather
+  than dropped.
 - **One window, pages as side tabs** (Shopping List, Best Crafts, Profit
   History, Purchase History, Gold). A minimum height keeps every side tab on
   the window.
@@ -409,6 +426,28 @@ time" route mode).
   it's taken now prefers the inbox as of its last update when the mail
   there has changed (the emptied one gone and the next moved up: the next
   isn't being taken).
+- **A post's timeout counts quiet time** (2026-11-23): a multisell of
+  things that don't stack posts one auction at a time, and can take longer
+  than the 15 seconds a post had to finish from the click. Cut short, the
+  part posted so far came off the queue, the item came up again for the
+  rest, the rest left the bags while it was priced, and it said to post 0
+  (a click moved on). Now it gives up only after 15 seconds with nothing
+  leaving the bags. Likewise an error message mid-post (it may not be about
+  the post) no longer strands it: if the rest leaves anyway, it's posted.
+- **Shopping List layout** (2026-11-23), Josh's: Profit first, then the
+  Crafting Queue, Post Queue, To do and Already in your bags. Every section
+  shows even when empty, with a gray line saying what it's for and when it
+  fills (a folded one shows nothing, as before), so the page keeps its shape
+  instead of sections coming and going. Spent on this order so far always
+  shows, under Items to buy, from 0. The Post step's prices go first in To
+  do's box, titled *Listed now: <item>*: posting often starts before the
+  other steps are done, and the plain "Post" title didn't say which item the
+  prices were for without looking up out of the box.
+  To do's box: Josh tried a fixed 12 rows, then a minimum of 6, then 3.
+  What looked odd in a short box was the scroll bar (its arrows nearly
+  meeting, no room for the thumb), so it now only shows when there's
+  something to scroll, which is only at 12 rows, and the box is just as
+  tall as its rows again (gone with nothing in it), up to 12.
 - **Grouped item auctions are priced per item** (2026-11-22): the game
   shows identical auctions of an item that doesn't stack as one row, quantity
   auctions of one item each, with buyoutAmount the price of one. Dividing it

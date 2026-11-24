@@ -247,6 +247,7 @@ VendorProfit.L = {
     POST_GUESSED = "(nothing listed: up from the last known %s)",
     POST_SKIPPED_CHEAP = "(skipping a few suspiciously cheap)",
     POST_LISTED_SKIPPED = "(skipped)",
+    POST_LISTED_TITLE = "Listed now: %s",
     POST_BELOW_COST = "Below what they cost you (%s each).",
     POST_NO_PRICE = "No price known for %s, and nothing listed: post it yourself.",
     POST_NO_ANSWER = "The auction house didn't answer for %s. Click Post to try again.",
@@ -255,7 +256,11 @@ VendorProfit.L = {
     POST_FAILED = "Couldn't post %s: %s",
     HEAD_BAGS = "Already in your bags",
     HEAD_PROFIT = "Profit",
-    NOTHING_QUEUED = "Nothing queued. Use Queue in a recipe's Cheapest Route section in the professions window.",
+    EMPTY_PROFIT = "What the queued crafts sell for, cost and make. Shows once something's queued.",
+    EMPTY_QUEUED = "Recipes to craft. Queue one with + on Best Crafts, or Queue in a recipe's Cheapest Route section in the professions window.",
+    EMPTY_POST_QUEUE = "Items to post at the auction house. What the queue crafts comes here, and so do auctions that come back by mail.",
+    EMPTY_TODO = "Steps to buy, craft, hand in and post, in order. Shows once something's queued.",
+    EMPTY_BAGS = "What the order uses from your bags. Shows once something's queued.",
     QUEUED_REMOVE = "Remove from the order.",
     QUEUED_MORE = "Craft one more. Shift-click: five more.",
     QUEUED_FEWER = "Craft one fewer. Shift-click: five fewer.",
@@ -549,6 +554,28 @@ VendorProfit.COINS = {
     silver = "|TInterface\\MoneyFrame\\UI-SilverIcon:0:0:2:0|t",
     copper = "|TInterface\\MoneyFrame\\UI-CopperIcon:0:0:2:0|t",
 }
+
+-- Makes a thin line (a texture 1 high) always draw. The game rounds a
+-- texture's edges to whole screen pixels, so at a UI scale where 1 is less
+-- than a pixel (a smaller window or resolution), a line could round to no
+-- pixels at all and vanish, depending on where it fell: some dividers drew,
+-- others didn't. Sized to one pixel (PixelUtil) wasn't enough in a resized
+-- window, where the game's idea of a pixel can be off, so the rounding is
+-- also turned off for it: a line between two pixel rows is blended across
+-- them, a touch softer, rather than dropped (as the gold graph's line is).
+-- Called again whenever it's laid out, since the scale can change (the
+-- panel redraws when it does).
+function VendorProfit.HairLine(texture)
+    if PixelUtil and PixelUtil.SetHeight then
+        PixelUtil.SetHeight(texture, 1, 1)
+    else
+        texture:SetHeight(1)
+    end
+    if texture.SetSnapToPixelGrid then
+        texture:SetSnapToPixelGrid(false)
+        texture:SetTexelSnappingBias(0)
+    end
+end
 
 -- Money as coins, like the game's own money text, except that silver and
 -- copper are always two digits after a larger coin: 5s 07c, not 5s 7c, so it

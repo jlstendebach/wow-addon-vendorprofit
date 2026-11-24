@@ -230,6 +230,8 @@ function FrameMethods:CreateTexture()
     t.GetHeight = function(tex) return tex.__h or 0 end
     t.SetTexture = function(tex, path) tex.__texture = path end
     t.SetBlendMode = function(tex, mode) tex.__blend = mode end
+    t.SetSnapToPixelGrid = function(tex, snap) tex.__snap = snap end
+    t.SetTexelSnappingBias = function(tex, bias) tex.__texelBias = bias end
     t.SetVertexColor = function(tex, ...) tex.__vertexColor = { ... } end
     t.SetTexCoord = function(tex, ...) tex.__texCoord = { ... } end
     t.SetAtlas = function(tex, atlas) tex.__atlas = atlas end
@@ -283,9 +285,14 @@ end
 function FontMethods:GetStringWidth() return stub.TextWidth(self.__text) end
 function FontMethods:GetUnboundedStringWidth() return stub.TextWidth(self.__text) end
 function FontMethods:GetStringHeight() return 12 end
-function FontMethods:ClearAllPoints() self.__point = nil end
+function FontMethods:ClearAllPoints() self.__point = nil; self.__points = nil end
 function FontMethods:SetShown(s) self.__shown = not not s end
-function FontMethods:SetPoint(...) self.__point = { ... } end
+-- __point is the last point set; __points every point by name.
+function FontMethods:SetPoint(point, ...)
+    self.__point = { point, ... }
+    self.__points = self.__points or {}
+    self.__points[point] = { point, ... }
+end
 function FontMethods:Show() self.__shown = true end
 function FontMethods:Hide() self.__shown = false end
 function FontMethods:IsShown() return self.__shown end
@@ -348,6 +355,14 @@ C_AddOns = { GetAddOnMetadata = function(addon, key) return stub.metadata[addon]
 -- Atlases the client has (C_Texture.GetAtlasInfo).
 stub.atlases = { ["auctionhouse-icon-favorite"] = { width = 13, height = 12 } }
 C_Texture = { GetAtlasInfo = function(atlas) return stub.atlases[atlas] end }
+-- Sizes in whole screen pixels: here just recorded (__pixelHeight) and set
+-- as given, the stub having no screen.
+PixelUtil = {
+    SetHeight = function(region, height, minPixels)
+        region.__pixelHeight = { height, minPixels }
+        region:SetHeight(height)
+    end,
+}
 C_Timer = { After = function(seconds, fn) stub.timers[#stub.timers + 1] = { at = stub.now + seconds, fn = fn } end }
 SlashCmdList = {}
 stub.money = 1000000
@@ -854,7 +869,8 @@ end
 -- Posting: stub.ah.posts = { { kind, bag, slot, itemID, duration, quantity,
 -- price } }. Unless ah.noPostReply, the items leave the bags a moment later
 -- (BAG_UPDATE_DELAYED, then AUCTION_HOUSE_AUCTION_CREATED); ah.postError
--- fails the next post with that message instead.
+-- fails the next post with that message instead. With ah.postStep, they
+-- leave one at a time, that many seconds apart, as a multisell does.
 ItemLocation = {}
 function ItemLocation:CreateFromBagAndSlot(bag, slot) return { bag = bag, slot = slot } end
 stub.ah.posts = {}
@@ -871,19 +887,30 @@ local function Post(kind, location, duration, quantity, price)
             return
         end
         local id = s.itemID
-        local left = quantity
-        for bag, slots in pairs(stub.containers) do
-            for slot, v in pairs(slots) do
-                if v.itemID == id and left > 0 and bag <= 5 then
-                    local take = math.min(v.count, left)
-                    v.count, left = v.count - take, left - take
-                    if v.count <= 0 then slots[slot] = nil end
+        local function Leave(n)
+            local left = n
+            for bag, slots in pairs(stub.containers) do
+                for slot, v in pairs(slots) do
+                    if v.itemID == id and left > 0 and bag <= 5 then
+                        local take = math.min(v.count, left)
+                        v.count, left = v.count - take, left - take
+                        if v.count <= 0 then slots[slot] = nil end
+                    end
                 end
             end
+            stub.bags[id] = (stub.bags[id] or 0) - n
+            stub.Fire("BAG_UPDATE_DELAYED")
+            stub.Fire("AUCTION_HOUSE_AUCTION_CREATED", 1)
         end
-        stub.bags[id] = (stub.bags[id] or 0) - quantity
-        stub.Fire("BAG_UPDATE_DELAYED")
-        stub.Fire("AUCTION_HOUSE_AUCTION_CREATED", 1)
+        local step = stub.ah.postStep
+        if step == nil then
+            Leave(quantity)
+            return
+        end
+        Leave(1)
+        for i = 2, quantity do
+            C_Timer.After((i - 1) * step, function() Leave(1) end)
+        end
     end)
 end
 function C_AuctionHouse.PostCommodity(location, duration, quantity, unitPrice)

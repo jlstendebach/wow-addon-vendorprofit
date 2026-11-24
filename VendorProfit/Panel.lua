@@ -33,7 +33,10 @@ local ROW_HEIGHT = 15
 local HEADING_HEIGHT = 20
 
 local HEADING_BUTTON_WIDTH = 120
--- To do's details scroll in a box at most this many rows tall.
+-- To do's details are in a box as tall as its rows, up to this many; past
+-- that it scrolls, so a big order doesn't run the window off the screen.
+-- The scroll bar only shows when it scrolls, and the box only when it has
+-- something in it. Folding To do hides it.
 Panel.TODO_ROWS = 12
 -- The box is a little darker than the window, its items and scroll bar
 -- inset by TODO_PADDING; the bar is SCROLLBAR_WIDTH wide, TODO_PADDING
@@ -226,12 +229,21 @@ local function AddDivider(row, title, onClick)
     row.right:Hide()
     row.button:Hide()
     local left, right = row.lines[1], row.lines[2]
+    VendorProfit.HairLine(left)
+    VendorProfit.HairLine(right)
+    -- Both ends of both lines on the page itself, at one height, the title's
+    -- width measured: anchored to the title's sides (its middle, from its
+    -- font), an end could sit a fraction of a pixel off the other, or on a
+    -- title not measured again yet after the screen changed, and the game
+    -- sometimes didn't draw the line at all.
+    local mid = y - 6
+    local gap = (row.left:GetStringWidth() or 0) / 2 + 6
     left:ClearAllPoints()
-    left:SetPoint("LEFT", content, "TOPLEFT", PADDING, y - 6)
-    left:SetPoint("RIGHT", row.left, "LEFT", -6, 0)
+    left:SetPoint("LEFT", content, "TOPLEFT", PADDING, mid)
+    left:SetPoint("RIGHT", content, "TOP", -gap, mid)
     right:ClearAllPoints()
-    right:SetPoint("LEFT", row.left, "RIGHT", 6, 0)
-    right:SetPoint("RIGHT", content, "TOPRIGHT", -PADDING, y - 6)
+    right:SetPoint("LEFT", content, "TOP", gap, mid)
+    right:SetPoint("RIGHT", content, "TOPRIGHT", -PADDING, mid)
     left:Show()
     right:Show()
     -- A divider that collapses its section: the whole row is clickable.
@@ -690,6 +702,10 @@ local function AddProfit(s)
         AddRow("row", L.ITEMS_YOU_HAVE, Money(-s.ownedValue))
     end
     AddRow("row", L.ITEMS_TO_BUY, Money(-s.remaining))
+    -- What's been paid: always shown, under what's left to buy, so it's
+    -- there to watch from the first purchase. Not taken off the profit
+    -- (see README).
+    AddRow("row", Gray(L.SPENT), Gray(VendorProfit.FormatCoins(s.spent)))
     AddRow("gap")
     -- The bottom line: a loss in red, label and all.
     local function Bottom(label, profit)
@@ -697,10 +713,6 @@ local function AddProfit(s)
     end
     AddRow("row", Bottom(L.VENDOR_PROFIT_ROW, s.profit), Money(s.profit))
     AddRow("row", Bottom(L.AUCTION_PROFIT_ROW, s.auctionProfit), OrNoPrice(s.auctionProfit))
-    if s.spent > 0 then
-        AddRow("gap")
-        AddRow("row", Gray(L.SPENT), Gray(VendorProfit.FormatCoins(s.spent)))
-    end
 end
 
 -- Sections fold away when their divider is clicked (a plus or minus sign
@@ -781,6 +793,15 @@ local function AddTodoDetails(groups)
         todoScroll = CreateFrame("ScrollFrame", nil, content, "UIPanelScrollFrameTemplate")
         todoList = CreateFrame("Frame", nil, todoScroll)
         todoScroll:SetScrollChild(todoList)
+        -- The template shows the bar again whenever the scroll range
+        -- changes (unless scrollBarHideable, which hides it at no range);
+        -- this runs after it, so the bar is shown only when it's needed.
+        todoScroll.scrollBarHideable = true
+        todoScroll:HookScript("OnScrollRangeChanged", function(self)
+            if self.ScrollBar then
+                self.ScrollBar:SetShown(self.needsBar == true)
+            end
+        end)
         -- Behind the items and the scroll bar, to the page's edges.
         todoScroll.back = content:CreateTexture(nil, "BACKGROUND")
         todoScroll.back:SetColorTexture(0, 0, 0, 0.35)
@@ -832,6 +853,12 @@ local function AddTodoDetails(groups)
         bar:ClearAllPoints()
         bar:SetPoint("TOPRIGHT", back, "TOPRIGHT", -TODO_PADDING, -TODO_PADDING - 16)
         bar:SetPoint("BOTTOMRIGHT", back, "BOTTOMRIGHT", -TODO_PADDING, TODO_PADDING + 16)
+        -- Only when there's something to scroll: in a short box the bar's
+        -- arrows nearly met, with no room for the thumb, and a bar that
+        -- can't scroll says nothing. It only shows at the most rows, where
+        -- it has room.
+        todoScroll.needsBar = todoUsed > shown
+        bar:SetShown(todoScroll.needsBar)
     end
     -- Shorter than before: don't leave it scrolled past its end.
     local maxScroll = math.max(todoUsed - Panel.TODO_ROWS, 0) * ROW_HEIGHT
@@ -1005,7 +1032,10 @@ local function AddToDo(plan)
                     end
                     rows[index] = { Money(group.price), right }
                 end
-                groups[#groups + 1] = { title = L.STEP_POST, rows = rows }
+                -- First in the box, posting started early or not, so the
+                -- prices are in view; titled with the item, so the box
+                -- says what they're for.
+                table.insert(groups, 1, { title = string.format(L.POST_LISTED_TITLE, ItemName(item.itemID)), rows = rows })
             end
         end
     end
@@ -1028,8 +1058,11 @@ local function AddToDo(plan)
     craftCover = openProfession and { button = craftRow.button, profession = openProfession, movedAt = stepMovedAt.craft }
         or nil
 
-    -- The box only with something in it: with just a Post step not priced
-    -- yet (nothing to list), an empty box squashed its scroll bar.
+    if detailsOpen and number == 0 then
+        AddRow("note", L.EMPTY_TODO)
+    end
+    -- The box only with something in it (just a Post step not priced yet
+    -- has nothing to list).
     if detailsOpen and #groups > 0 then
         AddTodoDetails(groups)
     end
@@ -1128,9 +1161,10 @@ local function AddPostQueued(item)
     })
 end
 
--- The title (with Scan), then the queued crafts, what's queued to post, the
--- order's profit, the To do checklist, and what's already in your bags,
--- for information.
+-- The title (with Scan), then the order's profit, the queued crafts,
+-- what's queued to post, the To do checklist, and what's already in your
+-- bags, for information. Every section shows even with nothing in it,
+-- saying what it's for and when it fills, so the page keeps its shape.
 local function AddContent()
     local s = Shopper.Summary()
     local plan = s.plan
@@ -1138,29 +1172,37 @@ local function AddContent()
     local entries = Order.Entries()
     local posts = Poster.Items()
     AddRow("heading", L.TAB_SHOPPING, nil, #entries > 0 and ScanButton() or nil)
-    if #entries == 0 and #posts == 0 then
-        AddRow("note", L.NOTHING_QUEUED)
-        return
+
+    if Section("profit", L.HEAD_PROFIT) then
+        if #entries > 0 then
+            AddProfit(s)
+        else
+            AddRow("note", L.EMPTY_PROFIT)
+        end
     end
-    if #entries > 0 and Section("queued", L.HEAD_QUEUED, #entries) then
+    if Section("queued", L.HEAD_QUEUED, #entries) then
         for index, entry in ipairs(entries) do
             AddQueued(index, entry)
         end
+        if #entries == 0 then
+            AddRow("note", L.EMPTY_QUEUED)
+        end
     end
-    if #posts > 0 and Section("postQueue", L.HEAD_POST_QUEUE, #posts) then
+    if Section("postQueue", L.HEAD_POST_QUEUE, #posts) then
         for _, item in ipairs(posts) do
             AddPostQueued(item)
         end
-    end
-
-    if #entries > 0 and Section("profit", L.HEAD_PROFIT) then
-        AddProfit(s)
+        if #posts == 0 then
+            AddRow("note", L.EMPTY_POST_QUEUE)
+        end
     end
     local fromBags = AddToDo(plan)
-
-    if #fromBags > 0 and Section("bags", L.HEAD_BAGS, #fromBags) then
+    if Section("bags", L.HEAD_BAGS, #fromBags) then
         for _, use in ipairs(fromBags) do
             AddRow("row", ItemLabel(use.itemID, use.quantity))
+        end
+        if #fromBags == 0 then
+            AddRow("note", L.EMPTY_BAGS)
         end
     end
 end

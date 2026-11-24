@@ -489,7 +489,9 @@ STEP = re.compile(r"^\d+\. (.*)$")
 
 def is_heading(line):
     # A folded section's divider says how many rows it holds: "Queued (2)".
-    return re.sub(r" \(\d+\)$", "", line) in HEADINGS or STEP.match(line) is not None
+    # The Post step's prices are titled with the item: "Listed now: X".
+    return (re.sub(r" \(\d+\)$", "", line) in HEADINGS or STEP.match(line) is not None
+            or line.startswith("Listed now: "))
 
 
 def section(ev, heading):
@@ -565,8 +567,8 @@ check("from your bags: 12 bronze bars, 3 copper bars",
       section(ev, "Already in your bags") == ["|Ticon2840:0|t Copper Bar x3", "|Ticon2841:0|t Bronze Bar x12"])
 check("from your bank: the other 2 copper bars, to fetch", section(ev, "Take from bank") == ["|Ticon2840:0|t Copper Bar x2"])
 check("no mailbox step with nothing in the mail", section(ev, "Collect from mailbox") is None)
-check("layout: queued, profit, then the To do steps in order, then what's in your bags",
-      headings(ev) == ["Shopping List", "Crafting Queue", "Profit", "To do",
+check("layout: profit, the queues, then the To do steps in order, then what's in your bags",
+      headings(ev) == ["Shopping List", "Profit", "Crafting Queue", "Post Queue", "To do",
                        "1. Buy | |cff8080802 items|r", "2. Take from bank | |cff8080801 item|r", "3. Craft | |cff8080803 recipes|r",
                        "Buy", "Take from bank", "Craft", "Already in your bags"])
 # Cast times known: the Craft step says about how long its crafts take.
@@ -579,11 +581,18 @@ run('__stub.castTimes = {}; VendorProfit.Panel.Refresh()')
 check("To do: the steps with their counts and buttons stay at the top; their items scroll in a box below",
       ev("VendorProfit.Panel.TodoScroll():IsShown()") and ev(BUY) is not None and ev(CRAFT) is not None
       and section(ev, "Buy") == ["|Ticon2770:0|t Copper Ore x24 | auction  |cffffffff12s|r", "|Ticon3576:0|t Tin Bar x29 | auction  |cffffffff21s 75c|r"])
-run('VendorProfit.Panel.TODO_ROWS = 4; VendorProfit.Panel.Refresh()')
+run('VendorProfit.Panel.TODO_ROWS = 7; VendorProfit.Panel.Refresh()')
 check("a long To do list scrolls: the box stays at its most rows tall, the list inside as long as it needs",
-      ev("VendorProfit.Panel.TodoScroll():GetHeight()") == 4 * 15 and ev("VendorProfit.Panel.TodoScroll():GetScrollChild():GetHeight()") > 4 * 15)
+      ev("VendorProfit.Panel.TodoScroll():GetHeight()") == 7 * 15 and ev("VendorProfit.Panel.TodoScroll():GetScrollChild():GetHeight()") > 7 * 15)
+check("...with its scroll bar, even after the game's template shows or hides it on a range change",
+      ev("VendorProfit.Panel.TodoScroll().ScrollBar:IsShown()")
+      and ev("(function() local s = VendorProfit.Panel.TodoScroll(); s.ScrollBar:Hide(); s:GetScript('OnScrollRangeChanged')(s, 0, 30); return s.ScrollBar:IsShown() end)()"))
 run('VendorProfit.Panel.TODO_ROWS = 12; VendorProfit.Panel.Refresh()')
-check("...a short one is only as tall as its rows", ev("VendorProfit.Panel.TodoScroll():GetHeight()") == ev("VendorProfit.Panel.TodoScroll():GetScrollChild():GetHeight()"))
+check("...a short one is as tall as its rows (9 here), no scroll bar with nothing to scroll",
+      ev("VendorProfit.Panel.TodoScroll():GetHeight()") == 9 * 15
+      and ev("VendorProfit.Panel.TodoScroll():GetScrollChild():GetHeight()") == 9 * 15
+      and not ev("VendorProfit.Panel.TodoScroll().ScrollBar:IsShown()")
+      and not ev("(function() local s = VendorProfit.Panel.TodoScroll(); s.ScrollBar:Show(); s:GetScript('OnScrollRangeChanged')(s, 0, 0); return s.ScrollBar:IsShown() end)()"))
 check("the box is darker than the window, a little bigger than its items all round",
       ev("VendorProfit.Panel.TodoScroll().back.__color[4]") > 0 and ev("VendorProfit.Panel.TodoScroll().back:IsShown()")
       and ev("VendorProfit.Panel.TodoScroll().back:GetHeight()") == ev("VendorProfit.Panel.TodoScroll():GetHeight()") + 12
@@ -591,9 +600,11 @@ check("the box is darker than the window, a little bigger than its items all rou
 check("...its scroll bar the same 6 in from the box's right edge as the items are from its left",
       ev("VendorProfit.Panel.TodoScroll().ScrollBar.__points.TOPRIGHT[2] == VendorProfit.Panel.TodoScroll().back")
       and ev("VendorProfit.Panel.TodoScroll().ScrollBar.__points.TOPRIGHT[4]") == -6)
-check("profit rows: sell prices (auction after the AH cut), expenses, profits", section(ev, "Profit")[:6] == [
+check("profit rows: sell prices (auction after the AH cut), expenses (spent so far always shown, under what's left to buy), profits",
+      section(ev, "Profit")[:7] == [
     "Vendor price | |cffffffff60s|r", "Auction price | |cffffffff1g 23s 50c|r",
     "Items you have | |cffff2020-10s|r", "Items to buy | |cffff2020-33s 75c|r",
+    "|cff808080Spent on this order so far|r | |cff808080" + ev("VendorProfit.FormatCoins(0)") + "|r",
     "Vendor profit | |cffffffff16s 25c|r", "Auction profit | |cffffffff79s 75c|r"])
 check("panel lists the crafts", has_line(ev, "Copper Bar x24", "Mining, 24 crafts")
       and has_line(ev, "Bronze Bar x58", "Mining, 29 crafts") and has_line(ev, "Rough Bronze Cuirass x10", "Blacksmithing, 10 crafts"))
@@ -666,7 +677,7 @@ check("tin bars bought", ev("__stub.bags[3576]") == 29 and ev("VendorProfitCharD
 check("spent is shown but not taken off the profit", has_line(ev, "Spent on this order so far")
       and ev("VendorProfit.Shopper.Summary().profit") == ev("VendorProfit.Shopper.Summary().revenue") - ev("VendorProfit.Shopper.Summary().ownedValue"))
 check("nothing left to buy: the Buy step is gone", ev(BUY) is None and section(ev, "Buy") is None
-      and headings(ev)[3:5] == ["To do", "1. Take from bank | |cff8080801 item|r"])
+      and headings(ev)[4:6] == ["To do", "1. Take from bank | |cff8080801 item|r"])
 check("crafts still listed", has_line(ev, "Bronze Bar x58", "29 crafts"))
 check("no errors while shopping", ev("#__stub.errors") == 0)
 
@@ -761,6 +772,28 @@ check("remembered per character", ev("VendorProfitCharDB.collapsed.bags") == Tru
 run(BAGS + '.hit:GetScript("OnMouseUp")(' + BAGS + '.hit, "LeftButton")')
 check("click again: back open", has_line(ev, "Bronze Bar x12") and ev("VendorProfitCharDB.collapsed.bags") is None)
 
+# Divider lines one screen pixel tall (PixelUtil), set again when the UI scale
+# or screen size changes: a line 1 high could round to no pixels and vanish.
+LINES = 'VendorProfit.Panel.FindRow("To do").lines'
+check("divider lines sized in whole pixels, at least one, and never rounded away to none",
+      ev("(function() local l = %s; return l[1].__pixelHeight[2] == 1 and l[2].__pixelHeight[2] == 1 end)()" % LINES)
+      and ev("(function() local l = %s; return l[1].__snap == false and l[2].__snap == false and l[1].__texelBias == 0 end)()" % LINES))
+run("(function() local l = %s; l[1].__pixelHeight, l[2].__pixelHeight = nil, nil end)()" % LINES)
+run('__stub.Fire("UI_SCALE_CHANGED")')
+check("...sized again when the UI scale changes",
+      ev("(function() local l = VendorProfit.Panel.FindRow('To do').lines; return l[1].__pixelHeight ~= nil and l[2].__pixelHeight ~= nil end)()"))
+
+check("...both ends of both lines on the page at one height, either side of the title (not on the title itself)",
+      ev("""(function()
+          local row = VendorProfit.Panel.FindRow('To do')
+          local l, r = row.lines[1].__points, row.lines[2].__points
+          local page = l.LEFT[2]
+          local half = row.left:GetStringWidth() / 2 + 6
+          return l.RIGHT[2] == page and r.LEFT[2] == page and r.RIGHT[2] == page
+              and l.LEFT[5] == l.RIGHT[5] and r.LEFT[5] == r.RIGHT[5] and l.LEFT[5] == r.LEFT[5]
+              and l.RIGHT[4] == -half and r.LEFT[4] == half
+      end)()"""))
+
 # Every section folds the same way.
 def fold(name):
     row = 'VendorProfit.Panel.FindRow("%s")' % name
@@ -774,12 +807,12 @@ fold("To do")
 check("To do folds just its scroll box: the steps and their buttons stay",
       section(ev, "Buy") is None and ev(BUY) is not None and ev(CRAFT) is not None
       and not ev("VendorProfit.Panel.TodoScroll():IsShown()")
-      and headings(ev) == ["Shopping List", "Crafting Queue (1)", "Profit", "To do", "1. Buy | |cff8080802 items|r",
+      and headings(ev) == ["Shopping List", "Profit", "Crafting Queue (1)", "Post Queue", "To do", "1. Buy | |cff8080802 items|r",
                            "2. Take from bank | |cff8080801 item|r", "3. Craft | |cff8080803 recipes|r", "Already in your bags"])
 check("Scan stays on the title line with everything folded", ev(SCAN + ".__text") == "Scan")
 for name in ["Crafting Queue", "Profit", "To do"]:
     fold(name)
-check("all open again", headings(ev)[:4] == ["Shopping List", "Crafting Queue", "Profit", "To do"] and section(ev, "Take from bank") is not None)
+check("all open again", headings(ev)[:5] == ["Shopping List", "Profit", "Crafting Queue", "Post Queue", "To do"] and section(ev, "Take from bank") is not None)
 run2, ev2 = shop_client(before_load="VendorProfitCharDB = { bagsCollapsed = true }")
 run2('__stub.createCount = 10'); run2(QUEUE + ':Click()')
 check("saved before every section folded: the bags fold carries over", ev2("VendorProfitCharDB.collapsed.bags") == True
@@ -2110,7 +2143,7 @@ check("says it's done", any("Took everything from the bank" in l for l in lines(
 run('__stub.Fire("BAG_UPDATE_DELAYED")')
 check("bank section gone, items now from bags", section(ev, "Take from bank") is None
       and section(ev, "Already in your bags")[:2] == ["|Ticon2840:0|t Copper Bar x7", "|Ticon3576:0|t Tin Bar x7"]
-      and headings(ev)[3] == "To do" and headings(ev)[4].startswith("1. Craft"))
+      and headings(ev)[4] == "To do" and headings(ev)[5].startswith("1. Craft"))
 run('__stub.CloseBank()')
 check("stays open when the bank closes", ev("VendorProfit.Panel.IsShown()"))
 check("no errors from the bank", ev("#__stub.errors") == 0)
@@ -2166,7 +2199,8 @@ run, ev = shop_client()
 run('__stub.createCount = 1'); run(QUEUE + ':Click()')
 prof = section(ev, "Profit")
 check("profit rows in order",
-      [l.split(" | ")[0] for l in prof[:6]] == ["Vendor price", "Auction price", "Items you have", "Items to buy", "Vendor profit", "Auction profit"])
+      [l.split(" | ")[0] for l in prof[:7]] == ["Vendor price", "Auction price", "Items you have", "Items to buy",
+                                                "|cff808080Spent on this order so far|r", "Vendor profit", "Auction profit"])
 check("one craft, not '1 crafts'", has_line(ev, "Rough Bronze Cuirass x1", "Blacksmithing, 1 craft") and not has_line(ev, "1 crafts"))
 check("no Clear button on the Crafting Queue", ev('VendorProfit.Panel.RowButton("Crafting Queue")') is None)
 check("no buttons left at the bottom", ev('VendorProfit.Panel.FindButton("Scan again")') is None)
@@ -3212,7 +3246,7 @@ check("...never fewer than one: x takes it off", queue()[1] == (50002, 1) and no
 run(icon("Test Sword", 2) + ':Click()')
 run('local r = VendorProfit.Panel.FindRow("Test Shells"); for i = 1, 45 do VendorProfit.Poster.SetCount(50001, 200) end')
 check("auction house closed: Post says to open it", ev(POST + ".__text") == "Open AH" and not ev(POST + ":IsEnabled()"))
-check("just a Post step, nothing priced yet: no empty box under To do",
+check("just a Post step, nothing priced yet: no box, with nothing to put in it",
       ev("VendorProfit.Panel.TodoScroll() == nil or not (VendorProfit.Panel.TodoScroll():IsShown() or VendorProfit.Panel.TodoScroll().back:IsShown())"))
 # Shells: 3 at 40c (bait), then 100c; the sword: 2 auctions at 5g.
 run('''
@@ -3228,7 +3262,7 @@ run('__stub.Advance(0.5)')
 check("priced: the 3 at 40c passed over as bait; matching 1s; the queued 200, not all 250",
       ev("%s.Status()" % P) == "ready" and ev("%s.Current().price" % P) == 100
       and has_line(ev, "Post 200 Test Shells at", "skipping a few suspiciously cheap"))
-check("...and the cheapest prices found listed in To do's box, the bait marked", section(ev, "Post")[:3] == [
+check("...and the cheapest prices found listed in To do's box, the bait marked", section(ev, "Listed now: Test Shells")[:3] == [
       ev("VendorProfit.FormatMoney(40)") + " | x3 |cff808080(skipped)|r",
       ev("VendorProfit.FormatMoney(100)") + " | x600", ev("VendorProfit.FormatMoney(105)") + " | x200"])
 check("no Skip any more: the Post Queue's x keeps an item", ev('VendorProfit.Panel.FindButton("Skip")') is None)
@@ -3243,7 +3277,8 @@ check("posted: said so, off the queue (50 stay in the bags), the next item price
 run(POST + ':Click(); __stub.Advance(0.5)')
 check("items that don't stack: both swords in one post, one click", posts()[1] == ("item", 50002, 1, 2, 50000)
       and queue() == [])
-check("everything posted: the Post Queue and the Post step go", "Post Queue" not in headings(ev)
+check("everything posted: the Post step goes, the Post Queue stays, saying what it's for",
+      section(ev, "Post Queue") == ["|cff808080" + ev("VendorProfit.L.EMPTY_POST_QUEUE") + "|r"]
       and not any(h.startswith("1. Post") for h in headings(ev)))
 
 # Below what it cost: red, and the first click only arms it.
@@ -3318,11 +3353,92 @@ check("a post the game refuses: says why, Post offered again", has_line(ev, "Cou
       and ev("%s.Status()" % P) == "ready")
 run('__stub.CloseAH()')
 check("auction house closed: what's left stays queued", queue() == [(50007, 5)] and ev("%s.Status()" % P) == "closed")
+# A slow post: a multisell of things that don't stack posts one auction at a
+# time, and can take longer than the 15 seconds a post is given to answer.
+run('''
+    VendorProfitCharDB.postQueue = {}
+    __stub.items["item:50012"] = { name = "Slow Sword", cached = true, sellPrice = 1 }
+    __stub.PutInBags(0, 9, 50012, 5)
+    __stub.ah.nonCommodity[50012] = true
+    __stub.ah.auctions[50012] = { { auctionID = 9101, buyout = 40000, quantity = 2 } }
+    VendorProfit.Poster.Crafted(50012, 5)
+    __stub.ah.postStep = 6
+''')
+run('__stub.OpenAH()')
+run(POST + ':Click(); __stub.Advance(0.5)')
+run(POST + ':Click(); __stub.Advance(16)')
+check("a slow multisell, still going after 15 seconds: still posting, not cut short", ev("%s.Status()" % P) == "posting"
+      and queue() == [(50012, 5)] and ev("__stub.bags[50012]") == 2)
+run('__stub.Advance(30)')
+check("...done once all 5 have left: posted as one, off the queue, not offered again to post 0",
+      "Posted 5 Slow Sword" in " ".join(lines(ev)) and queue() == [] and ev("%s.Status()" % P) == "idle"
+      and not any(h.startswith("1. Post") for h in headings(ev)))
+# A stray error mid-post (it may not even be about the post): if the rest
+# leaves anyway, that's the post done.
+run('''
+    __stub.PutInBags(0, 9, 50012, 3)
+    VendorProfit.Poster.Crafted(50012, 3)
+    __stub.ah.postStep = 1
+''')
+run(POST + ':Click(); __stub.Advance(0.5)')
+run(POST + ':Click(); __stub.Advance(0.15); __stub.Fire("UI_ERROR_MESSAGE", 0, "You can\'t do that yet.")')
+check("an error mid-post: says so", ev("%s.Status()" % P) == "ready" and has_line(ev, "Couldn't post Slow Sword"))
+run('__stub.Advance(3)')
+check("...the rest left anyway: posted, off the queue, on to the next", queue() == [] and ev("%s.Status()" % P) == "idle"
+      and "Posted 3 Slow Sword" in " ".join(lines(ev)))
+# No reply at all: given up on after 15 quiet seconds.
+run('''
+    __stub.ah.postStep = nil
+    __stub.ah.noPostReply = true
+    __stub.PutInBags(0, 9, 50012, 2)
+    VendorProfit.Poster.Crafted(50012, 2)
+''')
+run(POST + ':Click(); __stub.Advance(0.5)')
+run(POST + ':Click(); __stub.Advance(14)')
+check("no reply: still waiting at 14 seconds", ev("%s.Status()" % P) == "posting")
+run('__stub.Advance(2)')
+check("...says so at 15, Post offered again, still queued", ev("%s.Status()" % P) == "ready"
+      and has_line(ev, "No word that Slow Sword posted") and queue() == [(50012, 2)])
+run('__stub.ah.noPostReply = false; __stub.CloseAH()')
 # Saved data from before the Post Queue: a set of items to post all of.
 run2, ev2 = client('VendorProfitCharDB = { toPost = { [50011] = true } }; __stub.bags[50011] = 7')
 check("an older save's items to post: queued at what's in the bags", [(e.itemID, e.count) for e in ev2("(function() VendorProfit.Poster.Items() return VendorProfitCharDB.postQueue end)()").values()] == [(50011, 7)]
       and ev2("VendorProfitCharDB.toPost") is None)
 check("no errors from posting", ev("#__stub.errors") == 0)
+
+# Posting early, with steps still to do: the prices go first in To do's box,
+# titled with the item.
+run, ev = shop_client()
+run('__stub.createCount = 4'); run(QUEUE + ':Click()')
+run('''
+    __stub.items["item:50020"] = { name = "Early Thing", cached = true, sellPrice = 1 }
+    __stub.PutInBags(0, 10, 50020, 3)
+    __stub.ah.listings[50020] = { { unitPrice = 500, quantity = 10 } }
+    VendorProfit.Poster.Crafted(50020, 3)
+''')
+run('__stub.OpenAH()')
+run(POST + ':Click(); __stub.Advance(0.5)')
+h = headings(ev)
+check("posting before buying and crafting: the prices first in the box, titled with the item",
+      "Listed now: Early Thing" in h and "Buy" in h and h.index("Listed now: Early Thing") < h.index("Buy")
+      and section(ev, "Listed now: Early Thing") == [ev("VendorProfit.FormatMoney(500)") + " | x10"])
+check("no errors posting early", ev("#__stub.errors") == 0)
+
+# --- An empty Shopping List: every section, saying what it's for ---------------------
+run, ev = client()
+run('VendorProfit.Panel.Show("shopping")')
+check("nothing queued: every section still shows, in order", headings(ev) ==
+      ["Shopping List", "Profit", "Crafting Queue", "Post Queue", "To do", "Already in your bags"])
+check("...each saying what it's for and when it fills", all(section(ev, name) == ["|cff808080" + ev("VendorProfit.L.%s" % key) + "|r"] for name, key in [
+      ("Profit", "EMPTY_PROFIT"), ("Crafting Queue", "EMPTY_QUEUED"), ("Post Queue", "EMPTY_POST_QUEUE"),
+      ("To do", "EMPTY_TODO"), ("Already in your bags", "EMPTY_BAGS")]))
+check("...no Scan with nothing to scan, no box under To do with no steps", ev(SCAN) is None
+      and ev("VendorProfit.Panel.TodoScroll() == nil or not VendorProfit.Panel.TodoScroll():IsShown()"))
+row = 'VendorProfit.Panel.FindRow("Post Queue")'
+run(row + '.hit:GetScript("OnMouseUp")(' + row + '.hit, "LeftButton")')
+check("folded: nothing under it, saying it holds 0", section(ev, "Post Queue (0)") == [])
+run(row + '.hit:GetScript("OnMouseUp")(' + row + '.hit, "LeftButton")')
+check("no errors with nothing queued", ev("#__stub.errors") == 0)
 
 # --- Turn-ins: Thorium Shells for Thorium Headed Arrows ----------------------------
 # 200 shells handed in for 200 arrows, priced on Best Crafts like a recipe under

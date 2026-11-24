@@ -1557,6 +1557,7 @@ local function Refresh()
         local y = RowTop(favorites, favorites) - ROW_HEIGHT + 2 - DIVIDER_SPACE
         divider:SetPoint("TOPLEFT", frame.list, "TOPLEFT", 0, y)
         divider:SetPoint("TOPRIGHT", frame.list, "TOPRIGHT", 0, y)
+        VendorProfit.HairLine(divider)
         divider:Show()
     else
         divider:Hide()
