@@ -417,6 +417,15 @@ time" route mode).
   (a click moved on). Now it gives up only after 15 seconds with nothing
   leaving the bags. Likewise an error message mid-post (it may not be about
   the post) no longer strands it: if the rest leaves anyway, it's posted.
+- **Shopping List layout** (2026-11-23), Josh's: Profit first, then the
+  Crafting Queue, Post Queue, To do and Already in your bags. Every section
+  shows even when empty, with a gray line saying what it's for and when it
+  fills (a folded one shows nothing, as before), so the page keeps its shape
+  instead of sections coming and going. Spent on this order so far always
+  shows, under Items to buy, from 0. The Post step's prices go first in To
+  do's box, titled *Listed now: <item>*: posting often starts before the
+  other steps are done, and the plain "Post" title didn't say which item the
+  prices were for without looking up out of the box.
 - **Grouped item auctions are priced per item** (2026-11-22): the game
   shows identical auctions of an item that doesn't stack as one row, quantity
   auctions of one item each, with buyoutAmount the price of one. Dividing it
