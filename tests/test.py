@@ -581,12 +581,12 @@ run('__stub.castTimes = {}; VendorProfit.Panel.Refresh()')
 check("To do: the steps with their counts and buttons stay at the top; their items scroll in a box below",
       ev("VendorProfit.Panel.TodoScroll():IsShown()") and ev(BUY) is not None and ev(CRAFT) is not None
       and section(ev, "Buy") == ["|Ticon2770:0|t Copper Ore x24 | auction  |cffffffff12s|r", "|Ticon3576:0|t Tin Bar x29 | auction  |cffffffff21s 75c|r"])
-run('VendorProfit.Panel.TODO_ROWS = 4; VendorProfit.Panel.Refresh()')
+run('VendorProfit.Panel.TODO_ROWS = 7; VendorProfit.Panel.Refresh()')
 check("a long To do list scrolls: the box stays at its most rows tall, the list inside as long as it needs",
-      ev("VendorProfit.Panel.TodoScroll():GetHeight()") == 4 * 15 and ev("VendorProfit.Panel.TodoScroll():GetScrollChild():GetHeight()") > 4 * 15)
+      ev("VendorProfit.Panel.TodoScroll():GetHeight()") == 7 * 15 and ev("VendorProfit.Panel.TodoScroll():GetScrollChild():GetHeight()") > 7 * 15)
 run('VendorProfit.Panel.TODO_ROWS = 12; VendorProfit.Panel.Refresh()')
-check("...a short one is the same size: always 12 rows", ev("VendorProfit.Panel.TodoScroll():GetHeight()") == 12 * 15
-      and ev("VendorProfit.Panel.TodoScroll():GetScrollChild():GetHeight()") < 12 * 15)
+check("...a short one is as tall as its rows (9 here)", ev("VendorProfit.Panel.TodoScroll():GetHeight()") == 9 * 15
+      and ev("VendorProfit.Panel.TodoScroll():GetScrollChild():GetHeight()") == 9 * 15)
 check("the box is darker than the window, a little bigger than its items all round",
       ev("VendorProfit.Panel.TodoScroll().back.__color[4]") > 0 and ev("VendorProfit.Panel.TodoScroll().back:IsShown()")
       and ev("VendorProfit.Panel.TodoScroll().back:GetHeight()") == ev("VendorProfit.Panel.TodoScroll():GetHeight()") + 12
@@ -3218,9 +3218,9 @@ check("...never fewer than one: x takes it off", queue()[1] == (50002, 1) and no
 run(icon("Test Sword", 2) + ':Click()')
 run('local r = VendorProfit.Panel.FindRow("Test Shells"); for i = 1, 45 do VendorProfit.Poster.SetCount(50001, 200) end')
 check("auction house closed: Post says to open it", ev(POST + ".__text") == "Open AH" and not ev(POST + ":IsEnabled()"))
-check("just a Post step, nothing priced yet: the box still there, its full size, empty",
+check("just a Post step, nothing priced yet: the box still there, empty, at its smallest (6 rows)",
       ev("VendorProfit.Panel.TodoScroll():IsShown() and VendorProfit.Panel.TodoScroll().back:IsShown()")
-      and ev("VendorProfit.Panel.TodoScroll():GetHeight()") == 12 * 15)
+      and ev("VendorProfit.Panel.TodoScroll():GetHeight()") == 6 * 15)
 # Shells: 3 at 40c (bait), then 100c; the sword: 2 auctions at 5g.
 run('''
     __stub.ah.listings[50001] = { { unitPrice = 40, quantity = 3 }, { unitPrice = 100, quantity = 600 }, { unitPrice = 105, quantity = 200 } }
