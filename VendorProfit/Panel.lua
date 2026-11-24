@@ -36,8 +36,8 @@ local HEADING_BUTTON_WIDTH = 120
 -- To do's details scroll in a box as tall as its rows, between these:
 -- at least a few rows, so it isn't cramped with only a row or two (or
 -- none: a Post step not priced yet), and at most this many before it
--- scrolls, so a big order doesn't run the window off the screen. Folding
--- To do hides it.
+-- scrolls, so a big order doesn't run the window off the screen. The
+-- scroll bar only shows when it scrolls. Folding To do hides it.
 Panel.TODO_MIN_ROWS = 3
 Panel.TODO_ROWS = 12
 -- The box is a little darker than the window, its items and scroll bar
@@ -786,6 +786,15 @@ local function AddTodoDetails(groups)
         todoScroll = CreateFrame("ScrollFrame", nil, content, "UIPanelScrollFrameTemplate")
         todoList = CreateFrame("Frame", nil, todoScroll)
         todoScroll:SetScrollChild(todoList)
+        -- The template shows the bar again whenever the scroll range
+        -- changes (unless scrollBarHideable, which hides it at no range);
+        -- this runs after it, so the bar is shown only when it's needed.
+        todoScroll.scrollBarHideable = true
+        todoScroll:HookScript("OnScrollRangeChanged", function(self)
+            if self.ScrollBar then
+                self.ScrollBar:SetShown(self.needsBar == true)
+            end
+        end)
         -- Behind the items and the scroll bar, to the page's edges.
         todoScroll.back = content:CreateTexture(nil, "BACKGROUND")
         todoScroll.back:SetColorTexture(0, 0, 0, 0.35)
@@ -837,6 +846,12 @@ local function AddTodoDetails(groups)
         bar:ClearAllPoints()
         bar:SetPoint("TOPRIGHT", back, "TOPRIGHT", -TODO_PADDING, -TODO_PADDING - 16)
         bar:SetPoint("BOTTOMRIGHT", back, "BOTTOMRIGHT", -TODO_PADDING, TODO_PADDING + 16)
+        -- Only when there's something to scroll: in a short box the bar's
+        -- arrows nearly met, with no room for the thumb, and a bar that
+        -- can't scroll says nothing. It only shows at the most rows, where
+        -- it has room.
+        todoScroll.needsBar = todoUsed > shown
+        bar:SetShown(todoScroll.needsBar)
     end
     -- Shorter than before: don't leave it scrolled past its end.
     local maxScroll = math.max(todoUsed - Panel.TODO_ROWS, 0) * ROW_HEIGHT
@@ -1040,8 +1055,7 @@ local function AddToDo(plan)
         AddRow("note", L.EMPTY_TODO)
     end
     -- The box whenever there's a step, empty or not (just a Post step not
-    -- priced yet has nothing to list): it's never smaller than
-    -- TODO_MIN_ROWS, so an empty one doesn't squash its scroll bar.
+    -- priced yet has nothing to list), never smaller than TODO_MIN_ROWS.
     if detailsOpen and number > 0 then
         AddTodoDetails(groups)
     end

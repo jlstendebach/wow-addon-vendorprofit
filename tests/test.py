@@ -584,9 +584,15 @@ check("To do: the steps with their counts and buttons stay at the top; their ite
 run('VendorProfit.Panel.TODO_ROWS = 7; VendorProfit.Panel.Refresh()')
 check("a long To do list scrolls: the box stays at its most rows tall, the list inside as long as it needs",
       ev("VendorProfit.Panel.TodoScroll():GetHeight()") == 7 * 15 and ev("VendorProfit.Panel.TodoScroll():GetScrollChild():GetHeight()") > 7 * 15)
+check("...with its scroll bar, even after the game's template shows or hides it on a range change",
+      ev("VendorProfit.Panel.TodoScroll().ScrollBar:IsShown()")
+      and ev("(function() local s = VendorProfit.Panel.TodoScroll(); s.ScrollBar:Hide(); s:GetScript('OnScrollRangeChanged')(s, 0, 30); return s.ScrollBar:IsShown() end)()"))
 run('VendorProfit.Panel.TODO_ROWS = 12; VendorProfit.Panel.Refresh()')
-check("...a short one is as tall as its rows (9 here)", ev("VendorProfit.Panel.TodoScroll():GetHeight()") == 9 * 15
-      and ev("VendorProfit.Panel.TodoScroll():GetScrollChild():GetHeight()") == 9 * 15)
+check("...a short one is as tall as its rows (9 here), no scroll bar with nothing to scroll",
+      ev("VendorProfit.Panel.TodoScroll():GetHeight()") == 9 * 15
+      and ev("VendorProfit.Panel.TodoScroll():GetScrollChild():GetHeight()") == 9 * 15
+      and not ev("VendorProfit.Panel.TodoScroll().ScrollBar:IsShown()")
+      and not ev("(function() local s = VendorProfit.Panel.TodoScroll(); s.ScrollBar:Show(); s:GetScript('OnScrollRangeChanged')(s, 0, 0); return s.ScrollBar:IsShown() end)()"))
 check("the box is darker than the window, a little bigger than its items all round",
       ev("VendorProfit.Panel.TodoScroll().back.__color[4]") > 0 and ev("VendorProfit.Panel.TodoScroll().back:IsShown()")
       and ev("VendorProfit.Panel.TodoScroll().back:GetHeight()") == ev("VendorProfit.Panel.TodoScroll():GetHeight()") + 12
