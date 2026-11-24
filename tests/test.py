@@ -782,6 +782,17 @@ run('__stub.Fire("UI_SCALE_CHANGED")')
 check("...sized again when the UI scale changes",
       ev("(function() local l = VendorProfit.Panel.FindRow('To do').lines; return l[1].__pixelHeight ~= nil and l[2].__pixelHeight ~= nil end)()"))
 
+check("...both ends of both lines on the page at one height, either side of the title (not on the title itself)",
+      ev("""(function()
+          local row = VendorProfit.Panel.FindRow('To do')
+          local l, r = row.lines[1].__points, row.lines[2].__points
+          local page = l.LEFT[2]
+          local half = row.left:GetStringWidth() / 2 + 6
+          return l.RIGHT[2] == page and r.LEFT[2] == page and r.RIGHT[2] == page
+              and l.LEFT[5] == l.RIGHT[5] and r.LEFT[5] == r.RIGHT[5] and l.LEFT[5] == r.LEFT[5]
+              and l.RIGHT[4] == -half and r.LEFT[4] == half
+      end)()"""))
+
 # Every section folds the same way.
 def fold(name):
     row = 'VendorProfit.Panel.FindRow("%s")' % name

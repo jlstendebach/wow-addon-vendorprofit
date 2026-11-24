@@ -283,9 +283,14 @@ end
 function FontMethods:GetStringWidth() return stub.TextWidth(self.__text) end
 function FontMethods:GetUnboundedStringWidth() return stub.TextWidth(self.__text) end
 function FontMethods:GetStringHeight() return 12 end
-function FontMethods:ClearAllPoints() self.__point = nil end
+function FontMethods:ClearAllPoints() self.__point = nil; self.__points = nil end
 function FontMethods:SetShown(s) self.__shown = not not s end
-function FontMethods:SetPoint(...) self.__point = { ... } end
+-- __point is the last point set; __points every point by name.
+function FontMethods:SetPoint(point, ...)
+    self.__point = { point, ... }
+    self.__points = self.__points or {}
+    self.__points[point] = { point, ... }
+end
 function FontMethods:Show() self.__shown = true end
 function FontMethods:Hide() self.__shown = false end
 function FontMethods:IsShown() return self.__shown end

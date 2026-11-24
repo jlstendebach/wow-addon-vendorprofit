@@ -21,6 +21,12 @@ time" route mode).
   again when the UI scale or screen size changes. Set 1 high, a line could
   round to no pixels at a scale where 1 is less than a pixel (windowed, a
   smaller resolution) and vanish, some dividers drawing and others not.
+  That alone didn't stop the Shopping List's divider lines vanishing after
+  a resolution change: each line had one end on the page and the other on
+  the title's side (its middle, from its font), so its two ends could sit
+  a fraction of a pixel apart, or on a title not measured again yet. Both
+  ends of both lines are now on the page at one height, either side of the
+  title's measured width.
 - **One window, pages as side tabs** (Shopping List, Best Crafts, Profit
   History, Purchase History, Gold). A minimum height keeps every side tab on
   the window.

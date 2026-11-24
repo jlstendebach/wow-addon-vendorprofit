@@ -231,12 +231,19 @@ local function AddDivider(row, title, onClick)
     local left, right = row.lines[1], row.lines[2]
     VendorProfit.HairLine(left)
     VendorProfit.HairLine(right)
+    -- Both ends of both lines on the page itself, at one height, the title's
+    -- width measured: anchored to the title's sides (its middle, from its
+    -- font), an end could sit a fraction of a pixel off the other, or on a
+    -- title not measured again yet after the screen changed, and the game
+    -- sometimes didn't draw the line at all.
+    local mid = y - 6
+    local gap = (row.left:GetStringWidth() or 0) / 2 + 6
     left:ClearAllPoints()
-    left:SetPoint("LEFT", content, "TOPLEFT", PADDING, y - 6)
-    left:SetPoint("RIGHT", row.left, "LEFT", -6, 0)
+    left:SetPoint("LEFT", content, "TOPLEFT", PADDING, mid)
+    left:SetPoint("RIGHT", content, "TOP", -gap, mid)
     right:ClearAllPoints()
-    right:SetPoint("LEFT", row.left, "RIGHT", 6, 0)
-    right:SetPoint("RIGHT", content, "TOPRIGHT", -PADDING, y - 6)
+    right:SetPoint("LEFT", content, "TOP", gap, mid)
+    right:SetPoint("RIGHT", content, "TOPRIGHT", -PADDING, mid)
     left:Show()
     right:Show()
     -- A divider that collapses its section: the whole row is clickable.
