@@ -153,6 +153,8 @@ function FrameMethods:IsEnabled() return self.__enabled ~= false end
 function FrameMethods:SetTitle(t) self.__title = t end
 function FrameMethods:SetMultiLine(m) self.__multiLine = m end
 function FrameMethods:SetFontObject() end
+function FrameMethods:GetFont() return "Fonts\\ARIALN.TTF", 14, "" end
+function FrameMethods:SetParent(parent) self.__parent = parent end
 function FrameMethods:SetAutoFocus(f) end
 function FrameMethods:SetNumeric(n) self.__numeric = n end
 function FrameMethods:SetJustifyH(j) self.__justifyH = j end

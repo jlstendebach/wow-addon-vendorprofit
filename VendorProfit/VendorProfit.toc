@@ -9,6 +9,7 @@
 ## IconTexture: Interface\Icons\INV_Misc_Coin_02
 
 Core.lua
+ScrollBox.lua
 VendorPrices.lua
 VendorLine.lua
 Recipes.lua

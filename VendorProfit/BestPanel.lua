@@ -43,8 +43,11 @@ local MINIMUMS_HEIGHT = 20
 -- How many rows the list shows before it scrolls: 14 until you drag the
 -- window's size grip (Create), then what you chose, saved per character.
 local DEFAULT_ROWS = 14
-local SCROLLBAR_WIDTH = 24
-local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
+-- The list is in a scroll box (ScrollBox.lua): its padding and bar beside
+-- the list, its padding above and below.
+local BOX_EXTRA = VendorProfit.ScrollBox.EXTRA_WIDTH
+local BOX_PADDING = VendorProfit.ScrollBox.PADDING
+local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - BOX_EXTRA
 local LIST_WIDTH = BASE_LIST_WIDTH
 local ICON_BUTTON_WIDTH = 22
 -- Room for the size grip at the end of the bottom row (16, and a gap).
@@ -230,7 +233,7 @@ local DIVIDER_SPACE = 4
 -- divider's gap (always allowed for, so favorites don't change the
 -- height), and the notes (one line) and minimums under it.
 local function ChromeHeight()
-    return -LIST_TOP + DIVIDER_GAP + 8 + MINIMUMS_HEIGHT + 8 + 12 + PADDING
+    return -LIST_TOP + VendorProfit.ScrollBox.EXTRA_HEIGHT + DIVIDER_GAP + 8 + MINIMUMS_HEIGHT + 8 + 12 + PADDING
 end
 
 -- The fewest rows: the window stays tall enough for the side tabs, and a
@@ -1121,7 +1124,7 @@ local function Create(page)
             rowWidth = rowWidth + width
         end
     end
-    BASE_LIST_WIDTH = math.max(BASE_LIST_WIDTH, rowWidth + GRIP_ROOM - SCROLLBAR_WIDTH)
+    BASE_LIST_WIDTH = math.max(BASE_LIST_WIDTH, rowWidth + GRIP_ROOM - BOX_EXTRA)
     ShowMinimums()
 
     -- Filter: a button in the page's own style that opens the game's menu
@@ -1182,12 +1185,11 @@ local function Create(page)
     frame.queuedHeading = Heading("queued", L.BEST_QUEUED_HEADING,
         L.BEST_QUEUED_HELP .. "\n" .. L.BEST_SORT_HELP)
 
-    -- The list scrolls; the mouse wheel works over it.
-    frame.scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    frame.scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, LIST_TOP)
-    frame.list = CreateFrame("Frame", nil, frame.scroll)
+    -- The list scrolls, in a scroll box (placed in Refresh); the mouse
+    -- wheel works over it.
+    frame.scroll = VendorProfit.ScrollBox.Create(frame)
+    frame.list = frame.scroll.list
     frame.list:SetSize(LIST_WIDTH, ROW_HEIGHT)
-    frame.scroll:SetScrollChild(frame.list)
     -- Rows are filled in as they come into view.
     frame.scroll:HookScript("OnVerticalScroll", function() FillVisible() end)
     -- A line between the favorites and the rest, in the gold of the
@@ -1326,16 +1328,17 @@ local function LayOutColumns(ranked)
         return
     end
     layoutKey = key
-    WIDTH = LIST_WIDTH + 2 * PADDING + SCROLLBAR_WIDTH
+    WIDTH = LIST_WIDTH + 2 * PADDING + BOX_EXTRA
     pageDef.width = WIDTH
     frame.list:SetWidth(LIST_WIDTH)
     for name, heading in pairs(frame.headings) do
         heading:SetSize(col[name].width, 14)
         heading:ClearAllPoints()
         if name == "name" then
-            heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + col[name].left, LIST_TOP + 16)
+            heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + BOX_PADDING + col[name].left, LIST_TOP + 16)
         else
-            heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + LIST_WIDTH + col[name].right, LIST_TOP + 16)
+            heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + BOX_PADDING + LIST_WIDTH + col[name].right,
+                LIST_TOP + 16)
         end
     end
 end
@@ -1612,21 +1615,22 @@ local function Refresh()
         divider:Hide()
     end
 
-    -- The list is VisibleRows tall, however many are listed (so the window
-    -- doesn't jump as you search or filter), and scrolls for the rest, back
-    -- to the top for another profession or tab.
+    -- The list's room is VisibleRows tall, however many are listed (so the
+    -- window doesn't jump as you search or filter); its box is as tall as
+    -- the rows, up to that, and scrolls for the rest, back to the top for
+    -- another profession or tab.
     local gap = favorites and DIVIDER_GAP or 0
     local listHeight = VisibleRows() * ROW_HEIGHT + DIVIDER_GAP
-    frame.list:SetHeight(math.max(#ranked, 1) * ROW_HEIGHT + gap)
-    frame.scroll:SetSize(LIST_WIDTH, listHeight)
-    frame.scroll:SetShown(#ranked > 0)
+    local content = #ranked > 0 and #ranked * ROW_HEIGHT + gap or 0
     local listKey = table.concat(keys, ",") .. "/" .. tab .. "/" .. filter
     if listKey ~= shownList then
         shownList = listKey
         frame.scroll:SetVerticalScroll(0)
     end
+    VendorProfit.ScrollBox.Place(frame.scroll, frame, PADDING, LIST_TOP, LIST_WIDTH,
+        math.min(content, listHeight), content)
     FillVisible()
-    local y = LIST_TOP - listHeight
+    local y = LIST_TOP - listHeight - VendorProfit.ScrollBox.EXTRA_HEIGHT
 
     -- Status: why the list is empty, where prices are from, and messages.
     local lines = {}

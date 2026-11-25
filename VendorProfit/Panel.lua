@@ -33,16 +33,10 @@ local ROW_HEIGHT = 15
 local HEADING_HEIGHT = 20
 
 local HEADING_BUTTON_WIDTH = 120
--- To do's details are in a box as tall as its rows, up to this many; past
--- that it scrolls, so a big order doesn't run the window off the screen.
--- The scroll bar only shows when it scrolls, and the box only when it has
--- something in it. Folding To do hides it.
+-- To do's details are in a scroll box (ScrollBox.lua) up to this many rows
+-- tall, so a big order doesn't run the window off the screen. Folding To do
+-- hides it.
 Panel.TODO_ROWS = 12
--- The box is a little darker than the window, its items and scroll bar
--- inset by TODO_PADDING; the bar is SCROLLBAR_WIDTH wide, TODO_PADDING
--- from the items.
-local TODO_PADDING = 6
-local SCROLLBAR_WIDTH = 16
 -- A step that has just moved into a button's place (the one before it
 -- finished) ignores clicks on it for this long, so a click meant for the
 -- old step doesn't land on the new one.
@@ -790,23 +784,11 @@ end
 -- for each step, then its items.
 local function AddTodoDetails(groups)
     if todoScroll == nil then
-        todoScroll = CreateFrame("ScrollFrame", nil, content, "UIPanelScrollFrameTemplate")
-        todoList = CreateFrame("Frame", nil, todoScroll)
-        todoScroll:SetScrollChild(todoList)
-        -- The template shows the bar again whenever the scroll range
-        -- changes (unless scrollBarHideable, which hides it at no range);
-        -- this runs after it, so the bar is shown only when it's needed.
-        todoScroll.scrollBarHideable = true
-        todoScroll:HookScript("OnScrollRangeChanged", function(self)
-            if self.ScrollBar then
-                self.ScrollBar:SetShown(self.needsBar == true)
-            end
-        end)
-        -- Behind the items and the scroll bar, to the page's edges.
-        todoScroll.back = content:CreateTexture(nil, "BACKGROUND")
-        todoScroll.back:SetColorTexture(0, 0, 0, 0.35)
+        todoScroll = VendorProfit.ScrollBox.Create(content)
+        todoList = todoScroll.list
     end
-    local listWidth = WIDTH - 2 * PADDING - 3 * TODO_PADDING - SCROLLBAR_WIDTH
+    -- The box reaches the page's edges.
+    local listWidth = WIDTH - 2 * PADDING - VendorProfit.ScrollBox.EXTRA_WIDTH
     todoList:SetWidth(listWidth)
     todoUsed = 0
     local function Line(left, right, isTitle)
@@ -835,39 +817,11 @@ local function AddTodoDetails(groups)
         todoRows[index].right:Hide()
     end
     local shown = math.min(todoUsed, Panel.TODO_ROWS)
-    todoList:SetHeight(math.max(todoUsed, 1) * ROW_HEIGHT)
     y = y - 4
-    local back = todoScroll.back
-    back:ClearAllPoints()
-    back:SetPoint("TOPLEFT", content, "TOPLEFT", PADDING, y)
-    back:SetSize(WIDTH - 2 * PADDING, shown * ROW_HEIGHT + 2 * TODO_PADDING)
-    back:Show()
-    todoScroll:ClearAllPoints()
-    todoScroll:SetPoint("TOPLEFT", content, "TOPLEFT", PADDING + TODO_PADDING, y - TODO_PADDING)
-    todoScroll:SetSize(listWidth, shown * ROW_HEIGHT)
-    -- The template puts the bar a little right of the list; here it's held
-    -- the same padding from the box's right edge as the items are from its
-    -- left, its arrows inside the box.
-    local bar = todoScroll.ScrollBar
-    if bar then
-        bar:ClearAllPoints()
-        bar:SetPoint("TOPRIGHT", back, "TOPRIGHT", -TODO_PADDING, -TODO_PADDING - 16)
-        bar:SetPoint("BOTTOMRIGHT", back, "BOTTOMRIGHT", -TODO_PADDING, TODO_PADDING + 16)
-        -- Only when there's something to scroll: in a short box the bar's
-        -- arrows nearly met, with no room for the thumb, and a bar that
-        -- can't scroll says nothing. It only shows at the most rows, where
-        -- it has room.
-        todoScroll.needsBar = todoUsed > shown
-        bar:SetShown(todoScroll.needsBar)
-    end
-    -- Shorter than before: don't leave it scrolled past its end.
-    local maxScroll = math.max(todoUsed - Panel.TODO_ROWS, 0) * ROW_HEIGHT
-    if (todoScroll:GetVerticalScroll() or 0) > maxScroll then
-        todoScroll:SetVerticalScroll(maxScroll)
-    end
-    todoScroll:Show()
+    local boxHeight = VendorProfit.ScrollBox.Place(todoScroll, content, PADDING, y, listWidth,
+        shown * ROW_HEIGHT, todoUsed * ROW_HEIGHT)
     todoAfter, todoPlaced = usedRows, true
-    y = y - shown * ROW_HEIGHT - 2 * TODO_PADDING - 4
+    y = y - boxHeight - 4
 end
 
 -- Where each To do step was last drawn (its top, by step), and when a step
@@ -1394,8 +1348,7 @@ local function RefreshShopping()
     local height = FinishLayout()
     HideUnusedRows()
     if todoScroll and not todoPlaced then
-        todoScroll:Hide()
-        todoScroll.back:Hide()
+        VendorProfit.ScrollBox.Hide(todoScroll)
     end
     return height
 end

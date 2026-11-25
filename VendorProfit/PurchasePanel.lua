@@ -24,8 +24,11 @@ local ROW_HEIGHT = 18
 -- tall, at -32) as Profit History's total is below its title.
 local LIST_TOP = -66
 local VISIBLE_ROWS = 18
-local SCROLLBAR_WIDTH = 24
-local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
+-- The list is in a scroll box (ScrollBox.lua): its padding and bar beside
+-- the list, its padding above and below.
+local BOX_EXTRA = VendorProfit.ScrollBox.EXTRA_WIDTH
+local BOX_PADDING = VendorProfit.ScrollBox.PADDING
+local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - BOX_EXTRA
 local LIST_WIDTH = BASE_LIST_WIDTH
 -- The columns, by key (Columns.lua), laid out for every purchase on each
 -- refresh: Date, Item, From, Each, Total, Now (the cheapest price today).
@@ -168,7 +171,7 @@ local function LayOut()
         return
     end
     layoutKey = key
-    WIDTH = LIST_WIDTH + 2 * PADDING + SCROLLBAR_WIDTH
+    WIDTH = LIST_WIDTH + 2 * PADDING + BOX_EXTRA
     pageDef.width = WIDTH
     frame.list:SetWidth(LIST_WIDTH)
     for index, heading in ipairs(frame.headings) do
@@ -176,9 +179,10 @@ local function LayOut()
         heading:SetWidth(column.width)
         heading:ClearAllPoints()
         if FROM_LEFT[KEYS[index]] then
-            heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + column.left, LIST_TOP + 16)
+            heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + BOX_PADDING + column.left, LIST_TOP + 16)
         else
-            heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + LIST_WIDTH + column.right, LIST_TOP + 16)
+            heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + BOX_PADDING + LIST_WIDTH + column.right,
+                LIST_TOP + 16)
         end
     end
 end
@@ -236,11 +240,10 @@ local function Create(page)
         Heading(L.PURCHASES_NOW, "RIGHT"),
     }
 
-    frame.scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    frame.scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, LIST_TOP)
-    frame.list = CreateFrame("Frame", nil, frame.scroll)
+    -- The list, in a scroll box (placed in Refresh).
+    frame.scroll = VendorProfit.ScrollBox.Create(frame)
+    frame.list = frame.scroll.list
     frame.list:SetSize(LIST_WIDTH, ROW_HEIGHT)
-    frame.scroll:SetScrollChild(frame.list)
     -- Scrolling refills the rows on screen.
     frame.scroll:HookScript("OnVerticalScroll", Render)
 
@@ -260,16 +263,15 @@ local function Refresh()
     end
     Render()
 
-    local shown = math.max(math.min(count, VISIBLE_ROWS), 1)
-    frame.list:SetHeight(math.max(count, 1) * ROW_HEIGHT)
-    frame.scroll:SetSize(LIST_WIDTH, shown * ROW_HEIGHT)
-    frame.scroll:SetShown(count > 0)
+    local shown = math.min(count, VISIBLE_ROWS)
+    local boxHeight = VendorProfit.ScrollBox.Place(frame.scroll, frame, PADDING, LIST_TOP, LIST_WIDTH,
+        shown * ROW_HEIGHT, count * ROW_HEIGHT)
     frame.empty:SetShown(count == 0)
     for _, heading in ipairs(frame.headings) do
         heading:SetShown(count > 0)
     end
 
-    local listHeight = count > 0 and shown * ROW_HEIGHT or (frame.empty:GetStringHeight() or 24)
+    local listHeight = count > 0 and boxHeight or (frame.empty:GetStringHeight() or 24)
     return -LIST_TOP + listHeight + PADDING
 end
 

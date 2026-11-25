@@ -271,6 +271,7 @@ end
 
 -- A box to copy the lines from (Ctrl+C), since chat can't be copied.
 local exportFrame
+local EXPORT_WIDTH, EXPORT_HEIGHT = 460, 360
 function Merchant.ShowPriceLines()
     if not open then
         print(L.PRICES_NO_VENDOR)
@@ -279,7 +280,7 @@ function Merchant.ShowPriceLines()
     local text, changed, total = Merchant.PriceLines()
     if exportFrame == nil then
         exportFrame = CreateFrame("Frame", "VendorProfitPriceExport", UIParent, "ButtonFrameTemplate")
-        exportFrame:SetSize(460, 360)
+        exportFrame:SetSize(EXPORT_WIDTH, EXPORT_HEIGHT)
         exportFrame:SetPoint("CENTER")
         exportFrame:SetFrameStrata("DIALOG")
         exportFrame:SetMovable(true)
@@ -297,21 +298,31 @@ function Merchant.ShowPriceLines()
         exportFrame.note:SetPoint("TOPLEFT", exportFrame, "TOPLEFT", 16, -32)
         exportFrame.note:SetPoint("RIGHT", exportFrame, "RIGHT", -16, 0)
         exportFrame.note:SetJustifyH("LEFT")
-        local scroll = CreateFrame("ScrollFrame", nil, exportFrame, "UIPanelScrollFrameTemplate")
-        scroll:SetPoint("TOPLEFT", exportFrame, "TOPLEFT", 16, -64)
-        scroll:SetPoint("BOTTOMRIGHT", exportFrame, "BOTTOMRIGHT", -34, 16)
-        local edit = CreateFrame("EditBox", nil, scroll)
+        -- The lines in a scroll box (ScrollBox.lua) filling the rest of the
+        -- window, placed below once the text is in.
+        local edit = CreateFrame("EditBox", nil, exportFrame)
         edit:SetMultiLine(true)
         edit:SetAutoFocus(false)
         edit:SetFontObject("ChatFontNormal")
-        edit:SetWidth(400)
         edit:SetScript("OnEscapePressed", function() exportFrame:Hide() end)
-        scroll:SetScrollChild(edit)
+        exportFrame.scroll = VendorProfit.ScrollBox.Create(exportFrame, edit)
+        edit:SetParent(exportFrame.scroll)
         exportFrame.edit = edit
     end
     exportFrame:SetTitle(L.PRICES_TITLE)
     exportFrame.note:SetText(string.format(L.PRICES_NOTE, total, changed))
     exportFrame.edit:SetText(text)
+    -- As tall as the lines, up to the room the window has.
+    local box = VendorProfit.ScrollBox
+    local listWidth = EXPORT_WIDTH - 2 * 16 - box.EXTRA_WIDTH
+    local room = EXPORT_HEIGHT - 64 - 16 - box.EXTRA_HEIGHT
+    local _, lines = text:gsub("\n", "\n")
+    local lineHeight = select(2, exportFrame.edit:GetFont()) or 14
+    -- A few pixels spare: the last line can't be cut off by a box a little
+    -- shorter than the text.
+    local content = text ~= "" and (lines + 1) * lineHeight + 4 or 0
+    exportFrame.edit:SetWidth(listWidth)
+    box.Place(exportFrame.scroll, exportFrame, 16, -64, listWidth, math.min(content, room), content)
     exportFrame:Show()
     exportFrame.edit:SetFocus()
     exportFrame.edit:HighlightText()

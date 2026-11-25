@@ -322,6 +322,7 @@ Files:
 | File | What it does |
 | --- | --- |
 | `Core.lua` | Prices, working out the shown recipe, attaching to Auctionator's frame |
+| `ScrollBox.lua` | The scroll boxes every list uses: shaded, padded, the scroll bar only when there's more than fits (`docs/ui-design.md`) |
 | `VendorPrices.lua` | Usual vendor prices, for items Auctionator hasn't seen a vendor sell yet; updated with `/vprofit prices` |
 | `VendorLine.lua` | The Vendor Profit line |
 | `Recipes.lua` | Saving and looking up this character's recipes |

@@ -94,6 +94,15 @@ time" route mode).
   the top right of the column under the mouse, moving with it across
   columns. Buttons keep the usual ANCHOR_RIGHT.
 
+- **One kind of scroll box** (2026-11-25): every list that scrolls (To do's
+  box, Best Crafts, Profit and Purchase History, the vendor price lines) uses
+  ScrollBox.lua, after the To do box Josh settled on: shaded, padded, as
+  tall as its rows up to its most, the scroll bar only when there's more
+  than fits. The rule is in `docs/ui-design.md`. Best Crafts keeps the
+  room for its rows (the window doesn't jump as you search) while the box
+  inside is only as tall as what's listed. Profit and Purchase History keep
+  their "nothing yet" notes where an empty list would be.
+
 ## Best Crafts
 
 - **Professions button** (left of Scan): made to be clicked again and
