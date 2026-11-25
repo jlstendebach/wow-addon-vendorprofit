@@ -306,6 +306,8 @@ function Merchant.ShowPriceLines()
         edit:SetFontObject("ChatFontNormal")
         edit:SetScript("OnEscapePressed", function() exportFrame:Hide() end)
         exportFrame.scroll = VendorProfit.ScrollBox.Create(exportFrame, edit)
+        -- Its text's height is only estimated: the game's range decides.
+        exportFrame.scroll.gameRange = true
         edit:SetParent(exportFrame.scroll)
         exportFrame.edit = edit
     end

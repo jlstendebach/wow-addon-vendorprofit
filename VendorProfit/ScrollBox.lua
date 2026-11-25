@@ -30,6 +30,27 @@ local function ShowBar(scroll, show)
     end
 end
 
+-- How far the list scrolls, from what it was last placed with, and the bar
+-- (a slider: the mouse wheel moves it, and it scrolls the list) held to it,
+-- the list not left past its end.
+local function Fit(scroll)
+    local maxScroll = math.max(math.floor(scroll.contentHeight - scroll.shownHeight), 0)
+    ShowBar(scroll, maxScroll > 0)
+    if scroll.gameRange then
+        return
+    end
+    if (scroll:GetVerticalScroll() or 0) > maxScroll then
+        scroll:SetVerticalScroll(maxScroll)
+    end
+    local bar = scroll.ScrollBar
+    if bar and bar.SetMinMaxValues then
+        bar:SetMinMaxValues(0, maxScroll)
+        if (bar:GetValue() or 0) > maxScroll then
+            bar:SetValue(maxScroll)
+        end
+    end
+end
+
 -- A box on parent: the scroll frame, its scroll child (scroll.list) and the
 -- shade behind them (scroll.back). Placed with ScrollBox.Place.
 function ScrollBox.Create(parent, child)
@@ -39,14 +60,22 @@ function ScrollBox.Create(parent, child)
     scroll.list = list
     scroll.back = parent:CreateTexture(nil, "BACKGROUND")
     scroll.back:SetColorTexture(0, 0, 0, ScrollBox.SHADE)
-    -- The template shows the bar again whenever the scroll range changes
-    -- (unless scrollBarHideable, which hides it at no range); this runs
-    -- after it, so the bar shows only when there's something to scroll. In
-    -- a short box its arrows nearly met, with no room for the thumb, and a
-    -- bar that can't scroll says nothing.
+    -- The template sets the bar's range and shows it again whenever the
+    -- scroll range changes (unless scrollBarHideable, which hides it at no
+    -- range). This runs after it and puts both back to what the box was
+    -- placed with: the range the game passes can be an older list's (a list
+    -- cut short by a filter kept its bar, and scrolled on into nothing). The
+    -- bar shows only when there's something to scroll: in a short box its
+    -- arrows nearly met, with no room for the thumb, and a bar that can't
+    -- scroll says nothing. A box whose content the addon can't measure
+    -- (scroll.gameRange: the vendor price lines' text) goes by the game's.
     scroll.scrollBarHideable = true
     scroll:HookScript("OnScrollRangeChanged", function(self, _, yrange)
-        ShowBar(self, (yrange or 0) > 0.5)
+        if self.contentHeight and not self.gameRange then
+            Fit(self)
+        else
+            ShowBar(self, (yrange or 0) > 0.5)
+        end
     end)
     return scroll
 end
@@ -81,21 +110,10 @@ function ScrollBox.Place(scroll, relativeTo, x, y, listWidth, height, contentHei
         bar:SetPoint("TOPRIGHT", back, "TOPRIGHT", -pad, -pad - ARROW)
         bar:SetPoint("BOTTOMRIGHT", back, "BOTTOMRIGHT", -pad, pad + ARROW)
     end
-    ShowBar(scroll, contentHeight > height + 0.5)
-    -- Shorter than before: not left scrolled past its new end. The bar (a
-    -- slider) is what the mouse wheel moves, so its range is set here too:
-    -- left at an old, longer list's, the wheel scrolled on past the end,
-    -- into nothing.
-    local maxScroll = math.max(math.floor(contentHeight - height), 0)
-    if (scroll:GetVerticalScroll() or 0) > maxScroll then
-        scroll:SetVerticalScroll(maxScroll)
-    end
-    if bar and bar.SetMinMaxValues then
-        bar:SetMinMaxValues(0, maxScroll)
-        if (bar:GetValue() or 0) > maxScroll then
-            bar:SetValue(maxScroll)
-        end
-    end
+    -- Shorter than before: not left scrolled past its new end, the bar
+    -- with it.
+    scroll.contentHeight, scroll.shownHeight = contentHeight, height
+    Fit(scroll)
     scroll:Show()
     return height + ScrollBox.EXTRA_HEIGHT
 end

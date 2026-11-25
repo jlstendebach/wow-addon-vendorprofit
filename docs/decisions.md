@@ -102,9 +102,11 @@ time" route mode).
   main content (Best Crafts, Profit and Purchase History) fills its page
   instead, Josh's call: its box always its most rows tall, kept when empty,
   with Profit and Purchase History's "nothing yet" notes inside it. The
-  bar's range (the slider the mouse wheel moves) is set with the box: left
-  at an older, longer list's, the wheel scrolled Best Crafts on into
-  nothing.
+  bar's range (the slider the mouse wheel moves) is set with the box, and
+  set back whenever the game's template changes it: the game can pass an
+  older, longer list's range (after a filter cut Best Crafts short, its bar
+  came back and the wheel scrolled on into nothing), so the box goes by
+  what it was placed with, not what the game says.
 
 ## Best Crafts
 

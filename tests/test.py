@@ -2580,6 +2580,16 @@ check("the list scrolls: a scroll box filling the page, 14 rows tall with 5 list
 # update it), as in game: the wheel scrolled on into nothing.
 run(B + ".scroll.ScrollBar:SetMinMaxValues(0, 500); VendorProfit.BestPanel.Refresh(); " + B + ".scroll:MouseWheel(-5)")
 check("...and the mouse wheel can't scroll it past its end into nothing", ev(B + ".scroll:GetVerticalScroll()") == 0)
+# The game's template, on a range change, setting the bar to an older,
+# longer list's range and showing it (as after a filter cut the list short).
+run('''
+    local s = VendorProfit.BestPanel.Frame().scroll
+    s.ScrollBar:SetMinMaxValues(0, 500); s.ScrollBar:Show()
+    s:GetScript("OnScrollRangeChanged")(s, 0, 500)
+    s:MouseWheel(-5)
+''')
+check("...nor after the game's template sets the bar to an older list's range: no bar, no scrolling",
+      not ev(B + ".scroll.ScrollBar:IsShown()") and ev(B + ".scroll:GetVerticalScroll()") == 0)
 run(B + '.scroll:SetVerticalScroll(40)')
 run(B + '.tabs.auction:Click()')
 check("auction tab: no auction price for the ring; scrolled back to the top", best()[4].endswith("no auction price|r")
