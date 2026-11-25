@@ -42,7 +42,9 @@ SPAN = """function __Span(region, page)
     if p[2] == page.list then
         left = p[1] == "TOPLEFT" and p[4] or page.list:GetWidth() + p[4] - w
     else
-        left = p[4] - 16 - (p[1] == "TOPRIGHT" and w or 0)
+        -- Headings are placed on the page: the list starts the page's 16 and
+        -- the scroll box's 6 in.
+        left = p[4] - 16 - 6 - (p[1] == "TOPRIGHT" and w or 0)
     end
     return left, left + w
 end"""
@@ -93,7 +95,7 @@ run, ev = client()
 LINE = "AuctionatorCraftingInfoProfessionsFrame.VendorProfitLine"
 
 # --- Loading and attaching ---------------------------------------------------
-check("files loaded in toc order", FILES == ["Core.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Poster.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "Auctions.lua", "History.lua", "Gold.lua", "Panel.lua", "MinimapButton.lua", "Columns.lua", "TurnIns.lua", "BestCrafts.lua", "ProfessionCycle.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua", "GoldPanel.lua"])
+check("files loaded in toc order", FILES == ["Core.lua", "ScrollBox.lua", "VendorPrices.lua", "VendorLine.lua", "Recipes.lua", "Route.lua", "RouteSection.lua", "Inventory.lua", "Plan.lua", "Order.lua", "QueueButton.lua", "SearchButton.lua", "Shopper.lua", "Poster.lua", "Crafter.lua", "OpenButton.lua", "Banker.lua", "Merchant.lua", "Auctions.lua", "History.lua", "Gold.lua", "Panel.lua", "MinimapButton.lua", "Columns.lua", "TurnIns.lua", "BestCrafts.lua", "ProfessionCycle.lua", "BestPanel.lua", "HistoryPanel.lua", "PurchasePanel.lua", "GoldPanel.lua"])
 check("version read from the .toc", ev("VendorProfit.VERSION") == TOC_VERSION)
 check("the .toc keeps the placeholder; releases and deploys stamp the real version", TOC_VERSION == "@project-version@")
 check("not attached before the professions window opens", not ev("VendorProfit.IsAttached()"))
@@ -1746,9 +1748,42 @@ run('local r = VendorProfit.HistoryPanel.Row(1); r.hit.__left = 10; r.date.__lef
 check("...moving along as the cursor crosses into another column", tooltip_at("VendorProfit.HistoryPanel.Row(1).hit", "VendorProfit.HistoryPanel.Row(1).item"))
 run('GameTooltip:Hide(); VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnUpdate")(VendorProfit.HistoryPanel.Row(1).hit)')
 check("...and stops following once the tooltip's gone", ev('VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnUpdate")') is None)
+check("the sales in a scroll box filling the page (15 rows, as tall as Best Crafts'), no scroll bar with so few",
+      ev("VendorProfit.HistoryPanel.Frame().scroll.back:IsShown()")
+      and ev("VendorProfit.HistoryPanel.Frame().scroll.back.__color[4]") == 0.35
+      and ev("VendorProfit.HistoryPanel.Frame().scroll:GetHeight()") == 15 * 22
+      and ev("VendorProfit.HistoryPanel.Frame().list:GetHeight()") < 15 * 22
+      and not ev("VendorProfit.HistoryPanel.Frame().scroll.ScrollBar:IsShown()"))
 check("Sales columns never touch: values and headings a gap apart, inside the list",
       columns_apart("VendorProfit.HistoryPanel.Frame()", ["VendorProfit.HistoryPanel.Row(1)." + k for k in ["date", "item", "cost", "sold", "profit"]])
       and columns_apart("VendorProfit.HistoryPanel.Frame()", ["VendorProfit.HistoryPanel.Frame().headings[%d]" % i for i in range(1, 6)]))
+# Every table follows Best Crafts': sortable headings, its row height, rows
+# lit under the mouse.
+SH = "VendorProfit.HistoryPanel.Frame().headings"
+def sales_rows():
+    return [ev("VendorProfit.HistoryPanel.Row(%d).sale" % i) for i in range(1, 9) if ev("VendorProfit.HistoryPanel.Row(%d) and VendorProfit.HistoryPanel.Row(%d).sale ~= nil" % (i, i))]
+check("Sales sorted newest first to start, its Date heading in white with the arrow",
+      ev("VendorProfit.HistoryPanel.SalesSort().key") == "date" and "Arrow-Down" in ev(SH + "[1].text:GetText()")
+      and [r.time for r in sales_rows()] == sorted([r.time for r in sales_rows()], reverse=True))
+run(SH + "[5]:Click()")
+profits = [r.sold - r.cost for r in sales_rows()]
+check("click Profit: the most profit first, saved per character", len(profits) >= 2 and profits == sorted(profits, reverse=True)
+      and ev("VendorProfitCharDB.historySalesSort.key") == "profit" and "Arrow-Down" in ev(SH + "[5].text:GetText()")
+      and "Arrow" not in ev(SH + "[1].text:GetText()"))
+run(SH + "[5]:Click()")
+check("...again: the least first", [r.sold - r.cost for r in sales_rows()] == sorted(profits))
+run(SH + "[1]:Click()")
+check("...Date: newest first again", ev("VendorProfit.HistoryPanel.SalesSort().ascending") is False
+      and [r.time for r in sales_rows()] == sorted([r.time for r in sales_rows()], reverse=True))
+run("VendorProfit.HistoryPanel.Row(1).hit:GetScript('OnLeave')()")
+check("rows as tall as Best Crafts' (22), not lit with the mouse off, the quest log's highlight",
+      ev("VendorProfit.HistoryPanel.Row(1).hit:GetHeight()") == 22
+      and not ev("VendorProfit.HistoryPanel.Row(1).highlight:IsShown()")
+      and "QuestTitleHighlight" in ev("VendorProfit.HistoryPanel.Row(1).highlight.__texture"))
+run("VendorProfit.HistoryPanel.Row(1).hit:GetScript('OnEnter')()")
+check("...lit", ev("VendorProfit.HistoryPanel.Row(1).highlight:IsShown()"))
+run("VendorProfit.HistoryPanel.Row(1).hit:GetScript('OnLeave')()")
+check("...and not once the mouse leaves", not ev("VendorProfit.HistoryPanel.Row(1).highlight:IsShown()"))
 # Columns fit what's listed: a big sale widens them, and they narrow again
 # when it's gone.
 R1 = "VendorProfit.HistoryPanel.Row(1)"
@@ -1768,7 +1803,7 @@ run('table.insert(VendorProfitCharDB.history.sales, { item = 2903, n = 1, cost =
     'VendorProfit.Panel.Refresh()')
 check("no room left for the item names' minimum: the window widens instead",
       ev("VendorProfitPanel:GetWidth()") > narrow[1] and ev(R1 + ".item:GetWidth()") == ev("VendorProfit.Columns.FILL_MIN")
-      and ev("VendorProfitPanel:GetWidth()") == ev("VendorProfit.HistoryPanel.Frame().list:GetWidth()") + 2 * 16 + 24
+      and ev("VendorProfitPanel:GetWidth()") == ev("VendorProfit.HistoryPanel.Frame().list:GetWidth()") + 2 * 16 + 34
       and columns_apart("VendorProfit.HistoryPanel.Frame()", [R1 + "." + k for k in ["date", "item", "cost", "sold", "profit"]]))
 run('table.remove(VendorProfitCharDB.history.sales); VendorProfit.Panel.Refresh()')
 check("...and back once it's gone", ev("VendorProfitPanel:GetWidth()") == narrow[1])
@@ -1798,7 +1833,7 @@ check("Best Sellers columns never touch: values and headings a gap apart, inside
       and columns_apart(HF, [HF + ".sellerHeadings." + k for k in seller_keys]))
 check("...headings fit with their sort arrows", sorted_headings_fit([HF + ".sellerHeadings." + k for k in seller_keys]))
 check("...the window fits the view's columns",
-      ev(HF + ".list:GetWidth()") + 2 * 16 + 24 == ev("VendorProfitPanel:GetWidth()"))
+      ev(HF + ".list:GetWidth()") + 2 * 16 + 34 == ev("VendorProfitPanel:GetWidth()"))
 run('VendorProfit.HistoryPanel.SellerRow(1).hit:GetScript("OnEnter")()')
 tip = [(l.left, l.right) for l in ev("GameTooltip.lines").values()]
 check("hover: how many in how many sales, the averages, vendor and auction counts, when it last sold",
@@ -1894,14 +1929,18 @@ run('''
     VendorProfit.HistoryPanel.SetRange("all")
 ''')
 run(HF + ".views.sales:Click()")
-check("10,000 sales: only the rows that fit on screen are built", ev("VendorProfit.HistoryPanel.Row(19) ~= nil")
-      and ev("VendorProfit.HistoryPanel.Row(20) == nil") and len(list(ev("VendorProfit.HistoryPanel.Lines()").values())) == 19)
+check("10,000 sales: only the rows that fit on screen are built", ev("VendorProfit.HistoryPanel.Row(16) ~= nil")
+      and ev("VendorProfit.HistoryPanel.Row(17) == nil") and len(list(ev("VendorProfit.HistoryPanel.Lines()").values())) == 16)
 check("...newest first", ev("VendorProfit.HistoryPanel.Row(1).sale.sold") == 100 + 10000)
-run('local scroll = ' + HF + '.scroll; scroll:SetVerticalScroll(5000 * 18); scroll:GetScript("OnVerticalScroll")(scroll, 5000 * 18)')
+check("...the box at its 15 rows, with its scroll bar", ev(HF + ".scroll:GetHeight()") == 15 * 22
+      and ev(HF + ".scroll.ScrollBar:IsShown()"))
+run('local scroll = ' + HF + '.scroll; scroll:SetVerticalScroll(5000 * 22); scroll:GetScript("OnVerticalScroll")(scroll, 5000 * 22)')
 check("scrolled half way: the rows show the 5,001st newest sale on", ev("VendorProfit.HistoryPanel.Row(1).sale.sold") == 100 + 5000
-      and ev("VendorProfit.HistoryPanel.Row(20) == nil"))
+      and ev("VendorProfit.HistoryPanel.Row(17) == nil"))
 run(HF + '.search:Type("zzz")')
-check("searching back to the top, nothing matching", ev(HF + ".scroll:GetVerticalScroll()") == 0 and ev(HF + ".empty:IsShown()"))
+check("searching back to the top, nothing matching: the box kept, empty, saying why inside it",
+      ev(HF + ".scroll:GetVerticalScroll()") == 0 and ev(HF + ".empty:IsShown()") and ev(HF + ".scroll.back:IsShown()")
+      and ev(HF + ".empty.__point[4]") == 16 + 6)
 run(HF + '.search:Type("")')
 run('VendorProfitCharDB.history.sales, VendorProfitCharDB.history.items = __stub.savedSales, __stub.savedItems; VendorProfit.HistoryPanel.Refresh()')
 
@@ -1952,9 +1991,30 @@ check("purchases listed newest first: date, item, from, each, total, now", len(b
 check("...with today's cheapest price to compare", bought[2].endswith(ev('VendorProfit.FormatMoney(math.min(150, %d))' % 120)))
 check("window as wide as the columns need", ev("VendorProfitPanel:GetWidth()") >= 540 and ev("VendorProfitPanel.tabs.purchases.label") == "Purchase History")
 PF = "VendorProfit.PurchasePanel.Frame()"
+check("purchases in a scroll box filling the page (15 rows), no scroll bar with so few",
+      ev(PF + ".scroll.back:IsShown()") and ev(PF + ".scroll:GetHeight()") == 15 * 22
+      and not ev(PF + ".scroll.ScrollBar:IsShown()"))
 check("Purchase columns never touch: values and headings a gap apart, inside the list",
       columns_apart(PF, ["VendorProfit.PurchasePanel.Row(1)." + k for k in ["date", "item", "from", "each", "total", "market"]])
       and columns_apart(PF, [PF + ".headings[%d]" % i for i in range(1, 7)]))
+def purchase_totals():
+    return [ev("VendorProfit.PurchasePanel.Row(%d).purchase.total" % i) for i in range(1, 9)
+            if ev("VendorProfit.PurchasePanel.Row(%d) and VendorProfit.PurchasePanel.Row(%d).purchase ~= nil" % (i, i))]
+check("purchases sorted newest first to start, its Date heading in white with the arrow",
+      ev("VendorProfit.PurchasePanel.Sort().key") == "date" and "Arrow-Down" in ev(PF + ".headings[1].text:GetText()"))
+run(PF + ".headings[5]:Click()")
+totals = purchase_totals()
+check("click Total: the most first, saved per character", len(totals) >= 2 and totals == sorted(totals, reverse=True)
+      and ev("VendorProfitCharDB.purchasesSort.key") == "total")
+run(PF + ".headings[5]:Click()")
+check("...again: the least first", purchase_totals() == sorted(totals))
+run(PF + ".headings[1]:Click()")
+check("...Date: back to the newest first", ev("VendorProfit.PurchasePanel.Sort().ascending") is False
+      and ev("VendorProfit.PurchasePanel.Sort().key") == "date")
+run("VendorProfit.PurchasePanel.Row(1).hit:GetScript('OnEnter')()")
+check("purchase rows 22 tall, lit under the mouse", ev("VendorProfit.PurchasePanel.Row(1).hit:GetHeight()") == 22
+      and ev("VendorProfit.PurchasePanel.Row(1).highlight:IsShown()"))
+run("VendorProfit.PurchasePanel.Row(1).hit:GetScript('OnLeave')()")
 run('local r = VendorProfit.PurchasePanel.Row(1); r.hit.__left = 10; r.date.__left = 10; r.item.__left = 80; r.from.__left = 300; '
     'r.each.__left = 340; r.total.__left = 400; r.market.__left = 460; __stub.cursorX = 120')
 run('VendorProfit.PurchasePanel.Row(1).hit:GetScript("OnEnter")()')
@@ -1971,9 +2031,9 @@ check("past the cap: the newest kept", ev("#VendorProfitCharDB.history.purchases
 run('VendorProfit.History.MAX_PURCHASES = 5000')
 # Thousands of purchases: only the rows that fit are built.
 run('for i = 1, 2000 do VendorProfit.History.Bought(2840, 1, i, "vendor") end; VendorProfit.Panel.Show("purchases")')
-check("2,000 purchases: only the rows that fit on screen are built", ev("VendorProfit.PurchasePanel.Row(19) ~= nil")
-      and ev("VendorProfit.PurchasePanel.Row(20) == nil") and len(list(ev("VendorProfit.PurchasePanel.Lines()").values())) == 19)
-run('local scroll = VendorProfit.PurchasePanel.Frame().scroll; scroll:SetVerticalScroll(100 * 18); scroll:GetScript("OnVerticalScroll")(scroll, 100 * 18)')
+check("2,000 purchases: only the rows that fit on screen are built", ev("VendorProfit.PurchasePanel.Row(16) ~= nil")
+      and ev("VendorProfit.PurchasePanel.Row(17) == nil") and len(list(ev("VendorProfit.PurchasePanel.Lines()").values())) == 16)
+run('local scroll = VendorProfit.PurchasePanel.Frame().scroll; scroll:SetVerticalScroll(100 * 22); scroll:GetScript("OnVerticalScroll")(scroll, 100 * 22)')
 check("...scrolling refills them", ev("VendorProfit.PurchasePanel.Row(1).purchase.total") == 2000 - 100)
 
 # One auction purchase of 100 arrives as five mails of 20, each with the invoice for all 100.
@@ -2046,6 +2106,9 @@ text = ev("VendorProfitPriceExport.edit.__text")
 check("lists the vendor's prices in the file's format, per item, sorted, marking new and changed",
       text.split("\n") == ["    [2320] = 10, -- Coarse Thread", "    [2321] = 120, -- Fine Thread (was 100)", "    [99999] = 7, -- New Thing (new)"])
 check("...leaving out limited stock and items that cost more than gold", "2880" not in text and "2324" not in text)
+check("in a scroll box as tall as its 3 lines, no scroll bar",
+      ev("VendorProfitPriceExport.scroll:GetHeight()") == 3 * 14 + 4 and ev("VendorProfitPriceExport.scroll.back:IsShown()")
+      and not ev("VendorProfitPriceExport.scroll.ScrollBar:IsShown()"))
 check("ready to copy", ev("VendorProfitPriceExport:IsShown()") and ev("VendorProfitPriceExport.edit.__highlighted")
       and ev("VendorProfitPriceExport.note:GetText()") == "3 items, 2 new or changed. Copy (Ctrl+C) the lines you want into VendorPrices.lua.")
 run('__stub.CloseMerchant()')
@@ -2350,7 +2413,7 @@ run(B + ".profitHeading:Click()")
 check("no investment where a reagent has no price; shown where only the sale price is missing",
       ev("VendorProfit.BestPanel.Row(4).investment:GetText()") == "" and ev("VendorProfit.BestPanel.Row(5).investment:GetText()") != "")
 check("Best Crafts is wider than the Shopping List, for the columns", ev("VendorProfitPanel:GetWidth()") >= 520
-      and ev("VendorProfitPanel:GetWidth()") == ev("VendorProfit.BestPanel.Frame().list:GetWidth()") + 2 * 16 + 24)
+      and ev("VendorProfitPanel:GetWidth()") == ev("VendorProfit.BestPanel.Frame().list:GetWidth()") + 2 * 16 + 34)
 BF = "VendorProfit.BestPanel.Frame()"
 best_keys = ["name", "investment", "profit", "roi", "auctions", "queued"]
 check("Best Crafts columns never touch: values and headings a gap apart, inside the list",
@@ -2551,10 +2614,27 @@ reset_filters()
 run('for _, id in ipairs({ 2670, 3328, 2671, 9102 }) do if __stub.recipes[id] then __stub.recipes[id].difficulty = nil end end')
 run('if __stub.recipe then __stub.recipe.difficulty = nil end; VendorProfit.BestPanel.Refresh()')
 check("unpriced ones can still be queued and shown", ev("VendorProfit.BestPanel.Row(4).queue:IsShown()") and ev("VendorProfit.BestPanel.Row(4).hit:IsShown()"))
-# 14 rows tall (and room for the favorites' divider) however few are listed, so
-# the window doesn't jump as you search or filter.
-check("the list scrolls: a scroll frame holding the rows, 14 tall with 5 listed", ev(B + ".scroll.__scrollChild == " + B + ".list")
-      and ev(B + ".scroll:GetHeight()") == 14 * 22 + 7 and ev(B + ".list:GetHeight()") == 5 * 22)
+# The room for 14 rows (and the favorites' divider) however few are listed, so
+# the window doesn't jump as you search or filter; the box as tall as its rows.
+check("the list scrolls: a scroll box filling the page, 14 rows tall with 5 listed, no scroll bar",
+      ev(B + ".scroll.__scrollChild == " + B + ".list")
+      and ev(B + ".scroll:GetHeight()") == 14 * 22 + 7 and ev(B + ".list:GetHeight()") == 5 * 22
+      and ev(B + ".scroll.back:GetHeight()") == 14 * 22 + 7 + 12 and ev(B + ".scroll.back.__color[4]") == 0.35
+      and not ev(B + ".scroll.ScrollBar:IsShown()"))
+# The bar's range left at an older, longer list's (the game doesn't always
+# update it), as in game: the wheel scrolled on into nothing.
+run(B + ".scroll.ScrollBar:SetMinMaxValues(0, 500); VendorProfit.BestPanel.Refresh(); " + B + ".scroll:MouseWheel(-5)")
+check("...and the mouse wheel can't scroll it past its end into nothing", ev(B + ".scroll:GetVerticalScroll()") == 0)
+# The game's template, on a range change, setting the bar to an older,
+# longer list's range and showing it (as after a filter cut the list short).
+run('''
+    local s = VendorProfit.BestPanel.Frame().scroll
+    s.ScrollBar:SetMinMaxValues(0, 500); s.ScrollBar:Show()
+    s:GetScript("OnScrollRangeChanged")(s, 0, 500)
+    s:MouseWheel(-5)
+''')
+check("...nor after the game's template sets the bar to an older list's range: no bar, no scrolling",
+      not ev(B + ".scroll.ScrollBar:IsShown()") and ev(B + ".scroll:GetVerticalScroll()") == 0)
 run(B + '.scroll:SetVerticalScroll(40)')
 run(B + '.tabs.auction:Click()')
 check("auction tab: no auction price for the ring; scrolled back to the top", best()[4].endswith("no auction price|r")

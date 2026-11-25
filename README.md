@@ -252,7 +252,7 @@ The order is saved per character. Each queued recipe has three small buttons: **
 
 The window's **Profit History** tab (or `/vprofit history`) shows what you've made selling things you crafted, with totals for everything and for the last 7 days at the top. Two buttons switch between views, the search box filters both by item name as you type, and **Range** narrows both to recent sales:
 
-- **Sales** (the default): every sale, newest first: the date (mm/dd), the item, what it cost you, what it sold for and the profit. Hover a sale to see whether it sold to a vendor or at auction, and its cost split into what you bought and your own items.
+- **Sales** (the default): every sale, newest first: the date (mm/dd), the item, what it cost you, what it sold for and the profit. Click a heading to sort by it (again to reverse); the sort is saved per character. Hover a sale to see whether it sold to a vendor or at auction, and its cost split into what you bought and your own items.
 - **Best Sellers**: one row per item: how many **Sold**, the **Avg profit** on each, the total **Profit**, the **Avg ROI** (each one's own return on what it cost you, averaged) and the overall **ROI** (all its profit over all it cost), most profit first. Click a heading to sort by it (again to reverse); the sort is saved per character. Hover a row for its average cost and sale price, how many went to vendors and to the auction house, and when it last sold.
 - **Range** (the button at the end of the row): **All time**, the **last 7, 30 or 90 days**, or the **last 50, 100 or 250 sales**. It's saved per character. Use All time for each item's long-run average, and a range to see how it's doing lately.
 
@@ -282,7 +282,7 @@ Sales use up the item's costs oldest first. Vendor sales are read from the vendo
 
 ## Purchase History
 
-The **Purchase History** tab (or `/vprofit purchases`) lists your last 5,000 purchases, newest first, for a gut check: the date (mm/dd), the item and how many, whether it came from the auction house or a vendor, what you paid **each** and in **total**, and what one costs **now** (the cheaper of the vendor and auction prices). Hover a purchase for the exact time.
+The **Purchase History** tab (or `/vprofit purchases`) lists your last 5,000 purchases, newest first, for a gut check: the date (mm/dd), the item and how many, whether it came from the auction house or a vendor, what you paid **each** and in **total**, and what one costs **now** (the cheaper of the vendor and auction prices). Click a heading to sort by it (again to reverse), saved per character. Hover a purchase for the exact time.
 
 Vendor purchases show up straight away, from any vendor. Auction house purchases show up when you take them out of the mailbox, read from their mail, however you bought them. These are the same purchases whose costs feed the Profit History.
 
@@ -322,6 +322,7 @@ Files:
 | File | What it does |
 | --- | --- |
 | `Core.lua` | Prices, working out the shown recipe, attaching to Auctionator's frame |
+| `ScrollBox.lua` | The scroll boxes every list uses: shaded, padded, the scroll bar only when there's more than fits (`docs/ui-design.md`) |
 | `VendorPrices.lua` | Usual vendor prices, for items Auctionator hasn't seen a vendor sell yet; updated with `/vprofit prices` |
 | `VendorLine.lua` | The Vendor Profit line |
 | `Recipes.lua` | Saving and looking up this character's recipes |

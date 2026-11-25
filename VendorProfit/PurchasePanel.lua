@@ -1,6 +1,6 @@
 -- The Purchase History tab of the Vendor Profit window: your recent
--- purchases (History.lua), newest first, with what you paid for each one,
--- for a gut check against today's price. Auction house purchases show up
+-- purchases (History.lua), newest first (or sorted by a column), with what
+-- you paid for each one, for a gut check against today's price. Auction house purchases show up
 -- when you take them out of the mailbox; vendor purchases straight away.
 --
 -- The list can hold thousands of purchases, so it only builds the rows that
@@ -19,13 +19,19 @@ VendorProfit.PurchasePanel = PurchasePanel
 -- Wider if the columns need it (Columns.lua).
 local WIDTH = 540
 local PADDING = 16
-local ROW_HEIGHT = 18
+-- Rows as tall as Best Crafts', as every table's (Columns.lua).
+local ROW_HEIGHT = Columns.ROW_HEIGHT
+-- The text's place in a row, from the row's top: as on Best Crafts.
+local TEXT_OFFSET = -4
 -- The column headings sit 16 above the list, as far below the title (12
 -- tall, at -32) as Profit History's total is below its title.
 local LIST_TOP = -66
-local VISIBLE_ROWS = 18
-local SCROLLBAR_WIDTH = 24
-local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - SCROLLBAR_WIDTH
+local VISIBLE_ROWS = 15
+-- The list is in a scroll box (ScrollBox.lua): its padding and bar beside
+-- the list, its padding above and below.
+local BOX_EXTRA = VendorProfit.ScrollBox.EXTRA_WIDTH
+local BOX_PADDING = VendorProfit.ScrollBox.PADDING
+local BASE_LIST_WIDTH = WIDTH - 2 * PADDING - BOX_EXTRA
 local LIST_WIDTH = BASE_LIST_WIDTH
 -- The columns, by key (Columns.lua), laid out for every purchase on each
 -- refresh: Date, Item, From, Each, Total, Now (the cheapest price today).
@@ -39,6 +45,30 @@ local pageDef
 local frame
 local rows = {}
 
+-- The sort: newest first, unless changed (saved per character). Item and
+-- From sort A to Z first; dates and money the newest or most first.
+local SORT_DEFAULT = { key = "date", ascending = false }
+local STARTS_ASCENDING = { item = true, from = true }
+
+local function Sort()
+    local db = VendorProfitCharDB
+    if db and type(db.purchasesSort) == "table" and db.purchasesSort.key then
+        return db.purchasesSort
+    end
+    return SORT_DEFAULT
+end
+
+function PurchasePanel.Sort()
+    return Sort()
+end
+
+-- Item names arrived: what the list shows may change (sorting by item).
+local namesVersion = 0
+local function NamesLoaded()
+    namesVersion = namesVersion + 1
+    PurchasePanel.Refresh()
+end
+
 local function Gray(text)
     return GRAY_FONT_COLOR:WrapTextInColorCode(text)
 end
@@ -46,7 +76,7 @@ end
 local function ItemLabel(itemID, n)
     local name = C_Item.GetItemInfo(itemID)
     if name == nil then
-        VendorProfit.RedrawWhenLoaded(itemID, PurchasePanel.Refresh)
+        VendorProfit.RedrawWhenLoaded(itemID, NamesLoaded)
         name = "item " .. itemID
     end
     local icon = select(5, C_Item.GetItemInfoInstant(itemID))
@@ -69,6 +99,56 @@ local function MarketNow(itemID)
         return math.min(vendor, auction)
     end
     return vendor or auction
+end
+
+local function SetSort(key)
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    VendorProfitCharDB.purchasesSort = Columns.NextSort(Sort(), key, STARTS_ASCENDING)
+    PurchasePanel.Refresh()
+end
+
+local VALUES = {
+    date = function(p) return p.time end,
+    item = function(p) return (C_Item.GetItemInfo(p.item) or ("item " .. p.item)):lower() end,
+    from = function(p) return p.how == "vendor" and L.HISTORY_VENDOR or L.HISTORY_AUCTION end,
+    each = function(p) return p.total / p.n end,
+    total = function(p) return p.total end,
+    market = function(p) return MarketNow(p.item) or -math.huge end,
+}
+
+-- The purchases the list shows, in the chosen order. Worked out again only
+-- when the purchases, sort or a loaded name change (and, sorted by today's
+-- price, each minute, as prices move).
+local data, dataKey = {}, nil
+local function Data()
+    local sort = Sort()
+    local key = table.concat({ History.Version(), History.PurchaseCount(), sort.key, tostring(sort.ascending),
+        namesVersion, sort.key == "market" and math.floor(time() / 60) or 0 }, "/")
+    if key ~= dataKey then
+        dataKey = key
+        data = {}
+        for index = 1, History.PurchaseCount() do
+            data[index] = History.Purchase(index)
+        end
+        -- Newest first already; any other order sorted (ties newest first).
+        if not (sort.key == "date" and not sort.ascending) then
+            local value, values = VALUES[sort.key] or VALUES.date, {}
+            for _, purchase in ipairs(data) do
+                values[purchase] = value(purchase)
+            end
+            table.sort(data, function(a, b)
+                local x, y = values[a], values[b]
+                if x ~= y then
+                    if sort.ascending then
+                        return x < y
+                    end
+                    return x > y
+                end
+                return a.time > b.time
+            end)
+        end
+    end
+    return data
 end
 
 local function Column(parent, width, justify)
@@ -107,10 +187,18 @@ local function GetRow(slot)
         row.each = Column(list, 0, "RIGHT")
         row.total = Column(list, 0, "RIGHT")
         row.market = Column(list, 0, "RIGHT")
+        -- The whole row hovers, for the details, lit while the mouse is on it.
+        row.highlight = Columns.Highlight(list)
         row.hit = CreateFrame("Frame", nil, list)
         row.hit:EnableMouse(true)
-        row.hit:SetScript("OnEnter", function() ShowTooltip(row) end)
-        row.hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row.hit:SetScript("OnEnter", function()
+            row.highlight:Show()
+            ShowTooltip(row)
+        end)
+        row.hit:SetScript("OnLeave", function()
+            row.highlight:Hide()
+            GameTooltip:Hide()
+        end)
         row.regions = { row.date, row.item, row.from, row.each, row.total, row.market, row.hit }
         rows[slot] = row
     end
@@ -124,20 +212,23 @@ local function PlaceRow(row, index)
     end
     row.index, row.layoutKey = index, layoutKey
     local list = frame.list
-    local top = -(index - 1) * ROW_HEIGHT - 2
+    local top = -(index - 1) * ROW_HEIGHT
     for _, key in ipairs(KEYS) do
         local region, column = row[key], col[key]
         region:SetWidth(column.width)
         region:ClearAllPoints()
         if FROM_LEFT[key] then
-            region:SetPoint("TOPLEFT", list, "TOPLEFT", column.left, top)
+            region:SetPoint("TOPLEFT", list, "TOPLEFT", column.left, top + TEXT_OFFSET)
         else
-            region:SetPoint("TOPRIGHT", list, "TOPRIGHT", column.right, top)
+            region:SetPoint("TOPRIGHT", list, "TOPRIGHT", column.right, top + TEXT_OFFSET)
         end
     end
     row.hit:ClearAllPoints()
-    row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top + 2)
+    row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top)
     row.hit:SetSize(LIST_WIDTH, ROW_HEIGHT)
+    row.highlight:ClearAllPoints()
+    row.highlight:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top)
+    row.highlight:SetSize(LIST_WIDTH, ROW_HEIGHT)
 end
 
 -- Lays the columns out to fit every purchase (Columns.lua), not just the
@@ -157,18 +248,18 @@ local function LayOut()
     end
     local key
     col, LIST_WIDTH, key = Columns.Layout(BASE_LIST_WIDTH, {
-        { key = "date", heading = L.HISTORY_DATE, samples = Columns.Date() },
-        { key = "item", heading = L.HISTORY_ITEM, fill = true },
-        { key = "from", heading = L.PURCHASES_FROM, samples = { L.HISTORY_VENDOR, L.HISTORY_AUCTION } },
-        { key = "each", heading = L.PURCHASES_EACH, samples = Columns.Money(extents, "each") },
-        { key = "total", heading = L.PURCHASES_TOTAL, samples = Columns.Money(extents, "total") },
-        { key = "market", heading = L.PURCHASES_NOW, samples = Columns.Money(extents, "market") },
+        { key = "date", heading = L.HISTORY_DATE, sorts = true, samples = Columns.Date() },
+        { key = "item", heading = L.HISTORY_ITEM, sorts = true, fill = true },
+        { key = "from", heading = L.PURCHASES_FROM, sorts = true, samples = { L.HISTORY_VENDOR, L.HISTORY_AUCTION } },
+        { key = "each", heading = L.PURCHASES_EACH, sorts = true, samples = Columns.Money(extents, "each") },
+        { key = "total", heading = L.PURCHASES_TOTAL, sorts = true, samples = Columns.Money(extents, "total") },
+        { key = "market", heading = L.PURCHASES_NOW, sorts = true, samples = Columns.Money(extents, "market") },
     })
     if key == layoutKey then
         return
     end
     layoutKey = key
-    WIDTH = LIST_WIDTH + 2 * PADDING + SCROLLBAR_WIDTH
+    WIDTH = LIST_WIDTH + 2 * PADDING + BOX_EXTRA
     pageDef.width = WIDTH
     frame.list:SetWidth(LIST_WIDTH)
     for index, heading in ipairs(frame.headings) do
@@ -176,20 +267,22 @@ local function LayOut()
         heading:SetWidth(column.width)
         heading:ClearAllPoints()
         if FROM_LEFT[KEYS[index]] then
-            heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + column.left, LIST_TOP + 16)
+            heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + BOX_PADDING + column.left, LIST_TOP + 16)
         else
-            heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + LIST_WIDTH + column.right, LIST_TOP + 16)
+            heading:SetPoint("TOPRIGHT", frame, "TOPLEFT", PADDING + BOX_PADDING + LIST_WIDTH + column.right,
+                LIST_TOP + 16)
         end
     end
 end
 
 -- Fills the rows that fit on screen from where the list is scrolled to.
 local function Render()
-    local count = History.PurchaseCount()
+    local list = Data()
+    local count = #list
     local first = math.floor((frame.scroll:GetVerticalScroll() or 0) / ROW_HEIGHT)
     local needed = math.min(VISIBLE_ROWS + 1, math.max(count - first, 0))
     for slot = 1, math.max(needed, #rows) do
-        local purchase = slot <= needed and History.Purchase(first + slot)
+        local purchase = slot <= needed and list[first + slot]
         local row = (purchase or rows[slot]) and GetRow(slot)
         if purchase then
             PlaceRow(row, first + slot)
@@ -209,6 +302,7 @@ local function Render()
             for _, region in ipairs(row.regions) do
                 region:Hide()
             end
+            row.highlight:Hide()
         end
     end
 end
@@ -220,34 +314,31 @@ local function Create(page)
     frame.heading:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, -32)
     frame.heading:SetText(L.TAB_PURCHASES)
 
-    -- In KEYS' order, placed with the columns (LayOut).
-    local function Heading(text, justify)
-        local heading = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        heading:SetJustifyH(justify)
-        heading:SetText(text)
-        return heading
+    -- In KEYS' order, placed with the columns (LayOut): click one to sort
+    -- by it, as on Best Crafts.
+    local function Heading(key, text, justify)
+        return Columns.Heading(frame, key, text, justify, SetSort)
     end
     frame.headings = {
-        Heading(L.HISTORY_DATE, "LEFT"),
-        Heading(L.HISTORY_ITEM, "LEFT"),
-        Heading(L.PURCHASES_FROM, "LEFT"),
-        Heading(L.PURCHASES_EACH, "RIGHT"),
-        Heading(L.PURCHASES_TOTAL, "RIGHT"),
-        Heading(L.PURCHASES_NOW, "RIGHT"),
+        Heading("date", L.HISTORY_DATE, "LEFT"),
+        Heading("item", L.HISTORY_ITEM, "LEFT"),
+        Heading("from", L.PURCHASES_FROM, "LEFT"),
+        Heading("each", L.PURCHASES_EACH, "RIGHT"),
+        Heading("total", L.PURCHASES_TOTAL, "RIGHT"),
+        Heading("market", L.PURCHASES_NOW, "RIGHT"),
     }
 
-    frame.scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
-    frame.scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, LIST_TOP)
-    frame.list = CreateFrame("Frame", nil, frame.scroll)
+    -- The list, in a scroll box (placed in Refresh).
+    frame.scroll = VendorProfit.ScrollBox.Create(frame)
+    frame.list = frame.scroll.list
     frame.list:SetSize(LIST_WIDTH, ROW_HEIGHT)
-    frame.scroll:SetScrollChild(frame.list)
     -- Scrolling refills the rows on screen.
     frame.scroll:HookScript("OnVerticalScroll", Render)
 
     frame.empty = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    frame.empty:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, LIST_TOP)
+    frame.empty:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + BOX_PADDING, LIST_TOP - BOX_PADDING)
     frame.empty:SetJustifyH("LEFT")
-    frame.empty:SetWidth(WIDTH - 2 * PADDING)
+    frame.empty:SetWidth(WIDTH - 2 * PADDING - 2 * BOX_PADDING)
     frame.empty:SetText(L.PURCHASES_EMPTY)
 end
 
@@ -260,16 +351,18 @@ local function Refresh()
     end
     Render()
 
-    local shown = math.max(math.min(count, VISIBLE_ROWS), 1)
-    frame.list:SetHeight(math.max(count, 1) * ROW_HEIGHT)
-    frame.scroll:SetSize(LIST_WIDTH, shown * ROW_HEIGHT)
-    frame.scroll:SetShown(count > 0)
+    -- The list fills the page: its box always VISIBLE_ROWS tall, kept when
+    -- empty (saying so, inside it).
+    local boxHeight = VendorProfit.ScrollBox.Place(frame.scroll, frame, PADDING, LIST_TOP, LIST_WIDTH,
+        VISIBLE_ROWS * ROW_HEIGHT, count * ROW_HEIGHT, true)
     frame.empty:SetShown(count == 0)
     for _, heading in ipairs(frame.headings) do
         heading:SetShown(count > 0)
     end
+    -- The sorted heading in white, with an arrow for its direction.
+    Columns.ShowSort(frame.headings, Sort())
 
-    local listHeight = count > 0 and shown * ROW_HEIGHT or (frame.empty:GetStringHeight() or 24)
+    local listHeight = boxHeight
     return -LIST_TOP + listHeight + PADDING
 end
 

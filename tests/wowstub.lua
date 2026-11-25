@@ -43,7 +43,19 @@ function CreateFrame(_, name, parent, template)
         end
     end
     if template == "UIPanelScrollFrameTemplate" then
-        f.ScrollBar = CreateFrame("Slider", nil, f)
+        -- The bar is a slider: the mouse wheel moves it, within its range,
+        -- and it scrolls the frame. Its range is only what was last set
+        -- (the game's template sets it when the scroll range changes).
+        local bar = CreateFrame("Slider", nil, f)
+        bar.__min, bar.__max, bar.__value = 0, 0, 0
+        function bar:SetMinMaxValues(lo, hi) self.__min, self.__max = lo, hi end
+        function bar:GetValue() return self.__value end
+        function bar:SetValue(v)
+            self.__value = math.max(self.__min, math.min(v, self.__max))
+            f:SetVerticalScroll(self.__value)
+        end
+        function f:MouseWheel(delta) bar:SetValue(bar:GetValue() - delta * 20) end
+        f.ScrollBar = bar
     end
     -- The window template's close button, which closes through HideUIPanel.
     if template == "ButtonFrameTemplate" then
@@ -153,6 +165,8 @@ function FrameMethods:IsEnabled() return self.__enabled ~= false end
 function FrameMethods:SetTitle(t) self.__title = t end
 function FrameMethods:SetMultiLine(m) self.__multiLine = m end
 function FrameMethods:SetFontObject() end
+function FrameMethods:GetFont() return "Fonts\\ARIALN.TTF", 14, "" end
+function FrameMethods:SetParent(parent) self.__parent = parent end
 function FrameMethods:SetAutoFocus(f) end
 function FrameMethods:SetNumeric(n) self.__numeric = n end
 function FrameMethods:SetJustifyH(j) self.__justifyH = j end
