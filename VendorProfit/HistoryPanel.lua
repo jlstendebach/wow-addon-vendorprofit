@@ -724,9 +724,9 @@ local function Create(page)
     end)
 
     frame.empty = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    frame.empty:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, LIST_TOP)
+    frame.empty:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + BOX_PADDING, LIST_TOP - BOX_PADDING)
     frame.empty:SetJustifyH("LEFT")
-    frame.empty:SetWidth(WIDTH - 2 * PADDING)
+    frame.empty:SetWidth(WIDTH - 2 * PADDING - 2 * BOX_PADDING)
 end
 
 -- Fills the Sales rows that fit on screen from where the list is scrolled
@@ -851,9 +851,10 @@ local function Refresh()
         end
     end
 
-    local visible = math.min(shown, VISIBLE_ROWS)
+    -- The list fills the page: its box always VISIBLE_ROWS tall, kept when
+    -- empty (saying why, inside it).
     local boxHeight = VendorProfit.ScrollBox.Place(frame.scroll, frame, PADDING, LIST_TOP, LIST_WIDTH,
-        visible * ROW_HEIGHT, shown * ROW_HEIGHT)
+        VISIBLE_ROWS * ROW_HEIGHT, shown * ROW_HEIGHT, true)
     if count == 0 then
         frame.empty:SetText(L.HISTORY_EMPTY)
     elseif filter ~= "" then
@@ -863,8 +864,7 @@ local function Refresh()
     end
     frame.empty:SetShown(shown == 0)
 
-    local listHeight = shown > 0 and boxHeight or (frame.empty:GetStringHeight() or 24)
-    return -LIST_TOP + listHeight + PADDING
+    return -LIST_TOP + boxHeight + PADDING
 end
 
 function HistoryPanel.Refresh()

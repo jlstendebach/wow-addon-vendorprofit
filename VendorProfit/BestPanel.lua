@@ -1615,10 +1615,9 @@ local function Refresh()
         divider:Hide()
     end
 
-    -- The list's room is VisibleRows tall, however many are listed (so the
-    -- window doesn't jump as you search or filter); its box is as tall as
-    -- the rows, up to that, and scrolls for the rest, back to the top for
-    -- another profession or tab.
+    -- The list's box fills the page: VisibleRows tall, however many are
+    -- listed (so the window doesn't jump as you search or filter), and
+    -- scrolls for the rest, back to the top for another profession or tab.
     local gap = favorites and DIVIDER_GAP or 0
     local listHeight = VisibleRows() * ROW_HEIGHT + DIVIDER_GAP
     local content = #ranked > 0 and #ranked * ROW_HEIGHT + gap or 0
@@ -1627,8 +1626,7 @@ local function Refresh()
         shownList = listKey
         frame.scroll:SetVerticalScroll(0)
     end
-    VendorProfit.ScrollBox.Place(frame.scroll, frame, PADDING, LIST_TOP, LIST_WIDTH,
-        math.min(content, listHeight), content)
+    VendorProfit.ScrollBox.Place(frame.scroll, frame, PADDING, LIST_TOP, LIST_WIDTH, listHeight, content, true)
     FillVisible()
     local y = LIST_TOP - listHeight - VendorProfit.ScrollBox.EXTRA_HEIGHT
 

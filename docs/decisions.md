@@ -98,10 +98,13 @@ time" route mode).
   box, Best Crafts, Profit and Purchase History, the vendor price lines) uses
   ScrollBox.lua, after the To do box Josh settled on: shaded, padded, as
   tall as its rows up to its most, the scroll bar only when there's more
-  than fits. The rule is in `docs/ui-design.md`. Best Crafts keeps the
-  room for its rows (the window doesn't jump as you search) while the box
-  inside is only as tall as what's listed. Profit and Purchase History keep
-  their "nothing yet" notes where an empty list would be.
+  than fits. The rule is in `docs/ui-design.md`. A list that's a page's
+  main content (Best Crafts, Profit and Purchase History) fills its page
+  instead, Josh's call: its box always its most rows tall, kept when empty,
+  with Profit and Purchase History's "nothing yet" notes inside it. The
+  bar's range (the slider the mouse wheel moves) is set with the box: left
+  at an older, longer list's, the wheel scrolled Best Crafts on into
+  nothing.
 
 ## Best Crafts
 

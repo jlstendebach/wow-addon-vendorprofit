@@ -2,7 +2,9 @@
 -- little darker than the window, its items and scroll bar inset by PADDING,
 -- as tall as its rows up to its most rows, the scroll bar only when there's
 -- more than fits, and no box with nothing in it. The To do box set the
--- pattern; every list that scrolls uses this.
+-- pattern; every list that scrolls uses this. A list that's a page's main
+-- content (Best Crafts, Profit and Purchase History) fills its page
+-- instead: its box always its most rows tall, kept when empty.
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -52,9 +54,10 @@ end
 -- Places a box with its top left at (x, y) from relativeTo's top left, its
 -- list listWidth wide, height tall on screen (its most, or less), the list
 -- contentHeight in all. With nothing in it (contentHeight 0) there's no
--- box. Returns how tall the box is (0 with none).
-function ScrollBox.Place(scroll, relativeTo, x, y, listWidth, height, contentHeight)
-    if contentHeight <= 0 then
+-- box, unless keep: a list that fills its page keeps its box, empty.
+-- Returns how tall the box is (0 with none).
+function ScrollBox.Place(scroll, relativeTo, x, y, listWidth, height, contentHeight, keep)
+    if contentHeight <= 0 and not keep then
         ScrollBox.Hide(scroll)
         return 0
     end
@@ -79,10 +82,19 @@ function ScrollBox.Place(scroll, relativeTo, x, y, listWidth, height, contentHei
         bar:SetPoint("BOTTOMRIGHT", back, "BOTTOMRIGHT", -pad, pad + ARROW)
     end
     ShowBar(scroll, contentHeight > height + 0.5)
-    -- Shorter than before: not left scrolled past its new end.
-    local maxScroll = math.max(contentHeight - height, 0)
+    -- Shorter than before: not left scrolled past its new end. The bar (a
+    -- slider) is what the mouse wheel moves, so its range is set here too:
+    -- left at an old, longer list's, the wheel scrolled on past the end,
+    -- into nothing.
+    local maxScroll = math.max(math.floor(contentHeight - height), 0)
     if (scroll:GetVerticalScroll() or 0) > maxScroll then
         scroll:SetVerticalScroll(maxScroll)
+    end
+    if bar and bar.SetMinMaxValues then
+        bar:SetMinMaxValues(0, maxScroll)
+        if (bar:GetValue() or 0) > maxScroll then
+            bar:SetValue(maxScroll)
+        end
     end
     scroll:Show()
     return height + ScrollBox.EXTRA_HEIGHT

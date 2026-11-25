@@ -248,9 +248,9 @@ local function Create(page)
     frame.scroll:HookScript("OnVerticalScroll", Render)
 
     frame.empty = frame:CreateFontString(nil, "OVERLAY", "GameFontDisableSmall")
-    frame.empty:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING, LIST_TOP)
+    frame.empty:SetPoint("TOPLEFT", frame, "TOPLEFT", PADDING + BOX_PADDING, LIST_TOP - BOX_PADDING)
     frame.empty:SetJustifyH("LEFT")
-    frame.empty:SetWidth(WIDTH - 2 * PADDING)
+    frame.empty:SetWidth(WIDTH - 2 * PADDING - 2 * BOX_PADDING)
     frame.empty:SetText(L.PURCHASES_EMPTY)
 end
 
@@ -263,15 +263,16 @@ local function Refresh()
     end
     Render()
 
-    local shown = math.min(count, VISIBLE_ROWS)
+    -- The list fills the page: its box always VISIBLE_ROWS tall, kept when
+    -- empty (saying so, inside it).
     local boxHeight = VendorProfit.ScrollBox.Place(frame.scroll, frame, PADDING, LIST_TOP, LIST_WIDTH,
-        shown * ROW_HEIGHT, count * ROW_HEIGHT)
+        VISIBLE_ROWS * ROW_HEIGHT, count * ROW_HEIGHT, true)
     frame.empty:SetShown(count == 0)
     for _, heading in ipairs(frame.headings) do
         heading:SetShown(count > 0)
     end
 
-    local listHeight = count > 0 and boxHeight or (frame.empty:GetStringHeight() or 24)
+    local listHeight = boxHeight
     return -LIST_TOP + listHeight + PADDING
 end
 

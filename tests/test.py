@@ -1748,10 +1748,11 @@ run('local r = VendorProfit.HistoryPanel.Row(1); r.hit.__left = 10; r.date.__lef
 check("...moving along as the cursor crosses into another column", tooltip_at("VendorProfit.HistoryPanel.Row(1).hit", "VendorProfit.HistoryPanel.Row(1).item"))
 run('GameTooltip:Hide(); VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnUpdate")(VendorProfit.HistoryPanel.Row(1).hit)')
 check("...and stops following once the tooltip's gone", ev('VendorProfit.HistoryPanel.Row(1).hit:GetScript("OnUpdate")') is None)
-check("the sales in a scroll box as tall as its rows, no scroll bar with so few",
+check("the sales in a scroll box filling the page (18 rows), no scroll bar with so few",
       ev("VendorProfit.HistoryPanel.Frame().scroll.back:IsShown()")
       and ev("VendorProfit.HistoryPanel.Frame().scroll.back.__color[4]") == 0.35
-      and ev("VendorProfit.HistoryPanel.Frame().scroll:GetHeight()") == ev("VendorProfit.HistoryPanel.Frame().list:GetHeight()")
+      and ev("VendorProfit.HistoryPanel.Frame().scroll:GetHeight()") == 18 * 18
+      and ev("VendorProfit.HistoryPanel.Frame().list:GetHeight()") < 18 * 18
       and not ev("VendorProfit.HistoryPanel.Frame().scroll.ScrollBar:IsShown()"))
 check("Sales columns never touch: values and headings a gap apart, inside the list",
       columns_apart("VendorProfit.HistoryPanel.Frame()", ["VendorProfit.HistoryPanel.Row(1)." + k for k in ["date", "item", "cost", "sold", "profit"]])
@@ -1910,8 +1911,9 @@ run('local scroll = ' + HF + '.scroll; scroll:SetVerticalScroll(5000 * 18); scro
 check("scrolled half way: the rows show the 5,001st newest sale on", ev("VendorProfit.HistoryPanel.Row(1).sale.sold") == 100 + 5000
       and ev("VendorProfit.HistoryPanel.Row(20) == nil"))
 run(HF + '.search:Type("zzz")')
-check("searching back to the top, nothing matching: no box, saying why", ev(HF + ".scroll:GetVerticalScroll()") == 0
-      and ev(HF + ".empty:IsShown()") and not ev(HF + ".scroll.back:IsShown()") and not ev(HF + ".scroll:IsShown()"))
+check("searching back to the top, nothing matching: the box kept, empty, saying why inside it",
+      ev(HF + ".scroll:GetVerticalScroll()") == 0 and ev(HF + ".empty:IsShown()") and ev(HF + ".scroll.back:IsShown()")
+      and ev(HF + ".empty.__point[4]") == 16 + 6)
 run(HF + '.search:Type("")')
 run('VendorProfitCharDB.history.sales, VendorProfitCharDB.history.items = __stub.savedSales, __stub.savedItems; VendorProfit.HistoryPanel.Refresh()')
 
@@ -1962,8 +1964,8 @@ check("purchases listed newest first: date, item, from, each, total, now", len(b
 check("...with today's cheapest price to compare", bought[2].endswith(ev('VendorProfit.FormatMoney(math.min(150, %d))' % 120)))
 check("window as wide as the columns need", ev("VendorProfitPanel:GetWidth()") >= 540 and ev("VendorProfitPanel.tabs.purchases.label") == "Purchase History")
 PF = "VendorProfit.PurchasePanel.Frame()"
-check("purchases in a scroll box as tall as its rows, no scroll bar with so few",
-      ev(PF + ".scroll.back:IsShown()") and ev(PF + ".scroll:GetHeight()") == ev(PF + ".list:GetHeight()")
+check("purchases in a scroll box filling the page (18 rows), no scroll bar with so few",
+      ev(PF + ".scroll.back:IsShown()") and ev(PF + ".scroll:GetHeight()") == 18 * 18
       and not ev(PF + ".scroll.ScrollBar:IsShown()"))
 check("Purchase columns never touch: values and headings a gap apart, inside the list",
       columns_apart(PF, ["VendorProfit.PurchasePanel.Row(1)." + k for k in ["date", "item", "from", "each", "total", "market"]])
@@ -2569,11 +2571,15 @@ run('if __stub.recipe then __stub.recipe.difficulty = nil end; VendorProfit.Best
 check("unpriced ones can still be queued and shown", ev("VendorProfit.BestPanel.Row(4).queue:IsShown()") and ev("VendorProfit.BestPanel.Row(4).hit:IsShown()"))
 # The room for 14 rows (and the favorites' divider) however few are listed, so
 # the window doesn't jump as you search or filter; the box as tall as its rows.
-check("the list scrolls: a scroll box holding the rows, as tall as the 5 listed, no scroll bar",
+check("the list scrolls: a scroll box filling the page, 14 rows tall with 5 listed, no scroll bar",
       ev(B + ".scroll.__scrollChild == " + B + ".list")
-      and ev(B + ".scroll:GetHeight()") == 5 * 22 and ev(B + ".list:GetHeight()") == 5 * 22
-      and ev(B + ".scroll.back:GetHeight()") == 5 * 22 + 12 and ev(B + ".scroll.back.__color[4]") == 0.35
+      and ev(B + ".scroll:GetHeight()") == 14 * 22 + 7 and ev(B + ".list:GetHeight()") == 5 * 22
+      and ev(B + ".scroll.back:GetHeight()") == 14 * 22 + 7 + 12 and ev(B + ".scroll.back.__color[4]") == 0.35
       and not ev(B + ".scroll.ScrollBar:IsShown()"))
+# The bar's range left at an older, longer list's (the game doesn't always
+# update it), as in game: the wheel scrolled on into nothing.
+run(B + ".scroll.ScrollBar:SetMinMaxValues(0, 500); VendorProfit.BestPanel.Refresh(); " + B + ".scroll:MouseWheel(-5)")
+check("...and the mouse wheel can't scroll it past its end into nothing", ev(B + ".scroll:GetVerticalScroll()") == 0)
 run(B + '.scroll:SetVerticalScroll(40)')
 run(B + '.tabs.auction:Click()')
 check("auction tab: no auction price for the ring; scrolled back to the top", best()[4].endswith("no auction price|r")
