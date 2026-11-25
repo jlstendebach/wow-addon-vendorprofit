@@ -2434,10 +2434,35 @@ check("min profit/hr at the shoulders' (to the silver): the cuirass and the shou
 above = at + 100
 run(M + '.hourGold:Type("%d"); ' % (above // 10000) + M + '.hourSilver:Type("%d")' % (above // 100 % 100))
 check("...a silver more: not the shoulders", shown() == ["Rough Bronze Cuirass"])
+# and / or between the minimums.
+J = M + ".joiners"
+check("'and' between the minimums, in the labels' gold, white under the mouse",
+      [ev(J + "[%d].__text" % i) for i in (1, 2)] == ["and", "and"]
+      and ev(J + "[1].__normalFont") == "GameFontNormalSmall" and ev(J + "[1].__highlightFont") == "GameFontHighlightSmall"
+      and ev(J + "[1].__point[2] == " + M + ".silver") and ev(M + ".hourGold.__point[2] ~= " + J + "[1]"))
+run(M + '.silver:Type("1")')
+check("and: min profit 1s and min profit/hr above the shoulders': just the cuirass", shown() == ["Rough Bronze Cuirass"])
+run(M + '.hourGold:Type("9999")')
+check("...and a min profit/hr nothing meets: none", shown() == [])
+run(J + '[2]:Click()')
+check("clicking either switches both to 'or', saved", [ev(J + "[%d].__text" % i) for i in (1, 2)] == ["or", "or"]
+      and ev("VendorProfitCharDB.bestMinimumsAny") == True)
+check("or: the recipes meeting either (the cuirass makes 1s; nothing makes that an hour)", shown() == ["Rough Bronze Cuirass"])
+run(M + '.silver:Type("0"); ' + M + '.roi:Type("1")')
+check("...min ROI 1% or an hourly minimum nothing meets: the two with an ROI; the box at 0 is no minimum (else all 5 would pass it)",
+      shown() == ["Rough Bronze Cuirass", "Rough Bronze Shoulders"])
+run(M + '.roi:Type("0"); ' + M + '.hourGold:Type("0"); ' + M + '.hourSilver:Type("0")')
+check("...no minimums set: everything, or or not", len(best()) == 5 and ev(J + "[1].__text") == "or")
+run(J + '[1].__scripts.OnEnter(' + J + '[1])')
+check("its tooltip says what it does", "any one" not in ev("GameTooltip.lines[1].left") and "one of the minimums" in ev("GameTooltip.lines[1].left"))
+run("GameTooltip:Hide(); " + J + "[1]:Click()")
+check("...and back to 'and'", ev(J + "[2].__text") == "and" and ev("VendorProfitCharDB.bestMinimumsAny") is None)
+run(J + "[1]:Click(); " + M + '.hourGold:Type("%d"); ' % (above // 10000) + M + '.hourSilver:Type("%d")' % (above // 100 % 100))
 run('__stub.castTimes = {}; __stub.PricesChanged()')
 run(B + '.filterReset:Click()')
-check("the red X clears the minimums too, boxes back to 0 (with the other filters: Mining ticked again)",
+check("the red X clears the minimums too, boxes back to 0, 'and' again (with the other filters: Mining ticked again)",
       len(best()) == 8 and ev("VendorProfitCharDB.bestMinimums") is None
+      and ev("VendorProfitCharDB.bestMinimumsAny") is None and ev(J + "[1].__text") == "and"
       and [ev(M + "." + k + ":GetText()") for k in ["gold", "silver", "hourGold", "hourSilver", "roi"]] == ["0"] * 5
       and not ev(B + ".filterReset:IsEnabled()"))
 run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
@@ -2446,11 +2471,12 @@ run_m('VendorProfit.Panel.Show("best")')
 check("minimums are saved per character, shown in their boxes next time (copper saved before the box went: left out)",
       [ev_m("VendorProfit.BestPanel.Frame().minimums." + k + ":GetText()") for k in ["gold", "silver", "hourGold", "hourSilver", "roi"]]
       == ["1", "23", "12", "34", "25"] and ev_m("({ (function() return VendorProfit.BestPanel.Minimums() end)() })[1]") == 12300)
+JOINED = 8 + 2 + max(ev_m('VendorProfit.Columns.Measure("and", "GameFontNormalSmall")'), ev_m('VendorProfit.Columns.Measure("or", "GameFontNormalSmall")')) + 8
 check("the window is wide enough for the bottom row and the size grip, however narrow the columns",
       ev_m("VendorProfitPanel:GetWidth()") - 2 * 16 >=
       ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_PROFIT, "GameFontNormalSmall")') + 10 + 47 + 9 + 36
-      + 24 + ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_PER_HOUR, "GameFontNormalSmall")') + 10 + 47 + 9 + 36
-      + 24 + ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_ROI, "GameFontNormalSmall")') + 10 + 47 + 16)
+      + JOINED + ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_PER_HOUR, "GameFontNormalSmall")') + 10 + 47 + 9 + 36
+      + JOINED + ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_ROI, "GameFontNormalSmall")') + 10 + 47 + 16)
 check("the minimum boxes as wide as 4 digits (or 2) and their unit",
       ev_m("VendorProfit.BestPanel.Frame().minimums.gold:GetWidth()") == 47
       and ev_m("VendorProfit.BestPanel.Frame().minimums.silver:GetWidth()") == 36

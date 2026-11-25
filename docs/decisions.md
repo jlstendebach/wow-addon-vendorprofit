@@ -384,6 +384,15 @@ time" route mode).
   **At most 100 items per request: more disconnects you from the server.**
   It was 200 once and kicked the player to the login screen.
 
+- **and / or between the minimums** (2026-11-25), Josh's idea: the word
+  between each pair of minimums is a toggle, and clicking either switches
+  both (one setting), so the row reads as the rule it applies ("Min profit
+  1g or Min profit/hr 5g or Min ROI 20%"). Gold text that turns white
+  under the mouse, like a link, rather than another button on a full row.
+  A box at 0 is no minimum either way (with or, it would otherwise let
+  everything through). Saved apart from the minimums; the red X sets it
+  back to and.
+
 ## Shopping List
 
 - **Post step** (2026-11-22), Josh's manual posting automated: after Craft,
