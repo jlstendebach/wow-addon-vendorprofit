@@ -1604,7 +1604,14 @@ events:SetScript("OnEvent", function(_, event)
     if event == "BAG_UPDATE_DELAYED" then
         local status = Shopper.Status()
         if status == "ready" or status == "idle" or status == "closed" then
-            Shopper.Recompute()
+            -- Planned again now only if the Shopping List is up; otherwise
+            -- when it's next needed (every bag update planned the whole
+            -- order, window open or not).
+            if Panel.IsShown() and activeTab == "shopping" then
+                Shopper.Recompute()
+            else
+                Shopper.Invalidate()
+            end
         end
     end
     RefreshIfShopping()

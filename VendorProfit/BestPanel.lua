@@ -740,6 +740,23 @@ end
 
 BestPanel.Minimums = Minimums
 
+-- Whether a recipe need meet only one of the minimums (or), not all of them
+-- (and, the default). Saved per character, apart from the minimums, so
+-- emptying the boxes keeps it; the filters' red X sets it back to and.
+local function AnyMinimum()
+    return VendorProfitCharDB ~= nil and VendorProfitCharDB.bestMinimumsAny == true
+end
+BestPanel.AnyMinimum = AnyMinimum
+
+local ShowMinimums
+
+local function SetAnyMinimum(any)
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    VendorProfitCharDB.bestMinimumsAny = any and true or nil
+    ShowMinimums()
+    BestPanel.Refresh()
+end
+
 local function SetMinimums(profit, roi, perHour)
     VendorProfitCharDB = VendorProfitCharDB or {}
     if profit > 0 or roi > 0 or perHour > 0 then
@@ -754,8 +771,9 @@ local function SetMinimums(profit, roi, perHour)
     BestPanel.Refresh()
 end
 
--- Shows the saved minimums in the boxes (0 for none).
-local function ShowMinimums()
+-- Shows the saved minimums in the boxes (0 for none), and and or between
+-- them.
+ShowMinimums = function()
     if frame == nil or frame.minimums == nil then
         return
     end
@@ -766,12 +784,16 @@ local function ShowMinimums()
     boxes.hourGold:SetText(tostring(math.floor(perHour / 10000)))
     boxes.hourSilver:SetText(tostring(math.floor(perHour / 100) % 100))
     boxes.roi:SetText(tostring(roi))
+    for _, joiner in ipairs(boxes.joiners) do
+        joiner:SetText(AnyMinimum() and L.BEST_MIN_OR or L.BEST_MIN_AND)
+    end
 end
 
 ResetFilters = function()
     if VendorProfitCharDB then
         VendorProfitCharDB.bestFilters = nil
         VendorProfitCharDB.bestMinimums = nil
+        VendorProfitCharDB.bestMinimumsAny = nil
     end
     ShowMinimums()
     BestPanel.Refresh()
@@ -780,7 +802,8 @@ end
 -- Whether an entry passes the filters. Skill-up filters show recipes of the
 -- checked colors; a recipe whose color isn't known can't pass them. A
 -- recipe with no profit to rank can't meet a minimum. ROI is compared as
--- shown, a whole percentage.
+-- shown, a whole percentage. The minimums set (a box at 0 is none) must all
+-- be met, or with or between them, any one.
 local function PassesFilters(entry)
     local filters = Filters()
     if filters.profitable and not (entry.profit and entry.profit > 0) then
@@ -790,14 +813,20 @@ local function PassesFilters(entry)
         return false
     end
     local minProfit, minRoi, minPerHour = Minimums()
-    if minProfit > 0 and not (entry.profit and entry.profit >= minProfit) then
-        return false
+    local set, met = 0, 0
+    local function Check(minimum, meets)
+        if minimum > 0 then
+            set = set + 1
+            if meets then
+                met = met + 1
+            end
+        end
     end
+    Check(minProfit, entry.profit and entry.profit >= minProfit)
     -- A recipe with no Profit/hr (no cast time) can't meet it either.
-    if minPerHour > 0 and not (entry.perHour and entry.perHour >= minPerHour) then
-        return false
-    end
-    if minRoi > 0 and not (entry.profit and entry.roi and math.floor(entry.roi * 100 + 0.5) >= minRoi) then
+    Check(minPerHour, entry.perHour and entry.perHour >= minPerHour)
+    Check(minRoi, entry.profit and entry.roi and math.floor(entry.roi * 100 + 0.5) >= minRoi)
+    if set > 0 and (AnyMinimum() and met == 0 or not AnyMinimum() and met < set) then
         return false
     end
     if SkillFilterActive() then
@@ -1053,20 +1082,40 @@ local function Create(page)
     -- (each border reaches 5px outside it). 4-digit boxes were 52, which
     -- left a gap before the unit; 2-digit ones at 33 scrolled "99" out of
     -- sight, so they stay 36.
+    -- "and" or "or" between the minimums, read like a sentence: clicking
+    -- either switches both, as one setting. Small red buttons like the
+    -- page's others (gold text alone didn't look clickable), as wide as the
+    -- longer word needs.
+    row.joiners = {}
+    local JOINER_GAP = 8
+    local joinerWidth = math.max(Columns.Measure(L.BEST_MIN_AND, "GameFontNormal"),
+        Columns.Measure(L.BEST_MIN_OR, "GameFontNormal")) + 18
+    local function Joiner(after)
+        local joiner = SmallButton(row, L.BEST_MIN_AND, joinerWidth)
+        -- Past the box's border, which reaches 5px outside it.
+        joiner:SetPoint("LEFT", after, "RIGHT", JOINER_GAP + 2, 0)
+        joiner:SetScript("OnClick", function()
+            SetAnyMinimum(not AnyMinimum())
+        end)
+        Tooltip(joiner, function() return AnyMinimum() and L.BEST_MIN_OR_HELP or L.BEST_MIN_AND_HELP end)
+        row.joiners[#row.joiners + 1] = joiner
+        return joiner
+    end
     local WIDE, NARROW = BestPanel.MIN_BOX_WIDE, BestPanel.MIN_BOX_NARROW
     local gold = Box("gold", Text(nil, L.BEST_MIN_PROFIT), 10, WIDE, 4, { texture = COIN:format("Gold") }, L.BEST_MIN_PROFIT_HELP)
     local silver = Box("silver", gold, 9, NARROW, 2, { texture = COIN:format("Silver") }, L.BEST_MIN_PROFIT_HELP)
-    local hourGold = Box("hourGold", Text(silver, L.BEST_MIN_PER_HOUR, 24), 10, WIDE, 4, { texture = COIN:format("Gold") },
-        L.BEST_MIN_PER_HOUR_HELP)
+    local hourGold = Box("hourGold", Text(Joiner(silver), L.BEST_MIN_PER_HOUR, JOINER_GAP), 10, WIDE, 4,
+        { texture = COIN:format("Gold") }, L.BEST_MIN_PER_HOUR_HELP)
     local hourSilver = Box("hourSilver", hourGold, 9, NARROW, 2, { texture = COIN:format("Silver") }, L.BEST_MIN_PER_HOUR_HELP)
-    Box("roi", Text(hourSilver, L.BEST_MIN_ROI, 24), 10, WIDE, 4, { text = "%" }, L.BEST_MIN_ROI_HELP)
+    Box("roi", Text(Joiner(hourSilver), L.BEST_MIN_ROI, JOINER_GAP), 10, WIDE, 4, { text = "%" }, L.BEST_MIN_ROI_HELP)
     -- The window is at least as wide as the row (and the size grip after
     -- it), however narrow the columns are.
+    local joined = JOINER_GAP + 2 + joinerWidth + JOINER_GAP
     local rowWidth = 0
     for _, part in ipairs({
         { Columns.Measure(L.BEST_MIN_PROFIT, "GameFontNormalSmall"), 10, WIDE, 9, NARROW },
-        { 24, Columns.Measure(L.BEST_MIN_PER_HOUR, "GameFontNormalSmall"), 10, WIDE, 9, NARROW },
-        { 24, Columns.Measure(L.BEST_MIN_ROI, "GameFontNormalSmall"), 10, WIDE },
+        { joined, Columns.Measure(L.BEST_MIN_PER_HOUR, "GameFontNormalSmall"), 10, WIDE, 9, NARROW },
+        { joined, Columns.Measure(L.BEST_MIN_ROI, "GameFontNormalSmall"), 10, WIDE },
     }) do
         for _, width in ipairs(part) do
             rowWidth = rowWidth + width

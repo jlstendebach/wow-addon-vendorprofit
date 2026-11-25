@@ -20,7 +20,8 @@ local FontMethods = {}
 FontMethods.__index = FontMethods
 
 function CreateFrame(_, name, parent, template)
-    local f = setmetatable({ __shown = true, __parent = parent, __events = {}, __scripts = {} }, FrameMethods)
+    local f = setmetatable({ __shown = true, __parent = parent, __events = {}, __scripts = {}, __template = template },
+        FrameMethods)
     if name then _G[name] = f end
     eventFrames[#eventFrames + 1] = f
     -- The auction house's money input: gold, silver and copper boxes.
@@ -967,13 +968,18 @@ function stub.CloseBank() BankFrame:Hide(); stub.Fire("BANKFRAME_CLOSED") end
 ATTACHMENTS_MAX_RECEIVE = 16
 -- Then stub.invoiceMails: auction mails, { itemID, n, money, invoice =
 -- { type, itemName, bid, consignment, count }, subject }, emptied by taking.
+-- As in the game, taking is a request: the mail empties (and an empty one
+-- goes, the next moving up) a moment later, then MAIL_INBOX_UPDATE fires.
+-- With stub.mailLingers, as the game sometimes does, the update comes while
+-- the emptied mail is still listed, and it goes a moment later with no
+-- update of its own.
 stub.invoiceMails = {}
 local function Mails()
     local list = {}
     for id, n in pairs(stub.mail) do if n > 0 then list[#list + 1] = { id, n } end end
     table.sort(list, function(a, b) return a[1] < b[1] end)
     for _, mail in ipairs(stub.invoiceMails) do
-        if (mail.n or 0) > 0 or (mail.money or 0) > 0 then
+        if (mail.n or 0) > 0 or (mail.money or 0) > 0 or mail.lingering then
             list[#list + 1] = { mail.itemID, mail.n or 0, mail = mail }
         end
     end
@@ -996,32 +1002,43 @@ function GetInboxInvoiceInfo(index)
     if invoice == nil then return nil end
     return invoice.type, invoice.itemName, "Someone", invoice.bid, invoice.bid, 0, invoice.consignment or 0, 0, 0, 0, invoice.count
 end
-function TakeInboxItem(index)
-    local m = Mails()[index]
-    if m == nil then return end
+local function Answer(m, fn)
+    C_Timer.After(0.1, function()
+        fn()
+        if stub.mailLingers and m.mail then
+            m.mail.lingering = true
+            C_Timer.After(0.05, function() m.mail.lingering = nil end)
+        end
+        stub.Fire("MAIL_INBOX_UPDATE")
+    end)
+end
+local function TakeItem(m)
     if m.mail then
+        if (m.mail.n or 0) == 0 then return end
         stub.bags[m[1]] = (stub.bags[m[1]] or 0) + m[2]
         m.mail.n = 0
-    else
+    elseif (stub.mail[m[1]] or 0) > 0 then
         stub.bags[m[1]] = (stub.bags[m[1]] or 0) + m[2]
         stub.mail[m[1]] = 0
     end
 end
-function TakeInboxMoney(index)
-    local m = Mails()[index]
-    if m and m.mail then
-        stub.money = stub.money + (m.mail.money or 0)
+local function TakeMoney(m)
+    if m.mail and (m.mail.money or 0) > 0 then
+        stub.money = stub.money + m.mail.money
         m.mail.money = 0
     end
 end
+function TakeInboxItem(index)
+    local m = Mails()[index]
+    if m then Answer(m, function() TakeItem(m) end) end
+end
+function TakeInboxMoney(index)
+    local m = Mails()[index]
+    if m then Answer(m, function() TakeMoney(m) end) end
+end
 function AutoLootMailItem(index)
     local m = Mails()[index]
-    if m == nil then return end
-    if m.mail and (m.mail.money or 0) > 0 then
-        stub.money = stub.money + m.mail.money
-    end
-    if m.mail then m.mail.money = 0 end
-    TakeInboxItem(index)
+    if m then Answer(m, function() TakeMoney(m); TakeItem(m) end) end
 end
 
 -- Batch lookups (browse results): one result per listed item, lowest price and

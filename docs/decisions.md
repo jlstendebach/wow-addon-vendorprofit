@@ -368,7 +368,10 @@ time" route mode).
   a big profession froze the game.
 - **AH counts** come from your owned auctions, which the game only lists at
   the auction house: read when it opens and after you post or cancel, saved,
-  and shown as of your last visit.
+  and shown as of your last visit. Asked for once things go quiet (after
+  the last of a run of posts or cancels) and never while the Post step is
+  posting (2026-11-25 review): a multisell asked after every auction, using
+  up the auction house's requests the posting needs.
 - **Auction tab is the default**: it's what the tab is used for most.
 - **Search** filters as you type (no Search button). **Filter** is a red
   button opening the game's checkbox menu under the button (not at the
@@ -380,6 +383,16 @@ time" route mode).
   (`C_AuctionHouse.SearchForItemKeys`) instead of a search per item.
   **At most 100 items per request: more disconnects you from the server.**
   It was 200 once and kicked the player to the login screen.
+
+- **and / or between the minimums** (2026-11-25), Josh's idea: the word
+  between each pair of minimums is a toggle, and clicking either switches
+  both (one setting), so the row reads as the rule it applies ("Min profit
+  1g or Min profit/hr 5g or Min ROI 20%"). Small red buttons like the
+  page's others: gold text that turned white under the mouse was tried
+  first and didn't look clickable.
+  A box at 0 is no minimum either way (with or, it would otherwise let
+  everything through). Saved apart from the minimums; the red X sets it
+  back to and.
 
 ## Shopping List
 
@@ -425,7 +438,13 @@ time" route mode).
   AUCTION_REMOVED_MAIL_SUBJECT), English if missing. Reading a mail as
   it's taken now prefers the inbox as of its last update when the mail
   there has changed (the emptied one gone and the next moved up: the next
-  isn't being taken).
+  isn't being taken). **Undone 2026-11-24:** that was the test stub's doing
+  (it emptied a mail the moment it was taken); in the game taking is a
+  request, so the mail at that position is still the one being taken, and
+  the inbox's last update can be from before an emptied mail went. Reading
+  that stale one recorded it again in place of the mail really taken: Open
+  All recorded one Whitesoul Helm sale three times. The stub now answers a
+  take a moment later, as the game does.
 - **A post's timeout counts quiet time** (2026-11-23): a multisell of
   things that don't stack posts one auction at a time, and can take longer
   than the 15 seconds a post had to finish from the click. Cut short, the
@@ -575,6 +594,12 @@ opens.
   fixes prove themselves; may later be limited to blocks blamed on Vendor
   Profit. (A block blamed on Auctionator while cancelling auctions was
   Auctionator's own CancelAuction, not ours.)
+
+- **Planning when it's seen** (2026-11-25 review): bags changing with the
+  Shopping List not up only forget the plan, worked out again when next
+  needed, rather than planning the whole order on every bag update.
+  Player-only cast events (RegisterUnitEvent) and one settle check after a
+  run of bag updates, instead of one per update, for the same reason.
 
 ## Crafting
 
@@ -767,6 +792,13 @@ opens.
   `/reload` or restart WoW.
 
 ## Open items
+
+- **2026-11-25 review, not fixed:** vendor sales are read from the buyback
+  list's changes, which can't see a sale when the item pushed off the full
+  list (12) is the same item, count and price as the one sold: selling 13+
+  identical stacks in one visit loses the extras. A fix would watch the
+  sell itself (the bag slot used at the merchant, confirmed by the bags
+  changing), as TradeSkillMaster does; needs checking in game.
 
 - **Save time route mode**: planned, not built (`docs/route-modes.md`).
 - **Blocked-action report**: narrow it once buying has been reliable for a

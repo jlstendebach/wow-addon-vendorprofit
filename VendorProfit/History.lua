@@ -698,14 +698,18 @@ local function ItemByName(name)
 end
 
 -- Reads a mail's invoice as it's taken: a purchase when its item is taken,
--- a sale when its money is, an auction back when its item is. Read live, or
--- as it was at the last inbox update if taking it has already emptied it,
--- or if the mail there now is another (the emptied one gone, the next
--- moved up into its place: that one isn't being taken).
+-- a sale when its money is, an auction back when its item is. Read live:
+-- taking is a request to the server, so the mail at that position is still
+-- the one being taken. As it was at the last inbox update only if it's
+-- already empty. Never just because the inbox has changed since: after a
+-- taken mail is deleted the next moves up into its place, sometimes with no
+-- inbox update between, and reading the old one then recorded it again in
+-- place of the one really taken (the Mailbox's Open All recorded one helm's
+-- sale three times).
 local function TakeMail(index, takingItem, takingMoney)
     local mail = ReadMail(index)
     local before = inbox[index]
-    if before and (mail == nil or mail.key ~= before.key or (takingItem and mail.itemID == nil)) then
+    if before and (mail == nil or (mail.key == before.key and takingItem and mail.itemID == nil)) then
         mail = before
     end
     if mail == nil or takenSinceUpdate[index] then
@@ -749,11 +753,14 @@ end
 
 -- Events ----------------------------------------------------------------------------
 
+local reconcileWaiting, lastBagUpdate = false, 0
 local events = CreateFrame("Frame")
-for _, event in ipairs({ "UNIT_SPELLCAST_SUCCEEDED", "MERCHANT_SHOW", "MERCHANT_UPDATE", "BAG_UPDATE_DELAYED",
-    "MAIL_SHOW", "MAIL_INBOX_UPDATE" }) do
+for _, event in ipairs({ "MERCHANT_SHOW", "MERCHANT_UPDATE", "BAG_UPDATE_DELAYED", "MAIL_SHOW", "MAIL_INBOX_UPDATE" }) do
     pcall(events.RegisterEvent, events, event)
 end
+-- Only the player's casts: registered for every unit, it ran for each cast
+-- in a group, a raid or a crowded city.
+events:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
 events:SetScript("OnEvent", function(_, event, unit, _, spellID)
     if event == "UNIT_SPELLCAST_SUCCEEDED" then
         if unit == "player" and spellID then
@@ -770,7 +777,23 @@ events:SetScript("OnEvent", function(_, event, unit, _, spellID)
             CheckBuyback()
         end
         Reconcile()
-        -- Check again once things have settled.
-        C_Timer.After(SETTLE + 0.5, Reconcile)
+        -- Check again once things have settled, SETTLE after the last bag
+        -- update: one timer, put off while updates keep coming (bags update
+        -- many times while crafting or looting, and a timer each piled up
+        -- checks of every recorded item).
+        lastBagUpdate = GetTime()
+        if not reconcileWaiting then
+            reconcileWaiting = true
+            local function Later()
+                local wait = lastBagUpdate + SETTLE + 0.5 - GetTime()
+                if wait > 0 then
+                    C_Timer.After(wait, Later)
+                    return
+                end
+                reconcileWaiting = false
+                Reconcile()
+            end
+            C_Timer.After(SETTLE + 0.5, Later)
+        end
     end
 end)

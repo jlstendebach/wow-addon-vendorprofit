@@ -284,7 +284,8 @@ end
 
 local events = CreateFrame("Frame")
 events:RegisterEvent("BAG_UPDATE_DELAYED")
-events:RegisterEvent("UNIT_SPELLCAST_SUCCEEDED")
+-- Only the player's casts (see History.lua).
+events:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
 pcall(events.RegisterEvent, events, "MAIL_INBOX_UPDATE")
 events:SetScript("OnEvent", function(_, event, unit, _, spellID)
     if event == "MAIL_INBOX_UPDATE" then

@@ -679,6 +679,20 @@ check("spent is shown but not taken off the profit", has_line(ev, "Spent on this
 check("nothing left to buy: the Buy step is gone", ev(BUY) is None and section(ev, "Buy") is None
       and headings(ev)[4:6] == ["To do", "1. Take from bank | |cff8080801 item|r"])
 check("crafts still listed", has_line(ev, "Bronze Bar x58", "29 crafts"))
+# Bags changing while the Shopping List isn't showing: planned again when
+# next needed, not on every bag update.
+run('''
+    __stub.plans = 0
+    local plan = VendorProfit.Order.Plan
+    VendorProfit.Order.Plan = function(...) __stub.plans = __stub.plans + 1; return plan(...) end
+    VendorProfit.Panel.Show("best")
+    __stub.Fire("BAG_UPDATE_DELAYED"); __stub.Fire("BAG_UPDATE_DELAYED")
+''')
+check("bags changing with the Shopping List not up: not planned on the spot", ev("__stub.plans") == 0)
+run('VendorProfit.Shopper.Summary()')
+check("...planned when next needed", ev("__stub.plans") > 0)
+run('__stub.plans = 0; VendorProfit.Panel.Show("shopping"); __stub.plans = 0; __stub.Fire("BAG_UPDATE_DELAYED")')
+check("...and on the spot while it's up", ev("__stub.plans") > 0)
 check("no errors while shopping", ev("#__stub.errors") == 0)
 
 # Crafting the copper bars changes the bags; the plan follows.
@@ -1975,10 +1989,27 @@ run('''
 run('TakeInboxItem(1)')
 check("a stack's mail: its 20 at the price each (315c), not the whole purchase's 315s", ev(H + ".Recorded(7912)") == 20
       and ev("VendorProfitCharDB.history.stock[7912][1].cost") == 315)
-run('for i = 1, 4 do __stub.Fire("MAIL_INBOX_UPDATE"); TakeInboxItem(1) end')
+run('for i = 1, 4 do __stub.Advance(0.2); TakeInboxItem(1) end; __stub.Advance(0.2)')
 check("the other four mails, though they read the same: all 100 recorded, at 315c each, 315s in all",
       ev(H + ".Recorded(7912)") == 100 and ev("VendorProfit.History.Purchase(1).total") == 6300
       and ev('(function() local t = 0; for i = 1, 5 do t = t + VendorProfit.History.Purchase(i).total end; return t end)()') == 31500)
+# The Mailbox's Open All: sales taken one after another at the top of the
+# inbox, each emptied mail gone and the next moved up, the inbox's last update
+# sometimes from before the emptied one went. Each is the mail really taken,
+# not the last one seen there.
+run('''
+    __stub.mailLingers = true
+    __stub.invoiceMails = {}
+    for i, bid in ipairs({ 1000, 2000, 3000 }) do
+        __stub.invoiceMails[i] = { money = bid, subject = "Auction successful: Solid Stone",
+            invoice = { type = "seller", itemName = "Solid Stone", bid = bid, consignment = 0, count = 1 } }
+    end
+    __stub.Fire("MAIL_INBOX_UPDATE")
+''')
+before = len(sales())
+run('for i = 1, 3 do TakeInboxMoney(1); __stub.Advance(0.2) end; __stub.mailLingers = false')
+check("Open All, the inbox updated before each emptied mail went: each sale once, the one really taken (not the first three times)",
+      sorted(x["sold"] for x in sales()[:len(sales()) - before]) == [1000, 2000, 3000] and len(sales()) == before + 3)
 
 
 # --- Known vendor prices ---------------------------------------------------------------
@@ -2403,10 +2434,35 @@ check("min profit/hr at the shoulders' (to the silver): the cuirass and the shou
 above = at + 100
 run(M + '.hourGold:Type("%d"); ' % (above // 10000) + M + '.hourSilver:Type("%d")' % (above // 100 % 100))
 check("...a silver more: not the shoulders", shown() == ["Rough Bronze Cuirass"])
+# and / or between the minimums.
+J = M + ".joiners"
+check("'and' between the minimums, on small red buttons like the page's others",
+      [ev(J + "[%d].__text" % i) for i in (1, 2)] == ["and", "and"]
+      and ev(J + "[1].__template") == "UIPanelButtonTemplate" and ev(J + "[1]:GetHeight()") == 20
+      and ev(J + "[1].__point[2] == " + M + ".silver") and ev(M + ".hourGold.__point[2] ~= " + J + "[1]"))
+run(M + '.silver:Type("1")')
+check("and: min profit 1s and min profit/hr above the shoulders': just the cuirass", shown() == ["Rough Bronze Cuirass"])
+run(M + '.hourGold:Type("9999")')
+check("...and a min profit/hr nothing meets: none", shown() == [])
+run(J + '[2]:Click()')
+check("clicking either switches both to 'or', saved", [ev(J + "[%d].__text" % i) for i in (1, 2)] == ["or", "or"]
+      and ev("VendorProfitCharDB.bestMinimumsAny") == True)
+check("or: the recipes meeting either (the cuirass makes 1s; nothing makes that an hour)", shown() == ["Rough Bronze Cuirass"])
+run(M + '.silver:Type("0"); ' + M + '.roi:Type("1")')
+check("...min ROI 1% or an hourly minimum nothing meets: the two with an ROI; the box at 0 is no minimum (else all 5 would pass it)",
+      shown() == ["Rough Bronze Cuirass", "Rough Bronze Shoulders"])
+run(M + '.roi:Type("0"); ' + M + '.hourGold:Type("0"); ' + M + '.hourSilver:Type("0")')
+check("...no minimums set: everything, or or not", len(best()) == 5 and ev(J + "[1].__text") == "or")
+run(J + '[1].__scripts.OnEnter(' + J + '[1])')
+check("its tooltip says what it does", "any one" not in ev("GameTooltip.lines[1].left") and "one of the minimums" in ev("GameTooltip.lines[1].left"))
+run("GameTooltip:Hide(); " + J + "[1]:Click()")
+check("...and back to 'and'", ev(J + "[2].__text") == "and" and ev("VendorProfitCharDB.bestMinimumsAny") is None)
+run(J + "[1]:Click(); " + M + '.hourGold:Type("%d"); ' % (above // 10000) + M + '.hourSilver:Type("%d")' % (above // 100 % 100))
 run('__stub.castTimes = {}; __stub.PricesChanged()')
 run(B + '.filterReset:Click()')
-check("the red X clears the minimums too, boxes back to 0 (with the other filters: Mining ticked again)",
+check("the red X clears the minimums too, boxes back to 0, 'and' again (with the other filters: Mining ticked again)",
       len(best()) == 8 and ev("VendorProfitCharDB.bestMinimums") is None
+      and ev("VendorProfitCharDB.bestMinimumsAny") is None and ev(J + "[1].__text") == "and"
       and [ev(M + "." + k + ":GetText()") for k in ["gold", "silver", "hourGold", "hourSilver", "roi"]] == ["0"] * 5
       and not ev(B + ".filterReset:IsEnabled()"))
 run('VendorProfit.BestPanel.SetFilter("prof:186", true)')
@@ -2415,11 +2471,12 @@ run_m('VendorProfit.Panel.Show("best")')
 check("minimums are saved per character, shown in their boxes next time (copper saved before the box went: left out)",
       [ev_m("VendorProfit.BestPanel.Frame().minimums." + k + ":GetText()") for k in ["gold", "silver", "hourGold", "hourSilver", "roi"]]
       == ["1", "23", "12", "34", "25"] and ev_m("({ (function() return VendorProfit.BestPanel.Minimums() end)() })[1]") == 12300)
+JOINED = 8 + 2 + max(ev_m('VendorProfit.Columns.Measure("and", "GameFontNormal")'), ev_m('VendorProfit.Columns.Measure("or", "GameFontNormal")')) + 18 + 8
 check("the window is wide enough for the bottom row and the size grip, however narrow the columns",
       ev_m("VendorProfitPanel:GetWidth()") - 2 * 16 >=
       ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_PROFIT, "GameFontNormalSmall")') + 10 + 47 + 9 + 36
-      + 24 + ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_PER_HOUR, "GameFontNormalSmall")') + 10 + 47 + 9 + 36
-      + 24 + ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_ROI, "GameFontNormalSmall")') + 10 + 47 + 16)
+      + JOINED + ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_PER_HOUR, "GameFontNormalSmall")') + 10 + 47 + 9 + 36
+      + JOINED + ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_ROI, "GameFontNormalSmall")') + 10 + 47 + 16)
 check("the minimum boxes as wide as 4 digits (or 2) and their unit",
       ev_m("VendorProfit.BestPanel.Frame().minimums.gold:GetWidth()") == 47
       and ev_m("VendorProfit.BestPanel.Frame().minimums.silver:GetWidth()") == 36
@@ -2785,6 +2842,19 @@ run('__stub.ah.owned[#__stub.ah.owned + 1] = { itemID = 2865, quantity = 1 }; __
 check("posting reads them again", ev("__stub.ah.ownedQueries") == 2 and ev("VendorProfit.BestPanel.Row(2).auctions:GetText()") == "1")
 run('__stub.Fire("AUCTION_HOUSE_AUCTION_CREATED"); __stub.Fire("AUCTION_CANCELED"); __stub.Advance(1)')
 check("...once for changes close together", ev("__stub.ah.ownedQueries") == 3)
+run('for i = 1, 4 do __stub.Fire("AUCTION_HOUSE_AUCTION_CREATED"); __stub.Advance(0.3) end')
+check("...a multisell (auctions created one at a time): once, after the last", ev("__stub.ah.ownedQueries") == 3)
+run('__stub.Advance(1)')
+check("...then read", ev("__stub.ah.ownedQueries") == 4)
+run('''
+    __stub.__savedPosterStatus = VendorProfit.Poster.Status
+    VendorProfit.Poster.Status = function() return "posting" end
+    __stub.Fire("AUCTION_HOUSE_AUCTION_CREATED")
+''')
+run('__stub.Advance(3)')
+check("...not while the Post step is posting (it needs the auction house's requests)", ev("__stub.ah.ownedQueries") == 4)
+run('VendorProfit.Poster.Status = __stub.__savedPosterStatus; __stub.Advance(1)')
+check("...but once it's done", ev("__stub.ah.ownedQueries") == 5)
 run(B + ".auctionsHeading:Click()")
 check("sort by AH: most up for auction first", [l.split(" | ")[0].split("|t ")[-1] for l in best()][:2] == ["Rough Bronze Cuirass", "Rough Bronze Shoulders"]
       and "Arrow-Down" in ev(B + ".auctionsHeading.text:GetText()"))
@@ -3327,7 +3397,7 @@ run('''
         { itemID = 50010, n = 1, subject = "Here, have this" },
     }
 ''')
-run('__stub.Fire("MAIL_INBOX_UPDATE"); TakeInboxItem(1); __stub.Fire("MAIL_INBOX_UPDATE"); AutoLootMailItem(1); __stub.Fire("MAIL_INBOX_UPDATE"); TakeInboxItem(1)')
+run('__stub.Fire("MAIL_INBOX_UPDATE"); TakeInboxItem(1); __stub.Advance(0.2); AutoLootMailItem(1); __stub.Advance(0.2); TakeInboxItem(1); __stub.Advance(0.2)')
 check("expired and cancelled auctions taken from the mail: queued to post again, as many as came back; other mail isn't",
       queue() == [(50008, 3), (50009, 1)])
 
