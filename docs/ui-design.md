@@ -19,3 +19,20 @@ do steps. Only its most rows are decided case by case.
   scroll, the bar's arrows had no room for the thumb, and a bar that can't
   scroll says nothing.
 - **Getting shorter:** never left scrolled past its new end.
+
+## Tables
+
+Every table looks and behaves like Best Crafts'.
+
+- **Sorting:** every column's heading sorts by it; clicking again reverses
+  it. Names start A to Z, dates newest first, numbers most first. The
+  sorted heading is white with an arrow for its direction. The sort is
+  saved per character.
+- **Spacing:** each column is as wide as its widest value or heading (with
+  room for the arrow), and columns are a gap apart, so nothing touches.
+  Names are left-aligned and take what's left of the row; numbers are
+  right-aligned.
+- **Text:** values in the game's small white font, headings in its small
+  gold font.
+- **Rows:** 22 pixels tall, lit under the mouse with the quest log's
+  highlight. Hovering shows a row's details in a tooltip.
