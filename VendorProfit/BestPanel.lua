@@ -1083,29 +1083,21 @@ local function Create(page)
     -- left a gap before the unit; 2-digit ones at 33 scrolled "99" out of
     -- sight, so they stay 36.
     -- "and" or "or" between the minimums, read like a sentence: clicking
-    -- either switches both, as one setting. Gold text like the labels,
-    -- white under the mouse, as wide as the longer word.
+    -- either switches both, as one setting. Small red buttons like the
+    -- page's others (gold text alone didn't look clickable), as wide as the
+    -- longer word needs.
     row.joiners = {}
     local JOINER_GAP = 8
-    local joinerWidth = math.max(Columns.Measure(L.BEST_MIN_AND, "GameFontNormalSmall"),
-        Columns.Measure(L.BEST_MIN_OR, "GameFontNormalSmall"))
+    local joinerWidth = math.max(Columns.Measure(L.BEST_MIN_AND, "GameFontNormal"),
+        Columns.Measure(L.BEST_MIN_OR, "GameFontNormal")) + 18
     local function Joiner(after)
-        local joiner = CreateFrame("Button", nil, row)
-        joiner:SetSize(joinerWidth, MINIMUMS_HEIGHT)
+        local joiner = SmallButton(row, L.BEST_MIN_AND, joinerWidth)
         -- Past the box's border, which reaches 5px outside it.
         joiner:SetPoint("LEFT", after, "RIGHT", JOINER_GAP + 2, 0)
-        joiner:SetNormalFontObject("GameFontNormalSmall")
-        joiner:SetHighlightFontObject("GameFontHighlightSmall")
-        joiner:SetText(L.BEST_MIN_AND)
         joiner:SetScript("OnClick", function()
             SetAnyMinimum(not AnyMinimum())
         end)
-        joiner:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(AnyMinimum() and L.BEST_MIN_OR_HELP or L.BEST_MIN_AND_HELP, 1, 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        joiner:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        Tooltip(joiner, function() return AnyMinimum() and L.BEST_MIN_OR_HELP or L.BEST_MIN_AND_HELP end)
         row.joiners[#row.joiners + 1] = joiner
         return joiner
     end

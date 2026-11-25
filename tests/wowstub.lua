@@ -20,7 +20,8 @@ local FontMethods = {}
 FontMethods.__index = FontMethods
 
 function CreateFrame(_, name, parent, template)
-    local f = setmetatable({ __shown = true, __parent = parent, __events = {}, __scripts = {} }, FrameMethods)
+    local f = setmetatable({ __shown = true, __parent = parent, __events = {}, __scripts = {}, __template = template },
+        FrameMethods)
     if name then _G[name] = f end
     eventFrames[#eventFrames + 1] = f
     -- The auction house's money input: gold, silver and copper boxes.
@@ -100,8 +101,6 @@ function FrameMethods:SetPoint(point, ...)
 end
 function FrameMethods:ClearAllPoints() self.__point = nil; self.__points = nil end
 function FrameMethods:SetText(t) self.__text = t end
-function FrameMethods:SetNormalFontObject(f) self.__normalFont = f end
-function FrameMethods:SetHighlightFontObject(f) self.__highlightFont = f end
 function FrameMethods:HookScript(event, fn)
     local before = self.__scripts[event]
     self.__scripts[event] = function(...)

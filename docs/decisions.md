@@ -387,8 +387,9 @@ time" route mode).
 - **and / or between the minimums** (2026-11-25), Josh's idea: the word
   between each pair of minimums is a toggle, and clicking either switches
   both (one setting), so the row reads as the rule it applies ("Min profit
-  1g or Min profit/hr 5g or Min ROI 20%"). Gold text that turns white
-  under the mouse, like a link, rather than another button on a full row.
+  1g or Min profit/hr 5g or Min ROI 20%"). Small red buttons like the
+  page's others: gold text that turned white under the mouse was tried
+  first and didn't look clickable.
   A box at 0 is no minimum either way (with or, it would otherwise let
   everything through). Saved apart from the minimums; the red X sets it
   back to and.

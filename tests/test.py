@@ -2436,9 +2436,9 @@ run(M + '.hourGold:Type("%d"); ' % (above // 10000) + M + '.hourSilver:Type("%d"
 check("...a silver more: not the shoulders", shown() == ["Rough Bronze Cuirass"])
 # and / or between the minimums.
 J = M + ".joiners"
-check("'and' between the minimums, in the labels' gold, white under the mouse",
+check("'and' between the minimums, on small red buttons like the page's others",
       [ev(J + "[%d].__text" % i) for i in (1, 2)] == ["and", "and"]
-      and ev(J + "[1].__normalFont") == "GameFontNormalSmall" and ev(J + "[1].__highlightFont") == "GameFontHighlightSmall"
+      and ev(J + "[1].__template") == "UIPanelButtonTemplate" and ev(J + "[1]:GetHeight()") == 20
       and ev(J + "[1].__point[2] == " + M + ".silver") and ev(M + ".hourGold.__point[2] ~= " + J + "[1]"))
 run(M + '.silver:Type("1")')
 check("and: min profit 1s and min profit/hr above the shoulders': just the cuirass", shown() == ["Rough Bronze Cuirass"])
@@ -2471,7 +2471,7 @@ run_m('VendorProfit.Panel.Show("best")')
 check("minimums are saved per character, shown in their boxes next time (copper saved before the box went: left out)",
       [ev_m("VendorProfit.BestPanel.Frame().minimums." + k + ":GetText()") for k in ["gold", "silver", "hourGold", "hourSilver", "roi"]]
       == ["1", "23", "12", "34", "25"] and ev_m("({ (function() return VendorProfit.BestPanel.Minimums() end)() })[1]") == 12300)
-JOINED = 8 + 2 + max(ev_m('VendorProfit.Columns.Measure("and", "GameFontNormalSmall")'), ev_m('VendorProfit.Columns.Measure("or", "GameFontNormalSmall")')) + 8
+JOINED = 8 + 2 + max(ev_m('VendorProfit.Columns.Measure("and", "GameFontNormal")'), ev_m('VendorProfit.Columns.Measure("or", "GameFontNormal")')) + 18 + 8
 check("the window is wide enough for the bottom row and the size grip, however narrow the columns",
       ev_m("VendorProfitPanel:GetWidth()") - 2 * 16 >=
       ev_m('VendorProfit.Columns.Measure(VendorProfit.L.BEST_MIN_PROFIT, "GameFontNormalSmall")') + 10 + 47 + 9 + 36
