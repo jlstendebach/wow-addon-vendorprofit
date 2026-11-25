@@ -1975,10 +1975,27 @@ run('''
 run('TakeInboxItem(1)')
 check("a stack's mail: its 20 at the price each (315c), not the whole purchase's 315s", ev(H + ".Recorded(7912)") == 20
       and ev("VendorProfitCharDB.history.stock[7912][1].cost") == 315)
-run('for i = 1, 4 do __stub.Fire("MAIL_INBOX_UPDATE"); TakeInboxItem(1) end')
+run('for i = 1, 4 do __stub.Advance(0.2); TakeInboxItem(1) end; __stub.Advance(0.2)')
 check("the other four mails, though they read the same: all 100 recorded, at 315c each, 315s in all",
       ev(H + ".Recorded(7912)") == 100 and ev("VendorProfit.History.Purchase(1).total") == 6300
       and ev('(function() local t = 0; for i = 1, 5 do t = t + VendorProfit.History.Purchase(i).total end; return t end)()') == 31500)
+# The Mailbox's Open All: sales taken one after another at the top of the
+# inbox, each emptied mail gone and the next moved up, the inbox's last update
+# sometimes from before the emptied one went. Each is the mail really taken,
+# not the last one seen there.
+run('''
+    __stub.mailLingers = true
+    __stub.invoiceMails = {}
+    for i, bid in ipairs({ 1000, 2000, 3000 }) do
+        __stub.invoiceMails[i] = { money = bid, subject = "Auction successful: Solid Stone",
+            invoice = { type = "seller", itemName = "Solid Stone", bid = bid, consignment = 0, count = 1 } }
+    end
+    __stub.Fire("MAIL_INBOX_UPDATE")
+''')
+before = len(sales())
+run('for i = 1, 3 do TakeInboxMoney(1); __stub.Advance(0.2) end; __stub.mailLingers = false')
+check("Open All, the inbox updated before each emptied mail went: each sale once, the one really taken (not the first three times)",
+      sorted(x["sold"] for x in sales()[:len(sales()) - before]) == [1000, 2000, 3000] and len(sales()) == before + 3)
 
 
 # --- Known vendor prices ---------------------------------------------------------------
@@ -3327,7 +3344,7 @@ run('''
         { itemID = 50010, n = 1, subject = "Here, have this" },
     }
 ''')
-run('__stub.Fire("MAIL_INBOX_UPDATE"); TakeInboxItem(1); __stub.Fire("MAIL_INBOX_UPDATE"); AutoLootMailItem(1); __stub.Fire("MAIL_INBOX_UPDATE"); TakeInboxItem(1)')
+run('__stub.Fire("MAIL_INBOX_UPDATE"); TakeInboxItem(1); __stub.Advance(0.2); AutoLootMailItem(1); __stub.Advance(0.2); TakeInboxItem(1); __stub.Advance(0.2)')
 check("expired and cancelled auctions taken from the mail: queued to post again, as many as came back; other mail isn't",
       queue() == [(50008, 3), (50009, 1)])
 

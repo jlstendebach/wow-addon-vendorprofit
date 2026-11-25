@@ -425,7 +425,13 @@ time" route mode).
   AUCTION_REMOVED_MAIL_SUBJECT), English if missing. Reading a mail as
   it's taken now prefers the inbox as of its last update when the mail
   there has changed (the emptied one gone and the next moved up: the next
-  isn't being taken).
+  isn't being taken). **Undone 2026-11-24:** that was the test stub's doing
+  (it emptied a mail the moment it was taken); in the game taking is a
+  request, so the mail at that position is still the one being taken, and
+  the inbox's last update can be from before an emptied mail went. Reading
+  that stale one recorded it again in place of the mail really taken: Open
+  All recorded one Whitesoul Helm sale three times. The stub now answers a
+  take a moment later, as the game does.
 - **A post's timeout counts quiet time** (2026-11-23): a multisell of
   things that don't stack posts one auction at a time, and can take longer
   than the 15 seconds a post had to finish from the click. Cut short, the
