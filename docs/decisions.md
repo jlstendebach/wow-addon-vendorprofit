@@ -108,6 +108,15 @@ time" route mode).
   came back and the wheel scrolled on into nothing), so the box goes by
   what it was placed with, not what the game says.
 
+- **Every table like Best Crafts'** (2026-11-25), Josh's: every heading
+  sorts (click again to reverse, saved per character; names start A to Z,
+  dates newest first, numbers most first), rows are Best Crafts' 22 tall
+  and lit under the mouse with the quest log's highlight, in the same fonts,
+  laid out by Columns.lua. Profit History's Sales and Purchase History
+  gained sorting (Best Sellers had it) and went from 18 rows of 18 to 15 of
+  22, about as tall as before. The heading, sort and highlight helpers live
+  in Columns.lua so the tables can't drift apart.
+
 ## Best Crafts
 
 - **Professions button** (left of Scan): made to be clicked again and

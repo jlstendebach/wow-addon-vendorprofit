@@ -1167,7 +1167,7 @@ local function Create(page)
         heading.text = heading:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         heading.text:SetAllPoints(heading)
         heading.text:SetJustifyH(key == "name" and "LEFT" or "RIGHT")
-        heading.label = text
+        heading.key, heading.label = key, text
         heading:SetScript("OnClick", function() SetSort(key) end)
         Tooltip(heading, help or L.BEST_SORT_HELP)
         frame.headings[key] = heading
@@ -1520,14 +1520,7 @@ local function Refresh()
     end
 
     -- Headings: the sorted one in white, with an arrow for its direction.
-    local sort = Sort()
-    for key, heading in pairs(frame.headings) do
-        if key == sort.key then
-            heading.text:SetText(HIGHLIGHT_FONT_COLOR:WrapTextInColorCode(Columns.SortedText(heading.label, sort.ascending)))
-        else
-            heading.text:SetText(heading.label)
-        end
-    end
+    Columns.ShowSort(frame.headings, Sort())
 
     local all = {}
     if #keys > 0 then

@@ -28,8 +28,11 @@ VendorProfit.Columns = Columns
 Columns.GAP = 12
 Columns.FILL_MIN = 160
 
--- The fonts the tabs use for values and for headings.
+-- The fonts every table uses for values and for headings, and its rows'
+-- height (Best Crafts', which every table follows).
 local VALUE_FONT, HEADING_FONT = "GameFontHighlightSmall", "GameFontNormalSmall"
+Columns.VALUE_FONT, Columns.HEADING_FONT = VALUE_FONT, HEADING_FONT
+Columns.ROW_HEIGHT = 22
 
 -- One hidden font string per font, reused for every measurement.
 local measurers = {}
@@ -53,6 +56,61 @@ end
 -- arrow for the direction.
 function Columns.SortedText(label, ascending)
     return label .. " " .. (ascending and L.BEST_SORT_UP or L.BEST_SORT_DOWN)
+end
+
+-- Every table's headings sort, as on Best Crafts (docs/ui-design.md,
+-- "Tables"): click one to sort by its column, again to reverse. A heading
+-- over a column: key, its label, LEFT or RIGHT like its column, onClick(key)
+-- to sort, and help for its tooltip (the sort help by default). Placed with
+-- the columns.
+function Columns.Heading(parent, key, label, justify, onClick, help)
+    local heading = CreateFrame("Button", nil, parent)
+    heading:SetHeight(14)
+    heading.text = heading:CreateFontString(nil, "OVERLAY", HEADING_FONT)
+    heading.text:SetAllPoints(heading)
+    heading.text:SetJustifyH(justify)
+    heading.text:SetText(label)
+    heading.key, heading.label = key, label
+    heading:SetScript("OnClick", function() onClick(key) end)
+    heading:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetText(help or L.BEST_SORT_HELP, 1, 1, 1, 1, true)
+        GameTooltip:Show()
+    end)
+    heading:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    return heading
+end
+
+-- Shows which column a table is sorted by ({ key, ascending }): its heading
+-- in white with an arrow for the direction, the rest as they are.
+function Columns.ShowSort(headings, sort)
+    for _, heading in pairs(headings) do
+        if heading.key == sort.key then
+            heading.text:SetText(HIGHLIGHT_FONT_COLOR:WrapTextInColorCode(Columns.SortedText(heading.label, sort.ascending)))
+        else
+            heading.text:SetText(heading.label)
+        end
+    end
+end
+
+-- The sort after clicking key's heading: the same column reversed, or a
+-- new one in its first direction (A to Z for names, the most first for
+-- numbers and the newest first for dates, unless startsAscending[key]).
+function Columns.NextSort(current, key, startsAscending)
+    if current.key == key then
+        return { key = key, ascending = not current.ascending }
+    end
+    return { key = key, ascending = startsAscending[key] == true }
+end
+
+-- A row's highlight while the mouse is on it: the game's own list highlight
+-- (the quest log's), on list under the row's text. Placed with the row.
+function Columns.Highlight(list)
+    local highlight = list:CreateTexture(nil, "BACKGROUND")
+    highlight:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
+    highlight:SetBlendMode("ADD")
+    highlight:Hide()
+    return highlight
 end
 
 -- Notes value (nil is skipped) as one of column key's, in extents (a table

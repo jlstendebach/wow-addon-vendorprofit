@@ -34,14 +34,15 @@ VendorProfit.HistoryPanel = HistoryPanel
 -- Wider if the columns need it (Columns.lua).
 local WIDTH = 540
 local PADDING = 16
-local ROW_HEIGHT = 18
+-- Rows as tall as Best Crafts', as every table's (Columns.lua).
+local ROW_HEIGHT = VendorProfit.Columns.ROW_HEIGHT
 -- Title at -32 (12 tall), the total at -50 (10 tall), the view buttons and
 -- search 6 below that (20 tall), then the column headings 6 below those and
 -- 16 above the list: the same gaps as Best Crafts.
 local TOTAL_TOP = -50
 local CONTROLS_TOP = -66
 local LIST_TOP = -108
-local VISIBLE_ROWS = 18
+local VISIBLE_ROWS = 15
 -- The list is in a scroll box (ScrollBox.lua): its padding and bar beside
 -- the list, its padding above and below.
 local BOX_EXTRA = VendorProfit.ScrollBox.EXTRA_WIDTH
@@ -62,6 +63,10 @@ local WEEK = 7 * 24 * 60 * 60
 -- per character). Item sorts A to Z first.
 local SORT_DEFAULT = { key = "profit", ascending = false }
 local SORT_STARTS_ASCENDING = { name = true }
+-- Sales' sort: newest first, unless changed (saved per character). Item
+-- sorts A to Z first; dates and money the newest or most first.
+local SALES_SORT_DEFAULT = { key = "date", ascending = false }
+local SALES_STARTS_ASCENDING = { item = true }
 
 -- Ranges, in the menu's order: All time, then the last so many days, then
 -- the last so many sales. Saved per character.
@@ -195,13 +200,40 @@ local function EachSaleInRange(fn)
     end
 end
 
--- The sales the Sales list shows: in range and matching the search, newest
--- first. Worked out again only when the history, search, range or a loaded
--- name changes (and, for day ranges, each minute as days roll over).
+local function SalesSort()
+    local db = VendorProfitCharDB
+    if db and type(db.historySalesSort) == "table" and db.historySalesSort.key then
+        return db.historySalesSort
+    end
+    return SALES_SORT_DEFAULT
+end
+
+function HistoryPanel.SalesSort()
+    return SalesSort()
+end
+
+local function SetSalesSort(key)
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    VendorProfitCharDB.historySalesSort = Columns.NextSort(SalesSort(), key, SALES_STARTS_ASCENDING)
+    HistoryPanel.Refresh()
+end
+
+local SALE_VALUES = {
+    date = function(sale) return sale.time end,
+    item = function(sale) return lowerNames[sale.item] or ItemName(sale.item):lower() end,
+    cost = function(sale) return sale.cost end,
+    sold = function(sale) return sale.sold end,
+    profit = function(sale) return sale.sold - sale.cost end,
+}
+
+-- The sales the Sales list shows: in range and matching the search, in the
+-- chosen order (newest first to start). Worked out again only when the
+-- history, search, range, sort or a loaded name changes (and, for day
+-- ranges, each minute as days roll over).
 local function SalesData()
-    local range = Range()
+    local range, sort = Range(), SalesSort()
     local key = table.concat({ History.Version(), History.SaleCount(), filter, range.key, namesVersion,
-        range.days and math.floor(time() / 60) or 0 }, "/")
+        range.days and math.floor(time() / 60) or 0, sort.key, tostring(sort.ascending) }, "/")
     if key ~= salesKey then
         salesKey = key
         local data, extents = {}, {}
@@ -213,6 +245,24 @@ local function SalesData()
                 Columns.Track(extents, "profit", sale.sold - sale.cost)
             end
         end)
+        -- Newest first already; any other order sorted (ties newest first).
+        if not (sort.key == "date" and not sort.ascending) then
+            local value = SALE_VALUES[sort.key] or SALE_VALUES.date
+            local values = {}
+            for _, sale in ipairs(data) do
+                values[sale] = value(sale)
+            end
+            table.sort(data, function(a, b)
+                local x, y = values[a], values[b]
+                if x ~= y then
+                    if sort.ascending then
+                        return x < y
+                    end
+                    return x > y
+                end
+                return a.time > b.time
+            end)
+        end
         salesData, salesExtents = data, extents
     end
     return salesData
@@ -345,15 +395,8 @@ function HistoryPanel.Sort()
 end
 
 local function SetSort(key)
-    local current = Sort()
-    local ascending
-    if current.key == key then
-        ascending = not current.ascending
-    else
-        ascending = SORT_STARTS_ASCENDING[key] or false
-    end
     VendorProfitCharDB = VendorProfitCharDB or {}
-    VendorProfitCharDB.bestSellersSort = { key = key, ascending = ascending }
+    VendorProfitCharDB.bestSellersSort = Columns.NextSort(Sort(), key, SORT_STARTS_ASCENDING)
     HistoryPanel.Refresh()
 end
 
@@ -443,14 +486,33 @@ end
 
 -- Rows ----------------------------------------------------------------------------
 
+-- The text's place in a row, from the row's top: as on Best Crafts.
+local TEXT_OFFSET = -4
+
 local function HitArea(row, list, top, onEnter)
-    -- The whole row hovers, for the details.
+    -- The whole row hovers, for the details, lit while the mouse is on it.
+    row.highlight = Columns.Highlight(list)
     row.hit = CreateFrame("Frame", nil, list)
-    row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top + 2)
+    row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top)
     row.hit:SetSize(LIST_WIDTH, ROW_HEIGHT)
     row.hit:EnableMouse(true)
-    row.hit:SetScript("OnEnter", function() onEnter(row) end)
-    row.hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    row.hit:SetScript("OnEnter", function()
+        row.highlight:Show()
+        onEnter(row)
+    end)
+    row.hit:SetScript("OnLeave", function()
+        row.highlight:Hide()
+        GameTooltip:Hide()
+    end)
+end
+
+local function PlaceHit(row, list, top)
+    row.hit:ClearAllPoints()
+    row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top)
+    row.hit:SetSize(LIST_WIDTH, ROW_HEIGHT)
+    row.highlight:ClearAllPoints()
+    row.highlight:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top)
+    row.highlight:SetSize(LIST_WIDTH, ROW_HEIGHT)
 end
 
 -- Puts a Sales row at a place in the list (1 = top of the whole list).
@@ -460,23 +522,21 @@ local function PlaceRow(row, index)
     end
     row.index, row.layoutKey = index, salesLayoutKey
     local list = frame.list
-    local top = -(index - 1) * ROW_HEIGHT - 2
+    local top = -(index - 1) * ROW_HEIGHT
     local function At(region, key)
         local column = sales[key]
         region:SetWidth(column.width)
         region:ClearAllPoints()
         if key == "date" or key == "item" then
-            region:SetPoint("TOPLEFT", list, "TOPLEFT", column.left, top)
+            region:SetPoint("TOPLEFT", list, "TOPLEFT", column.left, top + TEXT_OFFSET)
         else
-            region:SetPoint("TOPRIGHT", list, "TOPRIGHT", column.right, top)
+            region:SetPoint("TOPRIGHT", list, "TOPRIGHT", column.right, top + TEXT_OFFSET)
         end
     end
     for _, key in ipairs({ "date", "item", "cost", "sold", "profit" }) do
         At(row[key], key)
     end
-    row.hit:ClearAllPoints()
-    row.hit:SetPoint("TOPLEFT", list, "TOPLEFT", 0, top + 2)
-    row.hit:SetSize(LIST_WIDTH, ROW_HEIGHT)
+    PlaceHit(row, list, top)
 end
 
 -- The slot-th of the Sales rows that fit on screen.
@@ -492,6 +552,7 @@ local function GetRow(slot)
         row.profit = Column(list, 0, "RIGHT")
         HitArea(row, list, 0, ShowSaleTooltip)
         row.regions = { row.date, row.item, row.cost, row.sold, row.profit, row.hit }
+        row.highlight:Hide()
         rows[slot] = row
     end
     return row
@@ -501,7 +562,7 @@ local function GetSellerRow(index)
     local row = sellerRows[index]
     if row == nil then
         local list = frame.list
-        local top = -(index - 1) * ROW_HEIGHT - 2
+        local top = -(index - 1) * ROW_HEIGHT
         row = {}
         row.item = Column(list, 0, "LEFT")
         for _, key in ipairs({ "n", "average", "profit", "averageRoi", "roi" }) do
@@ -514,16 +575,16 @@ local function GetSellerRow(index)
     -- Placed again only when the columns change.
     if row.layoutKey ~= sellersLayoutKey then
         row.layoutKey = sellersLayoutKey
-        local list, top = frame.list, -(index - 1) * ROW_HEIGHT - 2
+        local list, top = frame.list, -(index - 1) * ROW_HEIGHT
         row.item:SetWidth(sellers.name.width)
         row.item:ClearAllPoints()
-        row.item:SetPoint("TOPLEFT", list, "TOPLEFT", sellers.name.left, top)
+        row.item:SetPoint("TOPLEFT", list, "TOPLEFT", sellers.name.left, top + TEXT_OFFSET)
         for _, key in ipairs({ "n", "average", "profit", "averageRoi", "roi" }) do
             row[key]:SetWidth(sellers[key].width)
             row[key]:ClearAllPoints()
-            row[key]:SetPoint("TOPRIGHT", list, "TOPRIGHT", sellers[key].right, top)
+            row[key]:SetPoint("TOPRIGHT", list, "TOPRIGHT", sellers[key].right, top + TEXT_OFFSET)
         end
-        row.hit:SetSize(LIST_WIDTH, ROW_HEIGHT)
+        PlaceHit(row, list, top)
     end
     return row
 end
@@ -531,6 +592,9 @@ end
 local function ShowRegions(row, shown)
     for _, region in ipairs(row.regions) do
         region:SetShown(shown)
+    end
+    if not shown then
+        row.highlight:Hide()
     end
 end
 
@@ -568,11 +632,11 @@ end
 local function LayOutSales()
     local key, listWidth
     sales, listWidth, key = Columns.Layout(BASE_LIST_WIDTH, {
-        { key = "date", heading = L.HISTORY_DATE, samples = Columns.Date() },
-        { key = "item", heading = L.HISTORY_ITEM, fill = true },
-        { key = "cost", heading = L.HISTORY_COST, samples = Columns.Money(salesExtents, "cost") },
-        { key = "sold", heading = L.HISTORY_SOLD, samples = Columns.Money(salesExtents, "sold") },
-        { key = "profit", heading = L.BEST_PROFIT, samples = Columns.Money(salesExtents, "profit") },
+        { key = "date", heading = L.HISTORY_DATE, sorts = true, samples = Columns.Date() },
+        { key = "item", heading = L.HISTORY_ITEM, sorts = true, fill = true },
+        { key = "cost", heading = L.HISTORY_COST, sorts = true, samples = Columns.Money(salesExtents, "cost") },
+        { key = "sold", heading = L.HISTORY_SOLD, sorts = true, samples = Columns.Money(salesExtents, "sold") },
+        { key = "profit", heading = L.BEST_PROFIT, sorts = true, samples = Columns.Money(salesExtents, "profit") },
     })
     SetListWidth(listWidth)
     if key ~= salesLayoutKey then
@@ -669,13 +733,10 @@ local function Create(page)
     search:HookScript("OnEnterPressed", function(self) self:ClearFocus() end)
     frame.search = search
 
-    -- Sales headings, placed with the columns (LayOutSales).
+    -- Sales headings: click one to sort by it, as on Best Crafts. Placed
+    -- with the columns (LayOutSales).
     local function Heading(key, text, justify)
-        local heading = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        heading:SetJustifyH(justify)
-        heading:SetText(text)
-        heading.key = key
-        return heading
+        return Columns.Heading(frame, key, text, justify, SetSalesSort)
     end
     frame.headings = {
         Heading("date", L.HISTORY_DATE, "LEFT"),
@@ -685,23 +746,11 @@ local function Create(page)
         Heading("profit", L.BEST_PROFIT, "RIGHT"),
     }
 
-    -- Best Sellers headings: click one to sort by it, as on Best Crafts.
-    -- Placed with the columns (LayOutSellers).
+    -- Best Sellers headings, the same. Placed with the columns
+    -- (LayOutSellers).
     frame.sellerHeadings = {}
     local function SortHeading(key, text)
-        local heading = CreateFrame("Button", nil, frame)
-        heading:SetHeight(14)
-        heading.text = heading:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        heading.text:SetAllPoints(heading)
-        heading.text:SetJustifyH(key == "name" and "LEFT" or "RIGHT")
-        heading.label = text
-        heading:SetScript("OnClick", function() SetSort(key) end)
-        heading:SetScript("OnEnter", function(self)
-            GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetText(L.BEST_SORT_HELP, 1, 1, 1, 1, true)
-            GameTooltip:Show()
-        end)
-        heading:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        local heading = Columns.Heading(frame, key, text, key == "name" and "LEFT" or "RIGHT", SetSort)
         frame.sellerHeadings[key] = heading
         return heading
     end
@@ -836,20 +885,16 @@ local function Refresh()
 
     local shown = view == "items" and RefreshSellers() or RefreshSales()
 
-    -- Headings: the view's own; Best Sellers' sorted one in white, with an
-    -- arrow for its direction.
+    -- Headings: the view's own, the sorted one in white, with an arrow for
+    -- its direction.
     for _, heading in ipairs(frame.headings) do
         heading:SetShown(view == "sales" and shown > 0)
     end
-    local sort = Sort()
-    for key, heading in pairs(frame.sellerHeadings) do
+    for _, heading in pairs(frame.sellerHeadings) do
         heading:SetShown(view == "items" and shown > 0)
-        if key == sort.key then
-            heading.text:SetText(HIGHLIGHT_FONT_COLOR:WrapTextInColorCode(Columns.SortedText(heading.label, sort.ascending)))
-        else
-            heading.text:SetText(heading.label)
-        end
     end
+    Columns.ShowSort(frame.headings, SalesSort())
+    Columns.ShowSort(frame.sellerHeadings, Sort())
 
     -- The list fills the page: its box always VISIBLE_ROWS tall, kept when
     -- empty (saying why, inside it).
