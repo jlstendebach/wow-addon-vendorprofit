@@ -679,6 +679,20 @@ check("spent is shown but not taken off the profit", has_line(ev, "Spent on this
 check("nothing left to buy: the Buy step is gone", ev(BUY) is None and section(ev, "Buy") is None
       and headings(ev)[4:6] == ["To do", "1. Take from bank | |cff8080801 item|r"])
 check("crafts still listed", has_line(ev, "Bronze Bar x58", "29 crafts"))
+# Bags changing while the Shopping List isn't showing: planned again when
+# next needed, not on every bag update.
+run('''
+    __stub.plans = 0
+    local plan = VendorProfit.Order.Plan
+    VendorProfit.Order.Plan = function(...) __stub.plans = __stub.plans + 1; return plan(...) end
+    VendorProfit.Panel.Show("best")
+    __stub.Fire("BAG_UPDATE_DELAYED"); __stub.Fire("BAG_UPDATE_DELAYED")
+''')
+check("bags changing with the Shopping List not up: not planned on the spot", ev("__stub.plans") == 0)
+run('VendorProfit.Shopper.Summary()')
+check("...planned when next needed", ev("__stub.plans") > 0)
+run('__stub.plans = 0; VendorProfit.Panel.Show("shopping"); __stub.plans = 0; __stub.Fire("BAG_UPDATE_DELAYED")')
+check("...and on the spot while it's up", ev("__stub.plans") > 0)
 check("no errors while shopping", ev("#__stub.errors") == 0)
 
 # Crafting the copper bars changes the bags; the plan follows.
@@ -2802,6 +2816,19 @@ run('__stub.ah.owned[#__stub.ah.owned + 1] = { itemID = 2865, quantity = 1 }; __
 check("posting reads them again", ev("__stub.ah.ownedQueries") == 2 and ev("VendorProfit.BestPanel.Row(2).auctions:GetText()") == "1")
 run('__stub.Fire("AUCTION_HOUSE_AUCTION_CREATED"); __stub.Fire("AUCTION_CANCELED"); __stub.Advance(1)')
 check("...once for changes close together", ev("__stub.ah.ownedQueries") == 3)
+run('for i = 1, 4 do __stub.Fire("AUCTION_HOUSE_AUCTION_CREATED"); __stub.Advance(0.3) end')
+check("...a multisell (auctions created one at a time): once, after the last", ev("__stub.ah.ownedQueries") == 3)
+run('__stub.Advance(1)')
+check("...then read", ev("__stub.ah.ownedQueries") == 4)
+run('''
+    __stub.__savedPosterStatus = VendorProfit.Poster.Status
+    VendorProfit.Poster.Status = function() return "posting" end
+    __stub.Fire("AUCTION_HOUSE_AUCTION_CREATED")
+''')
+run('__stub.Advance(3)')
+check("...not while the Post step is posting (it needs the auction house's requests)", ev("__stub.ah.ownedQueries") == 4)
+run('VendorProfit.Poster.Status = __stub.__savedPosterStatus; __stub.Advance(1)')
+check("...but once it's done", ev("__stub.ah.ownedQueries") == 5)
 run(B + ".auctionsHeading:Click()")
 check("sort by AH: most up for auction first", [l.split(" | ")[0].split("|t ")[-1] for l in best()][:2] == ["Rough Bronze Cuirass", "Rough Bronze Shoulders"]
       and "Arrow-Down" in ev(B + ".auctionsHeading.text:GetText()"))

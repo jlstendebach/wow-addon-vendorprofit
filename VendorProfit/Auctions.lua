@@ -62,18 +62,30 @@ local function Read()
     Changed()
 end
 
-local queryPending = false
+-- Asks once things go quiet: QUERY_DELAY after the last post or cancel, and
+-- not while the Post step is posting. A multisell creates its auctions one
+-- at a time, and asking after each spent the auction house's request
+-- allowance the posting and price searches need.
+local queryPending, lastAsked = false, 0
 local function Query()
+    lastAsked = GetTime()
     if queryPending then
         return
     end
     queryPending = true
-    C_Timer.After(Auctions.QUERY_DELAY, function()
+    local function Later()
+        local Poster = VendorProfit.Poster
+        local wait = lastAsked + Auctions.QUERY_DELAY - GetTime()
+        if wait > 0 or (Poster and Poster.Status() == "posting") then
+            C_Timer.After(math.max(wait, Auctions.QUERY_DELAY), Later)
+            return
+        end
         queryPending = false
         if AuctionHouseFrame and AuctionHouseFrame:IsShown() and C_AuctionHouse.QueryOwnedAuctions then
             C_AuctionHouse.QueryOwnedAuctions(SORTS)
         end
-    end)
+    end
+    C_Timer.After(Auctions.QUERY_DELAY, Later)
 end
 
 local events = CreateFrame("Frame")

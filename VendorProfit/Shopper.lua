@@ -337,6 +337,13 @@ function Shopper.Summary()
     return summary or Shopper.Recompute()
 end
 
+-- Forgets the summary, to be worked out again when next asked for: for
+-- changes while nothing is showing it (planning the whole order is the
+-- costly part, and bags change often).
+function Shopper.Invalidate()
+    summary = nil
+end
+
 -- The next purchase: the first auction item still needed. A stackable item
 -- as much as is listed; one that doesn't stack, one of its cheapest.
 -- Returns { itemID, quantity, budget, auctionID (single auctions) } or nil.

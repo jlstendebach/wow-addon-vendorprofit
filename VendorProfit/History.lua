@@ -753,11 +753,14 @@ end
 
 -- Events ----------------------------------------------------------------------------
 
+local reconcileWaiting, lastBagUpdate = false, 0
 local events = CreateFrame("Frame")
-for _, event in ipairs({ "UNIT_SPELLCAST_SUCCEEDED", "MERCHANT_SHOW", "MERCHANT_UPDATE", "BAG_UPDATE_DELAYED",
-    "MAIL_SHOW", "MAIL_INBOX_UPDATE" }) do
+for _, event in ipairs({ "MERCHANT_SHOW", "MERCHANT_UPDATE", "BAG_UPDATE_DELAYED", "MAIL_SHOW", "MAIL_INBOX_UPDATE" }) do
     pcall(events.RegisterEvent, events, event)
 end
+-- Only the player's casts: registered for every unit, it ran for each cast
+-- in a group, a raid or a crowded city.
+events:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
 events:SetScript("OnEvent", function(_, event, unit, _, spellID)
     if event == "UNIT_SPELLCAST_SUCCEEDED" then
         if unit == "player" and spellID then
@@ -774,7 +777,23 @@ events:SetScript("OnEvent", function(_, event, unit, _, spellID)
             CheckBuyback()
         end
         Reconcile()
-        -- Check again once things have settled.
-        C_Timer.After(SETTLE + 0.5, Reconcile)
+        -- Check again once things have settled, SETTLE after the last bag
+        -- update: one timer, put off while updates keep coming (bags update
+        -- many times while crafting or looting, and a timer each piled up
+        -- checks of every recorded item).
+        lastBagUpdate = GetTime()
+        if not reconcileWaiting then
+            reconcileWaiting = true
+            local function Later()
+                local wait = lastBagUpdate + SETTLE + 0.5 - GetTime()
+                if wait > 0 then
+                    C_Timer.After(wait, Later)
+                    return
+                end
+                reconcileWaiting = false
+                Reconcile()
+            end
+            C_Timer.After(SETTLE + 0.5, Later)
+        end
     end
 end)
