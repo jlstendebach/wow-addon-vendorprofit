@@ -417,6 +417,7 @@ function UnitCastingInfo(unit) if unit == "player" then return stub.casting end 
 function ButtonFrameTemplate_HidePortrait() end
 function ButtonFrameTemplate_HideButtonBar() end
 ERR_ITEM_NOT_FOUND, ERR_NOT_ENOUGH_MONEY = "Item not found.", "You don't have enough money."
+ERR_AUCTION_BID_PLACED, ERR_AUCTION_WON_S = "Bid accepted.", "You won an auction for %s"
 Enum = { AuctionHouseNotification = { AuctionWon = 4 }, CraftingReagentType = { Basic = 0, Optional = 1 }, TradeskillRelativeDifficulty = { Optimal = 0, Medium = 1, Easy = 2, Trivial = 3 }, PlayerInteractionType = { Auctioneer = 21, Merchant = 5 } }
 
 local function Color(code, r, g, b)
@@ -802,7 +803,26 @@ C_AuctionHouse = {
             stub.money = stub.money - amount
             local where = ah.toMail and stub.mail or stub.bags
             where[foundIn] = (where[foundIn] or 0) + 1
-            stub.Fire("AUCTION_HOUSE_SHOW_NOTIFICATION", Enum.AuctionHouseNotification.AuctionWon)
+            -- How the game says it's bought (ah.wonBy): the "auction won"
+            -- notice (default), the purchase-completed event, the bids list,
+            -- a chat line, or (later, ah.wonLate seconds on) any of those.
+            local function Say()
+                local by = ah.wonBy or "notice"
+                if by == "notice" then
+                    stub.Fire("AUCTION_HOUSE_SHOW_NOTIFICATION", Enum.AuctionHouseNotification.AuctionWon)
+                elseif by == "formatted" then
+                    stub.Fire("AUCTION_HOUSE_SHOW_FORMATTED_NOTIFICATION", Enum.AuctionHouseNotification.AuctionWon, "Item")
+                elseif by == "completed" then
+                    stub.Fire("AUCTION_HOUSE_PURCHASE_COMPLETED", auctionID)
+                elseif by == "bids" then
+                    stub.Fire("BIDS_UPDATED")
+                elseif by == "chat" then
+                    stub.Fire("CHAT_MSG_SYSTEM", ERR_AUCTION_WON_S:format("Tin Bar"))
+                elseif by == "accepted" then
+                    stub.Fire("CHAT_MSG_SYSTEM", ERR_AUCTION_BID_PLACED)
+                end
+            end
+            if ah.wonLate then C_Timer.After(ah.wonLate, Say) else Say() end
             if not ah.toMail then stub.Fire("BAG_UPDATE_DELAYED") end
         end)
     end,

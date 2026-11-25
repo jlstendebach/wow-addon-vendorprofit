@@ -1087,6 +1087,47 @@ check("'not found' with more in the row: searched again rather than dropping the
       ev("#__stub.ah.searches") == searches + 1 and ev("VendorProfit.Shopper.Status()") == "ready")
 check("no errors buying grouped auctions", ev("#__stub.errors") == 0)
 
+# How the game says a single auction is bought varies: every way counts, once.
+run, ev = shop_client()
+run('__stub.createCount = 4; __stub.bags[2840] = 20; __stub.auctionPrices[3576] = 80'); run(QUEUE + ':Click()')
+run('''
+    __stub.ah.nonCommodity[3576] = true
+    __stub.ah.auctions[3576] = { { auctionID = 401, buyout = 70, quantity = 9 } }
+''')
+run('__stub.OpenAH()'); click(run, "scan"); run('__stub.Advance(3)')
+bought = lambda: ev("__stub.bags[3576] or 0")
+spent = lambda: ev("VendorProfitCharDB.order.spent")
+for by in ["formatted", "completed", "bids", "chat", "accepted"]:
+    before_b, before_s = bought(), spent()
+    run('__stub.ah.wonBy = "%s"' % by); click(run, "buy"); run('__stub.Advance(0.5)')
+    check("bought, said with %s: recorded once, Buy ready for the next" % by,
+          bought() == before_b + 1 and spent() == before_s + 70 and ev("VendorProfit.Shopper.Status()") == "ready"
+          and ev("(VendorProfit.Shopper.Message())") == "Bought 1 Tin Bar for |cffffffff70c|r.")
+# Said twice (the notice and the bids list): still once.
+run('''
+    __stub.ah.wonBy = "notice"
+    local fire = __stub.Fire
+    __stub.Fire = function(event, ...)
+        fire(event, ...)
+        if event == "AUCTION_HOUSE_SHOW_NOTIFICATION" then fire("BIDS_UPDATED") end
+    end
+''')
+before_s = spent()
+click(run, "buy"); run('__stub.Advance(0.5)')
+check("said two ways at once: recorded once", spent() == before_s + 70)
+# Said only after the 15 seconds: recorded late, once.
+run('__stub.ah.wonBy = "bids"; __stub.ah.wonLate = 20')
+before_s = spent()
+click(run, "buy"); run('__stub.Advance(16)')
+check("no word in 15 seconds: says so, not recorded yet", spent() == before_s
+      and "No reply buying Tin Bar" in ev("(VendorProfit.Shopper.Message())"))
+run('__stub.Advance(6)')
+check("...said late: recorded then, once", spent() == before_s + 70)
+run('__stub.Fire("BIDS_UPDATED")')
+check("...a bids update later on records nothing more", spent() == before_s + 70)
+run('__stub.ah.wonLate = nil; __stub.ah.wonBy = nil')
+check("no errors with every way of saying it's bought", ev("#__stub.errors") == 0)
+
 # --- Queue the exact recipe (under Auctionator's Vendor Profit line) ---------------
 run, ev = shop_client()
 check("exact Queue under the Vendor Profit line, a small gap below it", ev(EXACT + ":IsShown()")

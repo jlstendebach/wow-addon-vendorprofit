@@ -624,6 +624,16 @@ opens.
   Player-only cast events (RegisterUnitEvent) and one settle check after a
   run of bag updates, instead of one per update, for the same reason.
 
+- **Any sign a single auction was bought counts** (2026-11-25): on
+  Forever, buying gear (Ultrasafe Transporter) put the item in the mail
+  but the "auction won" notice never reached the addon, so every purchase
+  waited 15 seconds and said "No reply". Now the notice (plain or
+  formatted), AUCTION_HOUSE_PURCHASE_COMPLETED for that auction, BIDS_UPDATED
+  or the chat line ("Bid accepted.", "You won an auction for ...") each
+  count, the first one recorded. TradeSkillMaster takes the bids list or the
+  chat line as the answer to a buyout. Which one Forever sends is
+  unconfirmed.
+
 ## Crafting
 
 - **Only professions you still have**: a dropped profession (Mining

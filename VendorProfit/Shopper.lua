@@ -32,9 +32,10 @@
 -- (bid-only ones are skipped: the panel never bids), cheapest first, and one
 -- click buys one item outright at its buyout (C_AuctionHouse.PlaceBid, as
 -- Auctionator does). There's no quote to
--- confirm: an auction's buyout is fixed and already on the button. The game
--- says "won" when it's bought; if someone else bought it first it says the
--- item wasn't found, and that auction is dropped so Buy goes on to the next.
+-- confirm: an auction's buyout is fixed and already on the button. It's
+-- bought when the game says so, which it can do several ways (see
+-- OnAuctionWon); if someone else bought it first it says the item wasn't
+-- found, and that auction is dropped so Buy goes on to the next.
 -- The auction house only sells an auction from the latest search, though
 -- (anyone's: the scan's next item, Auctionator, the game's own window): an
 -- auction from an older search is "not found" too. So when another search
@@ -1012,7 +1013,12 @@ local function OnItemResults(itemKey)
     FinishScanItem(current.itemID, listing)
 end
 
--- A single auction bought: the game says the auction was won.
+-- A single auction bought. The game can say so several ways: the "auction
+-- won" notice (plain or formatted), the purchase-completed event, your bids
+-- list updating, or "Bid accepted." in chat. Forever's client delivered the
+-- item without the notice reaching the addon, so every one of them counts
+-- (TradeSkillMaster takes the bids list or the chat line as the answer to a
+-- buyout too). Only the first is recorded: the purchase ends with it.
 local function OnAuctionWon()
     if (purchase == nil or status ~= "buying") and unanswered and unanswered.auctionID then
         -- One that timed out went through after all.
@@ -1041,6 +1047,26 @@ end
 local WON = Enum.AuctionHouseNotification and Enum.AuctionHouseNotification.AuctionWon
 local function OnNotification(notification)
     if WON ~= nil and notification == WON then
+        OnAuctionWon()
+    end
+end
+
+-- The purchase-completed event names the auction: only ours counts.
+local function OnPurchaseCompleted(auctionID)
+    local current = purchase or unanswered
+    if current and current.auctionID and (auctionID == nil or auctionID == current.auctionID) then
+        OnAuctionWon()
+    end
+end
+
+-- "Bid accepted." in chat, or "You won an auction for <item>".
+local WON_PATTERN = ERR_AUCTION_WON_S
+    and ("^" .. ERR_AUCTION_WON_S:gsub("([%(%)%.%+%-%*%?%[%]%^%$])", "%%%1"):gsub("%%s", ".+") .. "$")
+local function OnSystemMessage(text)
+    if text == nil then
+        return
+    end
+    if (ERR_AUCTION_BID_PLACED and text == ERR_AUCTION_BID_PLACED) or (WON_PATTERN and text:match(WON_PATTERN)) then
         OnAuctionWon()
     end
 end
@@ -1127,6 +1153,7 @@ for _, event in ipairs({
     "COMMODITY_SEARCH_RESULTS_UPDATED", "COMMODITY_SEARCH_RESULTS_ADDED",
     "ITEM_SEARCH_RESULTS_UPDATED", "ITEM_SEARCH_RESULTS_ADDED",
     "AUCTION_HOUSE_SHOW_NOTIFICATION", "AUCTION_HOUSE_SHOW_FORMATTED_NOTIFICATION", "UI_ERROR_MESSAGE",
+    "AUCTION_HOUSE_PURCHASE_COMPLETED", "BIDS_UPDATED", "CHAT_MSG_SYSTEM",
     "COMMODITY_PRICE_UPDATED", "COMMODITY_PRICE_UNAVAILABLE",
     "COMMODITY_PURCHASE_SUCCEEDED", "COMMODITY_PURCHASE_FAILED",
     "AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED",
@@ -1150,6 +1177,9 @@ local handlers = {
     end,
     AUCTION_HOUSE_SHOW_NOTIFICATION = OnNotification,
     AUCTION_HOUSE_SHOW_FORMATTED_NOTIFICATION = OnNotification,
+    AUCTION_HOUSE_PURCHASE_COMPLETED = OnPurchaseCompleted,
+    BIDS_UPDATED = function() OnAuctionWon() end,
+    CHAT_MSG_SYSTEM = OnSystemMessage,
     UI_ERROR_MESSAGE = OnErrorMessage,
     COMMODITY_PRICE_UPDATED = OnPriceUpdated,
     COMMODITY_PRICE_UNAVAILABLE = OnPriceUnavailable,
