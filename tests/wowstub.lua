@@ -908,6 +908,12 @@ end
 -- leave one at a time, that many seconds apart, as a multisell does.
 ItemLocation = {}
 function ItemLocation:CreateFromBagAndSlot(bag, slot) return { bag = bag, slot = slot } end
+function C_Item.GetItemID(location)
+    local s = location and Slot(location.bag, location.slot)
+    return s and s.itemID
+end
+-- The durations' names, as Forever's auction house shows them.
+AUCTION_DURATION_ONE, AUCTION_DURATION_TWO, AUCTION_DURATION_THREE = "2 Hours", "8 Hours", "24 Hours"
 stub.ah.posts = {}
 local function Post(kind, location, duration, quantity, price)
     local s = Slot(location.bag, location.slot)

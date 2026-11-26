@@ -451,6 +451,17 @@ time" route mode).
   The listing line moved into To do's box (one row per price) instead of a
   second scroll box. Saved as postQueue (the first version's toPost set is
   turned into it, each at what's in the bags).
+- **Posting for as long as you last did** (2026-11-26), Josh's: he posts
+  one item for 8 hours by hand and wants it reposted the same way. The
+  mail an auction comes back in doesn't say how long it was up, so every
+  post is watched instead (hooks on C_AuctionHouse.PostItem and
+  PostCommodity, which the Sell tab, Auctionator and the Post step all go
+  through, as TradeSkillMaster does) and its duration remembered per item.
+  Only longer-than-default ones are kept (postDurations); posting at the
+  default forgets it, so going back to 2 hours sticks. The Post step's
+  price line names a longer duration, for its bigger deposit. Rejected: a
+  duration setting per Post Queue row (more clicks, and it wouldn't learn
+  from how he already posts).
 - **Reposting what comes back** (2026-11-22): an auction mailed back,
   expired *or* cancelled (Josh cancels undercut auctions to repost them),
   is queued again for the count that came back, when its item is taken

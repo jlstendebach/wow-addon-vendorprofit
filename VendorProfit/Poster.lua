@@ -13,7 +13,8 @@
 --     own examples). Never seen: skipped, saying so.
 --   * Below what the item cost you (after the auction house's cut): Post
 --     turns red and needs a second click.
---   * The shortest duration, the queued count in one post. The game posts a
+--   * The shortest duration, unless you last posted the item for longer
+--     (see Durations), the queued count in one post. The game posts a
 --     number of items that don't stack in one go (Auctionator's multisell
 --     does the same), so it's one click for those too.
 --
@@ -41,7 +42,7 @@ Poster.SEARCH_RETRIES = 3
 Poster.POST_TIMEOUT = 15
 Poster.THROTTLE_POLL = 0.2
 -- The shortest duration, as the game numbers them (1, 2, 3, shortest
--- first; 2 hours on Forever's auction house, 12 on retail's).
+-- first; 2 hours on Forever's auction house, 12 on retail's): the default.
 Poster.DURATION = 1
 Poster.SUSPICIOUS_COUNT = 3
 Poster.SUSPICIOUS_GAP = 0.8
@@ -151,6 +152,45 @@ end
 -- An auction that came back by mail, expired or cancelled: n of the item.
 function Poster.Returned(itemID, n)
     Poster.Add(itemID, n or 1)
+end
+
+-- Durations --------------------------------------------------------------------
+
+-- How long you last posted each item for, so the Post step posts it the
+-- same way: watched on every post, whoever makes it (the game's Sell tab,
+-- Auctionator, the Post step), since the game passes the duration in. An
+-- auction mailed back doesn't say how long it was up. Only the longer ones
+-- are kept (VendorProfitCharDB.postDurations[itemID] = duration); posting
+-- an item at the default forgets it, so going back to 2 hours sticks.
+local function Durations()
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    VendorProfitCharDB.postDurations = VendorProfitCharDB.postDurations or {}
+    return VendorProfitCharDB.postDurations
+end
+
+function Poster.Duration(itemID)
+    return Durations()[itemID] or Poster.DURATION
+end
+
+local function Remember(location, duration)
+    if type(duration) ~= "number" or location == nil then
+        return
+    end
+    local ok, itemID = pcall(C_Item.GetItemID, location)
+    if not ok or itemID == nil then
+        return
+    end
+    Durations()[itemID] = duration ~= Poster.DURATION and duration or nil
+end
+
+hooksecurefunc(C_AuctionHouse, "PostItem", function(location, duration) Remember(location, duration) end)
+hooksecurefunc(C_AuctionHouse, "PostCommodity", function(location, duration) Remember(location, duration) end)
+
+-- The game's name for a duration ("8 Hours"), or nil.
+local DURATION_NAMES = { "AUCTION_DURATION_ONE", "AUCTION_DURATION_TWO", "AUCTION_DURATION_THREE" }
+function Poster.DurationName(duration)
+    local name = DURATION_NAMES[duration]
+    return name and _G[name] or nil
 end
 
 -- Takes count off an item's queued count (after posting them); off the
@@ -528,9 +568,9 @@ function Poster.Post()
     status = "posting"
     SetMessage(nil)
     if item.commodity then
-        C_AuctionHouse.PostCommodity(location, Poster.DURATION, quantity, item.price)
+        C_AuctionHouse.PostCommodity(location, Poster.Duration(item.itemID), quantity, item.price)
     else
-        C_AuctionHouse.PostItem(location, Poster.DURATION, quantity, nil, item.price)
+        C_AuctionHouse.PostItem(location, Poster.Duration(item.itemID), quantity, nil, item.price)
     end
     WatchPost(item, Poster.POST_TIMEOUT)
     Changed()

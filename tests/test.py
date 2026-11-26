@@ -3593,6 +3593,27 @@ check("...says so at 15, Post offered again, still queued", ev("%s.Status()" % P
 run('__stub.ah.noPostReply = false; __stub.CloseAH()')
 # Saved data from before the Post Queue: a set of items to post all of.
 run2, ev2 = client('VendorProfitCharDB = { toPost = { [50011] = true } }; __stub.bags[50011] = 7')
+# Durations: posted longer by hand (Sell tab, Auctionator), the Post step
+# posts it the same way; posted at the default again, it forgets.
+run('''
+    VendorProfitCharDB.postQueue = {}
+    __stub.items["item:50030"] = { name = "Long Helm", cached = true, sellPrice = 1 }
+    __stub.PutInBags(0, 11, 50030, 3)
+    __stub.ah.nonCommodity[50030] = true
+    __stub.ah.auctions[50030] = { { auctionID = 9301, buyout = 30000, quantity = 1 } }
+''')
+run('__stub.OpenAH()')
+run('C_AuctionHouse.PostItem(ItemLocation:CreateFromBagAndSlot(0, 11), 2, 1, nil, 31000); __stub.Advance(0.5)')
+check("an item posted by hand for longer: remembered (8 hours)", ev("VendorProfitCharDB.postDurations[50030]") == 2
+      and ev("VendorProfit.Poster.Duration(50030)") == 2)
+run('VendorProfit.Poster.Returned(50030, 2); ' + POST + ':Click(); __stub.Advance(0.5)')
+check("...back by mail: the Post step says it'll post for 8 hours", has_line(ev, "Post 2 Long Helm at", ", for 8 hours"))
+run(POST + ':Click(); __stub.Advance(0.5)')
+check("...and posts it so", posts()[-1] == ("item", 50030, 2, 2, 30000))
+run('__stub.PutInBags(0, 11, 50030, 1); C_AuctionHouse.PostItem(ItemLocation:CreateFromBagAndSlot(0, 11), 1, 1, nil, 31000); __stub.Advance(0.5)')
+check("posted at the default again: forgotten, so 2 hours sticks", ev("VendorProfitCharDB.postDurations[50030]") is None
+      and ev("VendorProfit.Poster.Duration(50030)") == 1)
+run('__stub.CloseAH()')
 check("an older save's items to post: queued at what's in the bags", [(e.itemID, e.count) for e in ev2("(function() VendorProfit.Poster.Items() return VendorProfitCharDB.postQueue end)()").values()] == [(50011, 7)]
       and ev2("VendorProfitCharDB.toPost") is None)
 check("no errors from posting", ev("#__stub.errors") == 0)
