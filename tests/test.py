@@ -3652,6 +3652,34 @@ check("folded: nothing under it, saying it holds 0", section(ev, "Post Queue (0)
 run(row + '.hit:GetScript("OnMouseUp")(' + row + '.hit, "LeftButton")')
 check("no errors with nothing queued", ev("#__stub.errors") == 0)
 
+# --- The Post Queue follows your bags ---------------------------------------------
+# Queued items that leave your bags some other way come off the queue, so they
+# don't turn up to post the next time you have some as a reagent.
+run, ev = client()
+queue = lambda: [(e.itemID, e.count) for e in ev("VendorProfitCharDB.postQueue or {}").values()]
+run('''
+    VendorProfitCharDB.postQueue = { { itemID = 50040, count = 200 }, { itemID = 50041, count = 5 }, { itemID = 50042, count = 1000 } }
+    __stub.bags[50040] = 200; __stub.bags[50041] = 5; __stub.bags[50042] = 0
+    __stub.Fire("PLAYER_ENTERING_WORLD")
+''')
+run('__stub.Advance(5)')
+check("just logged in (bags may still be loading): nothing taken off", queue() == [(50040, 200), (50041, 5), (50042, 1000)])
+run('__stub.Advance(6)')
+check("...once they're in: a count left from items long gone comes off", queue() == [(50040, 200), (50041, 5)])
+run('__stub.bags[50040] = 120; __stub.Fire("BAG_UPDATE_DELAYED"); __stub.Advance(2)')
+check("used some (crafted into something else): not at once, while things settle", queue()[0] == (50040, 200))
+run('__stub.Advance(4)')
+check("...then the queue down to what's left in your bags", queue()[0] == (50040, 120))
+run('__stub.bags[50041] = 0; __stub.Fire("BAG_UPDATE_DELAYED"); __stub.Advance(6)')
+check("all of one gone (sold to a vendor, handed in): off the queue", queue() == [(50040, 120)])
+run('VendorProfit.Poster.Crafted(50043, 3); __stub.Fire("BAG_UPDATE_DELAYED"); __stub.Advance(4)')
+check("just crafted, not in your bags yet: left queued", (50043, 3) in queue())
+run('__stub.bags[50043] = 3; __stub.Fire("BAG_UPDATE_DELAYED"); __stub.Advance(6)')
+check("...and once it lands, it stays", (50043, 3) in queue())
+run('__stub.bags[50040] = 300; __stub.Fire("BAG_UPDATE_DELAYED"); __stub.Advance(6)')
+check("more in your bags than queued (bought as a reagent): the queue doesn't grow", queue()[0] == (50040, 120))
+check("no errors following the bags", ev("#__stub.errors") == 0)
+
 # --- Turn-ins: Thorium Shells for Thorium Headed Arrows ----------------------------
 # 200 shells handed in for 200 arrows, priced on Best Crafts like a recipe under
 # its own Turn-ins heading, for anyone of the level. Shells: 200 a craft from 2

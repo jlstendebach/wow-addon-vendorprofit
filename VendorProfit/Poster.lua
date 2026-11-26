@@ -131,10 +131,15 @@ local function Find(itemID)
 end
 
 -- Queues count more of an item to post (at the end if it's new).
+-- When each item was last queued (GetTime()): what's queued lands in your
+-- bags a moment later (a craft, a mail), so Trim leaves it alone till then.
+local queuedAt = {}
+
 function Poster.Add(itemID, count)
     if count == nil or count <= 0 then
         return
     end
+    queuedAt[itemID] = GetTime()
     local _, entry = Find(itemID)
     if entry then
         entry.count = entry.count + count
@@ -624,7 +629,70 @@ end
 
 local AUCTIONEER = Enum.PlayerInteractionType and Enum.PlayerInteractionType.Auctioneer
 
+-- Items queued to post that leave your bags some other way (crafted into
+-- something else, handed in, sold to a vendor, mailed, banked) come off
+-- the queue as they go: what's queued is never more than what's in your
+-- bags. Left queued, an item kept its count, and the next time you had
+-- some for something else (bought or crafted as a reagent) it turned up in
+-- the Post Queue. Checked once things settle, SETTLE after the last bag
+-- update, and not for an item just queued (still on its way to your bags),
+-- nor the one being posted (Posted takes those off). Not in the first
+-- moments after logging in, while the bags may still be loading.
+Poster.SETTLE = 5
+Poster.LOGIN_GRACE = 10
+local enteredWorld = math.huge
+local lastBagUpdate, trimWaiting = 0, false
+
+function Poster.Trim()
+    if GetTime() < enteredWorld + Poster.LOGIN_GRACE then
+        return
+    end
+    local queue, changed = Queue(), false
+    for index = #queue, 1, -1 do
+        local entry = queue[index]
+        local posting = status == "posting" and current and current.itemID == entry.itemID
+        local settled = GetTime() - (queuedAt[entry.itemID] or -math.huge) >= Poster.SETTLE
+        local bags = InBags(entry.itemID)
+        if settled and not posting and bags < entry.count then
+            changed = true
+            if bags > 0 then
+                entry.count = bags
+            else
+                table.remove(queue, index)
+            end
+        end
+    end
+    if changed then
+        Changed()
+    end
+end
+
+local function TrimLater()
+    lastBagUpdate = GetTime()
+    if trimWaiting then
+        return
+    end
+    trimWaiting = true
+    local function Later()
+        local wait = lastBagUpdate + Poster.SETTLE + 0.5 - GetTime()
+        if wait > 0 then
+            C_Timer.After(wait, Later)
+            return
+        end
+        trimWaiting = false
+        Poster.Trim()
+    end
+    C_Timer.After(Poster.SETTLE + 0.5, Later)
+end
+
 local handlers = {
+    PLAYER_ENTERING_WORLD = function()
+        if enteredWorld == math.huge then
+            enteredWorld = GetTime()
+            -- Once the bags are surely in: what's queued but gone since.
+            C_Timer.After(Poster.LOGIN_GRACE + 0.5, Poster.Trim)
+        end
+    end,
     PLAYER_INTERACTION_MANAGER_FRAME_SHOW = function(kind) if kind == AUCTIONEER then Opened() end end,
     PLAYER_INTERACTION_MANAGER_FRAME_HIDE = function(kind) if kind == AUCTIONEER then Closed() end end,
     AUCTION_HOUSE_SHOW = Opened,
@@ -636,7 +704,10 @@ local handlers = {
         OnItemResults(itemKey or (current and C_AuctionHouse.MakeItemKey(current.itemID)))
     end,
     AUCTION_HOUSE_AUCTION_CREATED = CheckPosted,
-    BAG_UPDATE_DELAYED = CheckPosted,
+    BAG_UPDATE_DELAYED = function()
+        CheckPosted()
+        TrimLater()
+    end,
     UI_ERROR_MESSAGE = OnErrorMessage,
 }
 
