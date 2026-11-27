@@ -1087,6 +1087,47 @@ check("'not found' with more in the row: searched again rather than dropping the
       ev("#__stub.ah.searches") == searches + 1 and ev("VendorProfit.Shopper.Status()") == "ready")
 check("no errors buying grouped auctions", ev("#__stub.errors") == 0)
 
+# How the game says a single auction is bought varies: every way counts, once.
+run, ev = shop_client()
+run('__stub.createCount = 4; __stub.bags[2840] = 20; __stub.auctionPrices[3576] = 80'); run(QUEUE + ':Click()')
+run('''
+    __stub.ah.nonCommodity[3576] = true
+    __stub.ah.auctions[3576] = { { auctionID = 401, buyout = 70, quantity = 9 } }
+''')
+run('__stub.OpenAH()'); click(run, "scan"); run('__stub.Advance(3)')
+bought = lambda: ev("__stub.bags[3576] or 0")
+spent = lambda: ev("VendorProfitCharDB.order.spent")
+for by in ["formatted", "completed", "bids", "chat", "accepted"]:
+    before_b, before_s = bought(), spent()
+    run('__stub.ah.wonBy = "%s"' % by); click(run, "buy"); run('__stub.Advance(0.5)')
+    check("bought, said with %s: recorded once, Buy ready for the next" % by,
+          bought() == before_b + 1 and spent() == before_s + 70 and ev("VendorProfit.Shopper.Status()") == "ready"
+          and ev("(VendorProfit.Shopper.Message())") == "Bought 1 Tin Bar for |cffffffff70c|r.")
+# Said twice (the notice and the bids list): still once.
+run('''
+    __stub.ah.wonBy = "notice"
+    local fire = __stub.Fire
+    __stub.Fire = function(event, ...)
+        fire(event, ...)
+        if event == "AUCTION_HOUSE_SHOW_NOTIFICATION" then fire("BIDS_UPDATED") end
+    end
+''')
+before_s = spent()
+click(run, "buy"); run('__stub.Advance(0.5)')
+check("said two ways at once: recorded once", spent() == before_s + 70)
+# Said only after the 15 seconds: recorded late, once.
+run('__stub.ah.wonBy = "bids"; __stub.ah.wonLate = 20')
+before_s = spent()
+click(run, "buy"); run('__stub.Advance(16)')
+check("no word in 15 seconds: says so, not recorded yet", spent() == before_s
+      and "No reply buying Tin Bar" in ev("(VendorProfit.Shopper.Message())"))
+run('__stub.Advance(6)')
+check("...said late: recorded then, once", spent() == before_s + 70)
+run('__stub.Fire("BIDS_UPDATED")')
+check("...a bids update later on records nothing more", spent() == before_s + 70)
+run('__stub.ah.wonLate = nil; __stub.ah.wonBy = nil')
+check("no errors with every way of saying it's bought", ev("#__stub.errors") == 0)
+
 # --- Queue the exact recipe (under Auctionator's Vendor Profit line) ---------------
 run, ev = shop_client()
 check("exact Queue under the Vendor Profit line, a small gap below it", ev(EXACT + ":IsShown()")
@@ -3552,6 +3593,27 @@ check("...says so at 15, Post offered again, still queued", ev("%s.Status()" % P
 run('__stub.ah.noPostReply = false; __stub.CloseAH()')
 # Saved data from before the Post Queue: a set of items to post all of.
 run2, ev2 = client('VendorProfitCharDB = { toPost = { [50011] = true } }; __stub.bags[50011] = 7')
+# Durations: posted longer by hand (Sell tab, Auctionator), the Post step
+# posts it the same way; posted at the default again, it forgets.
+run('''
+    VendorProfitCharDB.postQueue = {}
+    __stub.items["item:50030"] = { name = "Long Helm", cached = true, sellPrice = 1 }
+    __stub.PutInBags(0, 11, 50030, 3)
+    __stub.ah.nonCommodity[50030] = true
+    __stub.ah.auctions[50030] = { { auctionID = 9301, buyout = 30000, quantity = 1 } }
+''')
+run('__stub.OpenAH()')
+run('C_AuctionHouse.PostItem(ItemLocation:CreateFromBagAndSlot(0, 11), 2, 1, nil, 31000); __stub.Advance(0.5)')
+check("an item posted by hand for longer: remembered (8 hours)", ev("VendorProfitCharDB.postDurations[50030]") == 2
+      and ev("VendorProfit.Poster.Duration(50030)") == 2)
+run('VendorProfit.Poster.Returned(50030, 2); ' + POST + ':Click(); __stub.Advance(0.5)')
+check("...back by mail: the Post step says it'll post for 8 hours", has_line(ev, "Post 2 Long Helm at", ", for 8 hours"))
+run(POST + ':Click(); __stub.Advance(0.5)')
+check("...and posts it so", posts()[-1] == ("item", 50030, 2, 2, 30000))
+run('__stub.PutInBags(0, 11, 50030, 1); C_AuctionHouse.PostItem(ItemLocation:CreateFromBagAndSlot(0, 11), 1, 1, nil, 31000); __stub.Advance(0.5)')
+check("posted at the default again: forgotten, so 2 hours sticks", ev("VendorProfitCharDB.postDurations[50030]") is None
+      and ev("VendorProfit.Poster.Duration(50030)") == 1)
+run('__stub.CloseAH()')
 check("an older save's items to post: queued at what's in the bags", [(e.itemID, e.count) for e in ev2("(function() VendorProfit.Poster.Items() return VendorProfitCharDB.postQueue end)()").values()] == [(50011, 7)]
       and ev2("VendorProfitCharDB.toPost") is None)
 check("no errors from posting", ev("#__stub.errors") == 0)
@@ -3589,6 +3651,34 @@ run(row + '.hit:GetScript("OnMouseUp")(' + row + '.hit, "LeftButton")')
 check("folded: nothing under it, saying it holds 0", section(ev, "Post Queue (0)") == [])
 run(row + '.hit:GetScript("OnMouseUp")(' + row + '.hit, "LeftButton")')
 check("no errors with nothing queued", ev("#__stub.errors") == 0)
+
+# --- The Post Queue follows your bags ---------------------------------------------
+# Queued items that leave your bags some other way come off the queue, so they
+# don't turn up to post the next time you have some as a reagent.
+run, ev = client()
+queue = lambda: [(e.itemID, e.count) for e in ev("VendorProfitCharDB.postQueue or {}").values()]
+run('''
+    VendorProfitCharDB.postQueue = { { itemID = 50040, count = 200 }, { itemID = 50041, count = 5 }, { itemID = 50042, count = 1000 } }
+    __stub.bags[50040] = 200; __stub.bags[50041] = 5; __stub.bags[50042] = 0
+    __stub.Fire("PLAYER_ENTERING_WORLD")
+''')
+run('__stub.Advance(5)')
+check("just logged in (bags may still be loading): nothing taken off", queue() == [(50040, 200), (50041, 5), (50042, 1000)])
+run('__stub.Advance(6)')
+check("...once they're in: a count left from items long gone comes off", queue() == [(50040, 200), (50041, 5)])
+run('__stub.bags[50040] = 120; __stub.Fire("BAG_UPDATE_DELAYED"); __stub.Advance(2)')
+check("used some (crafted into something else): not at once, while things settle", queue()[0] == (50040, 200))
+run('__stub.Advance(4)')
+check("...then the queue down to what's left in your bags", queue()[0] == (50040, 120))
+run('__stub.bags[50041] = 0; __stub.Fire("BAG_UPDATE_DELAYED"); __stub.Advance(6)')
+check("all of one gone (sold to a vendor, handed in): off the queue", queue() == [(50040, 120)])
+run('VendorProfit.Poster.Crafted(50043, 3); __stub.Fire("BAG_UPDATE_DELAYED"); __stub.Advance(4)')
+check("just crafted, not in your bags yet: left queued", (50043, 3) in queue())
+run('__stub.bags[50043] = 3; __stub.Fire("BAG_UPDATE_DELAYED"); __stub.Advance(6)')
+check("...and once it lands, it stays", (50043, 3) in queue())
+run('__stub.bags[50040] = 300; __stub.Fire("BAG_UPDATE_DELAYED"); __stub.Advance(6)')
+check("more in your bags than queued (bought as a reagent): the queue doesn't grow", queue()[0] == (50040, 120))
+check("no errors following the bags", ev("#__stub.errors") == 0)
 
 # --- Turn-ins: Thorium Shells for Thorium Headed Arrows ----------------------------
 # 200 shells handed in for 200 arrows, priced on Best Crafts like a recipe under

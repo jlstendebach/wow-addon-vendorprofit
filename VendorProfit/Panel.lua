@@ -966,6 +966,13 @@ local function AddToDo(plan)
         local item = Poster.Current()
         if item and item.price and (Poster.Status() == "ready" or Poster.Status() == "posting") then
             local note = string.format(L.POST_AT, PostCount(item.itemID), ItemName(item.itemID), Money(item.price))
+            -- Longer than the default (you last posted it so): said, so a
+            -- longer listing and its bigger deposit don't surprise.
+            local duration = Poster.Duration(item.itemID)
+            if duration ~= Poster.DURATION then
+                local name = Poster.DurationName(duration)
+                note = note .. string.format(L.POST_FOR, name and name:lower() or string.format(L.POST_DURATION_N, duration))
+            end
             if item.guess then
                 note = note .. " " .. string.format(L.POST_GUESSED, Money(item.guess))
             elseif item.skipped and item.skipped > 0 then

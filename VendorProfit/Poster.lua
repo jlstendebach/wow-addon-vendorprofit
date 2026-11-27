@@ -13,7 +13,8 @@
 --     own examples). Never seen: skipped, saying so.
 --   * Below what the item cost you (after the auction house's cut): Post
 --     turns red and needs a second click.
---   * The shortest duration, the queued count in one post. The game posts a
+--   * The shortest duration, unless you last posted the item for longer
+--     (see Durations), the queued count in one post. The game posts a
 --     number of items that don't stack in one go (Auctionator's multisell
 --     does the same), so it's one click for those too.
 --
@@ -41,7 +42,7 @@ Poster.SEARCH_RETRIES = 3
 Poster.POST_TIMEOUT = 15
 Poster.THROTTLE_POLL = 0.2
 -- The shortest duration, as the game numbers them (1, 2, 3, shortest
--- first; 2 hours on Forever's auction house, 12 on retail's).
+-- first; 2 hours on Forever's auction house, 12 on retail's): the default.
 Poster.DURATION = 1
 Poster.SUSPICIOUS_COUNT = 3
 Poster.SUSPICIOUS_GAP = 0.8
@@ -130,10 +131,15 @@ local function Find(itemID)
 end
 
 -- Queues count more of an item to post (at the end if it's new).
+-- When each item was last queued (GetTime()): what's queued lands in your
+-- bags a moment later (a craft, a mail), so Trim leaves it alone till then.
+local queuedAt = {}
+
 function Poster.Add(itemID, count)
     if count == nil or count <= 0 then
         return
     end
+    queuedAt[itemID] = GetTime()
     local _, entry = Find(itemID)
     if entry then
         entry.count = entry.count + count
@@ -151,6 +157,45 @@ end
 -- An auction that came back by mail, expired or cancelled: n of the item.
 function Poster.Returned(itemID, n)
     Poster.Add(itemID, n or 1)
+end
+
+-- Durations --------------------------------------------------------------------
+
+-- How long you last posted each item for, so the Post step posts it the
+-- same way: watched on every post, whoever makes it (the game's Sell tab,
+-- Auctionator, the Post step), since the game passes the duration in. An
+-- auction mailed back doesn't say how long it was up. Only the longer ones
+-- are kept (VendorProfitCharDB.postDurations[itemID] = duration); posting
+-- an item at the default forgets it, so going back to 2 hours sticks.
+local function Durations()
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    VendorProfitCharDB.postDurations = VendorProfitCharDB.postDurations or {}
+    return VendorProfitCharDB.postDurations
+end
+
+function Poster.Duration(itemID)
+    return Durations()[itemID] or Poster.DURATION
+end
+
+local function Remember(location, duration)
+    if type(duration) ~= "number" or location == nil then
+        return
+    end
+    local ok, itemID = pcall(C_Item.GetItemID, location)
+    if not ok or itemID == nil then
+        return
+    end
+    Durations()[itemID] = duration ~= Poster.DURATION and duration or nil
+end
+
+hooksecurefunc(C_AuctionHouse, "PostItem", function(location, duration) Remember(location, duration) end)
+hooksecurefunc(C_AuctionHouse, "PostCommodity", function(location, duration) Remember(location, duration) end)
+
+-- The game's name for a duration ("8 Hours"), or nil.
+local DURATION_NAMES = { "AUCTION_DURATION_ONE", "AUCTION_DURATION_TWO", "AUCTION_DURATION_THREE" }
+function Poster.DurationName(duration)
+    local name = DURATION_NAMES[duration]
+    return name and _G[name] or nil
 end
 
 -- Takes count off an item's queued count (after posting them); off the
@@ -528,9 +573,9 @@ function Poster.Post()
     status = "posting"
     SetMessage(nil)
     if item.commodity then
-        C_AuctionHouse.PostCommodity(location, Poster.DURATION, quantity, item.price)
+        C_AuctionHouse.PostCommodity(location, Poster.Duration(item.itemID), quantity, item.price)
     else
-        C_AuctionHouse.PostItem(location, Poster.DURATION, quantity, nil, item.price)
+        C_AuctionHouse.PostItem(location, Poster.Duration(item.itemID), quantity, nil, item.price)
     end
     WatchPost(item, Poster.POST_TIMEOUT)
     Changed()
@@ -584,7 +629,70 @@ end
 
 local AUCTIONEER = Enum.PlayerInteractionType and Enum.PlayerInteractionType.Auctioneer
 
+-- Items queued to post that leave your bags some other way (crafted into
+-- something else, handed in, sold to a vendor, mailed, banked) come off
+-- the queue as they go: what's queued is never more than what's in your
+-- bags. Left queued, an item kept its count, and the next time you had
+-- some for something else (bought or crafted as a reagent) it turned up in
+-- the Post Queue. Checked once things settle, SETTLE after the last bag
+-- update, and not for an item just queued (still on its way to your bags),
+-- nor the one being posted (Posted takes those off). Not in the first
+-- moments after logging in, while the bags may still be loading.
+Poster.SETTLE = 5
+Poster.LOGIN_GRACE = 10
+local enteredWorld = math.huge
+local lastBagUpdate, trimWaiting = 0, false
+
+function Poster.Trim()
+    if GetTime() < enteredWorld + Poster.LOGIN_GRACE then
+        return
+    end
+    local queue, changed = Queue(), false
+    for index = #queue, 1, -1 do
+        local entry = queue[index]
+        local posting = status == "posting" and current and current.itemID == entry.itemID
+        local settled = GetTime() - (queuedAt[entry.itemID] or -math.huge) >= Poster.SETTLE
+        local bags = InBags(entry.itemID)
+        if settled and not posting and bags < entry.count then
+            changed = true
+            if bags > 0 then
+                entry.count = bags
+            else
+                table.remove(queue, index)
+            end
+        end
+    end
+    if changed then
+        Changed()
+    end
+end
+
+local function TrimLater()
+    lastBagUpdate = GetTime()
+    if trimWaiting then
+        return
+    end
+    trimWaiting = true
+    local function Later()
+        local wait = lastBagUpdate + Poster.SETTLE + 0.5 - GetTime()
+        if wait > 0 then
+            C_Timer.After(wait, Later)
+            return
+        end
+        trimWaiting = false
+        Poster.Trim()
+    end
+    C_Timer.After(Poster.SETTLE + 0.5, Later)
+end
+
 local handlers = {
+    PLAYER_ENTERING_WORLD = function()
+        if enteredWorld == math.huge then
+            enteredWorld = GetTime()
+            -- Once the bags are surely in: what's queued but gone since.
+            C_Timer.After(Poster.LOGIN_GRACE + 0.5, Poster.Trim)
+        end
+    end,
     PLAYER_INTERACTION_MANAGER_FRAME_SHOW = function(kind) if kind == AUCTIONEER then Opened() end end,
     PLAYER_INTERACTION_MANAGER_FRAME_HIDE = function(kind) if kind == AUCTIONEER then Closed() end end,
     AUCTION_HOUSE_SHOW = Opened,
@@ -596,7 +704,10 @@ local handlers = {
         OnItemResults(itemKey or (current and C_AuctionHouse.MakeItemKey(current.itemID)))
     end,
     AUCTION_HOUSE_AUCTION_CREATED = CheckPosted,
-    BAG_UPDATE_DELAYED = CheckPosted,
+    BAG_UPDATE_DELAYED = function()
+        CheckPosted()
+        TrimLater()
+    end,
     UI_ERROR_MESSAGE = OnErrorMessage,
 }
 

@@ -451,6 +451,27 @@ time" route mode).
   The listing line moved into To do's box (one row per price) instead of a
   second scroll box. Saved as postQueue (the first version's toPost set is
   turned into it, each at what's in the bags).
+- **The Post Queue follows your bags** (2026-11-26): a queued count only
+  went down when posted, so items that went some other way (used as
+  reagents, handed in, vendored, posted before the queue existed, counted
+  twice by the Open All bug) kept their counts: Josten's queue held 16,642
+  Thorium Headed Arrows and 1,000 Thorium Shells. Crafting or buying any of
+  them as a reagent then put them up to post. Now the queue is never more
+  than what's in your bags: trimmed SETTLE after the last bag update,
+  leaving alone an item just queued (still landing) and the one being
+  posted, and not in the first moments after login. Banked items come off
+  too; the Post step only posts from your bags.
+- **Posting for as long as you last did** (2026-11-26), Josh's: he posts
+  one item for 8 hours by hand and wants it reposted the same way. The
+  mail an auction comes back in doesn't say how long it was up, so every
+  post is watched instead (hooks on C_AuctionHouse.PostItem and
+  PostCommodity, which the Sell tab, Auctionator and the Post step all go
+  through, as TradeSkillMaster does) and its duration remembered per item.
+  Only longer-than-default ones are kept (postDurations); posting at the
+  default forgets it, so going back to 2 hours sticks. The Post step's
+  price line names a longer duration, for its bigger deposit. Rejected: a
+  duration setting per Post Queue row (more clicks, and it wouldn't learn
+  from how he already posts).
 - **Reposting what comes back** (2026-11-22): an auction mailed back,
   expired *or* cancelled (Josh cancels undercut auctions to repost them),
   is queued again for the count that came back, when its item is taken
@@ -623,6 +644,16 @@ opens.
   needed, rather than planning the whole order on every bag update.
   Player-only cast events (RegisterUnitEvent) and one settle check after a
   run of bag updates, instead of one per update, for the same reason.
+
+- **Any sign a single auction was bought counts** (2026-11-25): on
+  Forever, buying gear (Ultrasafe Transporter) put the item in the mail
+  but the "auction won" notice never reached the addon, so every purchase
+  waited 15 seconds and said "No reply". Now the notice (plain or
+  formatted), AUCTION_HOUSE_PURCHASE_COMPLETED for that auction, BIDS_UPDATED
+  or the chat line ("Bid accepted.", "You won an auction for ...") each
+  count, the first one recorded. TradeSkillMaster takes the bids list or the
+  chat line as the answer to a buyout. Which one Forever sends is
+  unconfirmed.
 
 ## Crafting
 
