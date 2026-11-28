@@ -274,10 +274,10 @@ Costs follow the items, so each sale has its own cost, not today's prices:
 - **Your own** items (farmed, owned before installing, from an alt or a trade) cost their market value at the moment a craft uses them: the cheapest way to get one right then, which is what using it instead of selling it cost you.
 - **Crafted** items cost what their reagents cost, used up oldest first. Bars smelted from bought ore carry the ore's exact cost into whatever they make.
 
-Sales use up the item's costs oldest first. Vendor sales are read from the vendor's buyback list, with the exact price; buying something back undoes its sale. Auction sales are read from the "Auction successful" mail when you take its money: the sale price less the auction house's cut (the deposit comes back with it, so it cancels out). So an auction sale only shows up once you've collected it.
+Sales use up the item's costs oldest first. Vendor sales are read from the vendor's buyback list, with the exact price, and from the sell itself (right-click, or a vendor addon), counted once its stack leaves your bags, so a 13th identical stack in one visit still counts once the 12-slot buyback list is full; buying something back undoes its sale. Auction sales are read from the "Auction successful" mail, counted once its gold actually arrives: the sale price less the auction house's cut (the deposit comes back with it, so it cancels out). So an auction sale only shows up once you've collected it, and a mail asked for twice (Open All with TradeSkillMaster) counts once. Auction purchases and returned auctions likewise count once their items land in your bags.
 
 - Only crafts made since installing are tracked. Selling something made before that leaves it out rather than inventing a cost.
-- Bought reagents that leave some other way (mailed to an alt, destroyed) stop counting once you no longer have them. Crafted items out of your bags keep counting, since they may be up for auction.
+- Items that leave some other way (mailed to an alt, destroyed, used) stop counting once they're nowhere to be seen: not in your bags or bank, and not yours at the auction house (up, or sold with the gold not sent yet, as of your last visit). They're set aside for 31 days rather than forgotten, since some are only out of sight: a sale from the mail takes their cost, and items that turn up again (an expired auction taken from the mail) get theirs back.
 - The last 10,000 sales are kept in full, older ones added up by item and day, per character.
 
 ## Purchase History
@@ -365,8 +365,8 @@ Saved data, per character (`VendorProfitCharDB`):
 - `bestExact`: Best Crafts prices exact recipes (its **Exact** button) rather than cheapest routes.
 - `postQueue = { { itemID, count }, ... }`: the Post Queue.
 - `bestSellersSort = { key, ascending }`: how Profit History's Best Sellers is sorted.
-- `auctions = { counts, time }`: how many of each item you had up for auction at your last visit to the auction house, and when.
-- `history = { stock, sales, items, daily, purchases }`: what the items you have cost you, your last 10,000 sales, every sale added up per item, older sales added up per item per day, and your last 5,000 purchases.
+- `auctions = { counts, sold, time }`: how many of each item you had up for auction at your last visit to the auction house, how many sold with the gold not sent yet, and when.
+- `history = { stock, missing, sales, items, daily, purchases }`: what the items you have cost you, recorded items not seen anywhere (kept 31 days), your last 10,000 sales, every sale added up per item, older sales added up per item per day, and your last 5,000 purchases.
 - `historyRange`: Profit History's range.
 - `goldRange`: the Gold tab's range.
 

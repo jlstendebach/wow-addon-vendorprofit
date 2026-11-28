@@ -1716,10 +1716,10 @@ check("history tab: empty to start, saying what it tracks", ev("VendorProfit.Pan
 
 # Day 1: buy a Copper Bar at auction for 1s (taken from its mail), craft, sell to a vendor for 2s.
 run('__stub.invoiceMails = { { itemID = 2840, n = 1, subject = "Auction won: Copper Bar", invoice = { type = "buyer", itemName = "Copper Bar", bid = 100, count = 1 } } }')
-run('__stub.Fire("MAIL_INBOX_UPDATE"); TakeInboxItem(1)')
+run('__stub.Fire("MAIL_INBOX_UPDATE"); TakeInboxItem(1); __stub.Advance(0.2)')
 check("auction purchase recorded at what you paid, from its mail", ev(H + ".Recorded(2840)") == 1
       and ev("VendorProfitCharDB.history.stock[2840][1].cost") == 100)
-run('TakeInboxItem(1)')
+run('TakeInboxItem(1); __stub.Advance(0.2)')
 check("taking the same mail twice records it once", ev(H + ".Recorded(2840)") == 1)
 craft(run)
 check("craft: the bar's cost goes into the ring", ev(H + ".Recorded(2840)") == 0 and ev(H + ".Recorded(2903)") == 1
@@ -1737,7 +1737,7 @@ check("vendor purchase recorded at what you paid", ev(H + ".Recorded(2840)") == 
 run('__stub.CloseMerchant()')
 craft(run)
 run('__stub.invoiceMails = { { money = 180, subject = "Auction successful: Test Ring", invoice = { type = "seller", itemName = "Test Ring", bid = 190, consignment = 10, count = 1 } } }')
-run('__stub.Fire("MAIL_INBOX_UPDATE"); TakeInboxMoney(1)')
+run('__stub.Fire("MAIL_INBOX_UPDATE"); TakeInboxMoney(1); __stub.Advance(0.2)')
 check("auction sale recorded when its money is taken: 1s 90c less the 10c cut, against the 1s 50c it cost",
       [(x["how"], x["cost"], x["sold"]) for x in sales()] == [("auction", 150, 180), ("vendor", 100, 200)])
 
@@ -2017,9 +2017,43 @@ run('__stub.bags[2840] = 0; __stub.Advance(7); __stub.Fire("BAG_UPDATE_DELAYED")
 check("reagents you no longer have stop counting", ev(H + ".Recorded(2840)") == 0)
 craft(run)
 run('__stub.bags[2903] = 0; __stub.Advance(7); __stub.Fire("BAG_UPDATE_DELAYED"); __stub.Advance(7)')
-check("crafted items out of your bags still count (they may be up for auction)", ev(H + ".Recorded(2903)") == 1)
+check("crafted items nowhere to be seen go missing (not stock, kept aside)", ev(H + ".Recorded(2903)") == 0
+      and ev(H + ".Missing(2903)") == 1)
 run('__stub.Fire("UNIT_SPELLCAST_SUCCEEDED", "player", "cast", 12345)')
-check("other spells aren't crafts", ev(H + ".Recorded(2903)") == 1)
+check("other spells aren't crafts", ev(H + ".Recorded(2903)") == 0)
+settle = '__stub.Advance(7); __stub.Fire("BAG_UPDATE_DELAYED"); __stub.Advance(7)'
+ring_cost = ev("VendorProfitCharDB.history.missing[2903][1].cost")
+run('__stub.ah.owned = { { itemID = 2903, quantity = 1 } }; __stub.Fire("OWNED_AUCTIONS_UPDATED"); ' + settle)
+check("...up for auction (the list just didn't show it yet): back in stock", ev(H + ".Recorded(2903)") == 1
+      and ev(H + ".Missing(2903)") == 0 and ev("VendorProfitCharDB.history.stock[2903][1].cost") == ring_cost)
+run('__stub.ah.owned = { { itemID = 2903, quantity = 1, sold = true } }; __stub.Fire("OWNED_AUCTIONS_UPDATED"); ' + settle)
+check("sold, its gold not sent yet: still counts", ev(H + ".Recorded(2903)") == 1
+      and ev("VendorProfit.Auctions.Count(2903)") == 0)
+run('__stub.ah.owned = {}; __stub.Fire("OWNED_AUCTIONS_UPDATED"); ' + settle)
+check("its gold in the mail (gone from the list): missing", ev(H + ".Missing(2903)") == 1)
+before = len(sales())
+run('''
+    __stub.invoiceMails = { { money = 900, subject = "Auction successful: Test Ring",
+        invoice = { type = "seller", itemName = "Test Ring", bid = 950, consignment = 50, count = 1 } } }
+    __stub.Fire("MAIL_INBOX_UPDATE"); TakeInboxMoney(1); __stub.Advance(0.5)
+''')
+check("...its sale from the mail gets its cost", len(sales()) == before + 1 and sales()[0]["cost"] == round(ring_cost)
+      and ev(H + ".Missing(2903)") == 0)
+craft(run)
+run('__stub.bags[2903] = 0; ' + settle)
+run('__stub.bags[2903] = 1; ' + settle)
+check("missing, then back (an expired auction taken from the mail): back in stock", ev(H + ".Recorded(2903)") == 1
+      and ev(H + ".Missing(2903)") == 0)
+run('__stub.bags[2903] = 0; ' + settle)
+run('VendorProfitCharDB.history.missing[2903][1].gone = time() - 32 * VendorProfit.History.DAY; ' + settle)
+check("missing past when mail would expire: dropped", ev(H + ".Missing(2903)") == 0
+      and ev("VendorProfitCharDB.history.missing[2903]") is None)
+run('__stub.ah.owned = { { itemID = 2840, quantity = 1 } }; __stub.Fire("OWNED_AUCTIONS_UPDATED")')
+run('__stub.CloseMerchant(); __stub.OpenMerchant({ { itemID = 2840, price = 150 } }); BuyMerchantItem(1, 1); __stub.CloseMerchant()')
+run('__stub.bags[2840] = __stub.bags[2840] - 1; ' + settle)
+check("bought to sell again, then posted: still counts", ev(H + ".Recorded(2840)") == 1)
+run('__stub.ah.owned = {}; __stub.Fire("OWNED_AUCTIONS_UPDATED"); ' + settle)
+run('table.remove(VendorProfitCharDB.history.purchases)')
 check("no errors", ev("#__stub.errors") == 0)
 
 # Purchase History: every purchase above, newest first, what each one cost.
@@ -2087,7 +2121,7 @@ run('''
     end
     __stub.Fire("MAIL_INBOX_UPDATE")
 ''')
-run('TakeInboxItem(1)')
+run('TakeInboxItem(1); __stub.Advance(0.2)')
 check("a stack's mail: its 20 at the price each (315c), not the whole purchase's 315s", ev(H + ".Recorded(7912)") == 20
       and ev("VendorProfitCharDB.history.stock[7912][1].cost") == 315)
 run('for i = 1, 4 do __stub.Advance(0.2); TakeInboxItem(1) end; __stub.Advance(0.2)')
@@ -2111,6 +2145,94 @@ before = len(sales())
 run('for i = 1, 3 do TakeInboxMoney(1); __stub.Advance(0.2) end; __stub.mailLingers = false')
 check("Open All, the inbox updated before each emptied mail went: each sale once, the one really taken (not the first three times)",
       sorted(x["sold"] for x in sales()[:len(sales()) - before]) == [1000, 2000, 3000] and len(sales()) == before + 3)
+# Recorded from what arrives, not from the request: a mail asked for twice
+# (TradeSkillMaster holds a take back until a name loads; Open All asks
+# again) pays out once, and is recorded once.
+run('''
+    __stub.invoiceMails = { { money = 4000, subject = "Auction successful: Solid Stone",
+        invoice = { type = "seller", itemName = "Solid Stone", bid = 4000, consignment = 0, count = 1 } } }
+    __stub.Fire("MAIL_INBOX_UPDATE")
+''')
+before = len(sales())
+run('TakeInboxMoney(1); TakeInboxMoney(1)')
+check("a sale asked for twice: nothing recorded before its gold arrives", len(sales()) == before)
+run('__stub.Advance(0.5)')
+check("...its gold once: recorded once", len(sales()) == before + 1 and sales()[0]["sold"] == 4000)
+run('__stub.Advance(11)')
+check("...the second request, which brought nothing, dropped", len(sales()) == before + 1)
+# Two sales' gold in one go: both.
+run('''
+    __stub.invoiceMails = {}
+    for i, bid in ipairs({ 500, 700 }) do
+        __stub.invoiceMails[i] = { money = bid, subject = "Auction successful: Solid Stone",
+            invoice = { type = "seller", itemName = "Solid Stone", bid = bid, consignment = 0, count = 1 } }
+    end
+    __stub.Fire("MAIL_INBOX_UPDATE")
+    __stub.mailMoneyQuiet = true
+''')
+before = len(sales())
+run('TakeInboxMoney(1); TakeInboxMoney(2); __stub.Advance(0.5); __stub.mailMoneyQuiet = false; __stub.Fire("PLAYER_MONEY")')
+check("two sales' gold arriving together: both recorded", sorted(x["sold"] for x in sales()[:2]) == [500, 700]
+      and len(sales()) == before + 2)
+run('__stub.money = __stub.money + 999; __stub.Fire("PLAYER_MONEY")')
+check("gold from anything else records nothing", len(sales()) == before + 2)
+# A purchase asked for twice: its items land once, recorded once.
+run('''
+    __stub.invoiceMails = { { itemID = 7912, n = 20, subject = "Auction won: Solid Stone",
+        invoice = { type = "buyer", itemName = "Solid Stone", bid = 600, count = 20 } } }
+    __stub.Fire("MAIL_INBOX_UPDATE")
+''')
+count = ev("VendorProfit.History.PurchaseCount()")
+run('TakeInboxItem(1); TakeInboxItem(1); __stub.Advance(1.5)')
+check("a purchase asked for twice: recorded once its items land", ev("VendorProfit.History.PurchaseCount()") == count + 1
+      and ev("VendorProfit.History.Purchase(1).total") == 600)
+# Refused (bags full): nothing arrives, nothing recorded.
+run('''
+    __stub.invoiceMails = { { itemID = 7912, n = 20, subject = "Auction won: Solid Stone",
+        invoice = { type = "buyer", itemName = "Solid Stone", bid = 600, count = 20 } } }
+    __stub.Fire("MAIL_INBOX_UPDATE")
+    __stub.mailRefuse = true
+''')
+count = ev("VendorProfit.History.PurchaseCount()")
+run('TakeInboxItem(1); __stub.Advance(12); __stub.mailRefuse = false')
+check("a take the game refuses (bags full): nothing recorded", ev("VendorProfit.History.PurchaseCount()") == count)
+run('TakeInboxItem(1); __stub.Advance(1.5)')
+check("...taken later: recorded then, once", ev("VendorProfit.History.PurchaseCount()") == count + 1)
+check("no errors recording mail from what arrives", ev("#__stub.errors") == 0)
+
+# Vendor sales the buyback list can't show: it holds 12, and once it's full
+# of one stack, selling another just like it reads the same as before.
+# The sell itself is noted and confirmed by the bags.
+run('''
+    __stub.items["item:4000"] = { sellPrice = 10, cached = true, name = "Test Gem" }
+    __stub.buyback = {}
+    for i = 1, 12 do __stub.buyback[i] = { itemID = 4000, n = 1, price = 10 } end
+    for slot = 1, 4 do __stub.PutInBags(0, slot, 4000, 1) end
+    VendorProfit.History.Bought(4000, 4, 40, "vendor")
+    __stub.OpenMerchant({})
+''')
+before = len(sales())
+run('C_Container.UseContainerItem(0, 1); __stub.Advance(0.1)')
+check("a 13th identical stack sold (the buyback list reads the same): recorded", len(sales()) == before + 1
+      and sales()[0]["item"] == 4000 and sales()[0]["sold"] == 10 and sales()[0]["how"] == "vendor")
+run('__stub.buyback = {}; __stub.CloseMerchant(); __stub.OpenMerchant({}); C_Container.UseContainerItem(0, 2); __stub.Advance(0.1)')
+check("a sell the buyback list shows too: recorded once", len(sales()) == before + 2)
+run('__stub.sellBagFirst = true; C_Container.UseContainerItem(0, 3); __stub.Advance(0.1); __stub.sellBagFirst = false')
+check("...the bags updating before the list: still once", len(sales()) == before + 3)
+run('__stub.sellLost = true; C_Container.UseContainerItem(0, 4); __stub.Advance(6); __stub.sellLost = false')
+check("a sell nothing confirms: nothing recorded", len(sales()) == before + 3)
+run('__stub.SellItem(4000, 1); __stub.Advance(0.1)')
+check("...then dragged to the merchant (not noted): the list records it, once", len(sales()) == before + 4)
+run('''
+    __stub.items["item:4001"] = { sellPrice = 0, cached = true, name = "Keepsake" }
+    __stub.PutInBags(0, 5, 4001, 1)
+    C_Container.UseContainerItem(0, 5); __stub.Advance(0.1)
+''')
+check("something the merchant won't buy: nothing noted", len(sales()) == before + 4)
+run('__stub.CloseMerchant()')
+run('__stub.PutInBags(0, 6, 4000, 1); C_Container.UseContainerItem(0, 6); __stub.Advance(0.1)')
+check("using an item away from a merchant isn't a sale", len(sales()) == before + 4)
+check("no errors noting vendor sells", ev("#__stub.errors") == 0)
 
 
 # --- Known vendor prices ---------------------------------------------------------------

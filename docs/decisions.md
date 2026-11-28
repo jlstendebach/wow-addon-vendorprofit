@@ -717,6 +717,34 @@ opens.
 - **Sales**: vendor sales from the buyback list (buying back undoes a sale);
   auction sales from the "Auction successful" mail when its money is taken
   (sale less the cut).
+- **Mail is recorded from what arrives, not from the take request.**
+  TradeSkillMaster holds a take back until the sender's name loads, and its
+  Open All asks again meanwhile; the inbox updating between the two reset
+  the "same mail" guard, so one Lionheart Helm sale was recorded twice
+  (Josten's record fixed by hand on 2026-11-27, backup beside the save).
+  Now a take only notes what it should bring: a sale is recorded when that
+  much gold arrives (PLAYER_MONEY), a purchase or returned auction when that
+  many items land (BAG_UPDATE_DELAYED); notes nothing confirms go after 10s.
+- **Vendor sells are hooked as well as read from the buyback list.** The
+  list holds 12, and once it's full of one stack, selling another like it
+  pushes off its twin: the list reads the same, and 13+ identical stacks in
+  one visit lost every sale after the 12th. C_Container.UseContainerItem at
+  an open merchant (right-click; vendor addons use it too) notes the sell,
+  confirmed when the stack leaves the bags (TradeSkillMaster's ledger does
+  only this). The list still catches drag-and-drop sells; a new list entry
+  matching a note is the same sale, recorded once whichever comes first.
+- **Unseen items go missing, not away.** Crafted items used to be kept
+  forever once out of the bags (they might be up for auction), so ones
+  mailed away or destroyed lingered as stock: wrong cost floors and wrong
+  costs on later sales. Now everything is counted against bags, bank and
+  your auctions (active, and sold awaiting gold: the owned list keeps those
+  as status Sold). Short, the oldest move to `missing` instead of being
+  dropped, because some are only out of sight (a sale's gold or an expired
+  auction in the mail, a post the owned list hasn't caught up with). An
+  auction sale takes missing ones first; more turning up than recorded
+  brings back the last to go missing, so a miscount undoes itself. Kept 31
+  days (mail's 30). Bought items flipped on the auction house were dropped
+  the moment they were posted before this; now they count too.
 - **How much is kept**: the last 10,000 sales in full and 5,000 purchases.
   Sales that drop off are added up per item per day, for good, so day ranges
   and Best Sellers reach back indefinitely; every sale is also added up per
