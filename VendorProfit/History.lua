@@ -14,9 +14,10 @@
 --
 -- A sale uses up the item's recorded costs, oldest first:
 --   * to a vendor: read from the vendor's buyback list, which has the exact
---     price; buying something back undoes its sale;
---   * at auction: read from the "Auction successful" mail when you take its
---     money: the sale price less the auction house's cut (the deposit is
+--     price, and from the sell itself once its stack leaves the bags;
+--     buying something back undoes its sale;
+--   * at auction: read from the "Auction successful" mail once its money
+--     arrives: the sale price less the auction house's cut (the deposit is
 --     refunded, so it cancels out).
 -- Only items with recorded costs are listed; anything sold beyond them (made
 -- before this was installed) is left out rather than given a made-up cost.
@@ -38,6 +39,9 @@
 --     reach back through them; only the per-sale detail is gone
 --   purchases = { { time, item, n, total, how }, ... } oldest first, at most
 --     MAX_PURCHASES, for the Purchase History tab
+--   missing[itemID] = { { n, cost, bought, crafted, time, gone }, ... }:
+--     recorded items nowhere to be seen (see Reconcile), gone = when they
+--     went missing; dropped after MISSING_DAYS
 
 local _, ns = ...
 local VendorProfit = ns.VendorProfit
@@ -56,6 +60,8 @@ History.DAY = 24 * 60 * 60
 -- How long after an item comes in or goes out before its count is trusted
 -- again (purchases and crafts land a moment later).
 local SETTLE = 5
+-- Missing items are kept this long: mail keeps for 30 days.
+History.MISSING_DAYS = 31
 
 local listeners = {}
 function History.OnChange(fn)
@@ -145,6 +151,7 @@ local function DB()
     db.history.sales = db.history.sales or {}
     db.history.purchases = db.history.purchases or {}
     db.history.daily = db.history.daily or {}
+    db.history.missing = db.history.missing or {}
     if db.history.items == nil then
         -- From before the totals were kept: start them from the sales list.
         db.history.items = {}
@@ -191,8 +198,7 @@ end
 
 -- Uses up n of an item's recorded costs, oldest first. Returns how many had
 -- one, their total cost, the bought part of it, and whether any were crafted.
-local function TakeStock(itemID, n)
-    local stock = DB().stock
+local function TakeLots(stock, itemID, n)
     local lots = stock[itemID]
     local taken, cost, bought, crafted = 0, 0, 0, false
     while lots and #lots > 0 and taken < n do
@@ -212,6 +218,10 @@ local function TakeStock(itemID, n)
     end
     lastMove = GetTime()
     return taken, cost, bought, crafted
+end
+
+local function TakeStock(itemID, n)
+    return TakeLots(DB().stock, itemID, n)
 end
 
 local function Recorded(itemID)
@@ -234,26 +244,100 @@ function History.UnitCost(itemID)
     return count > 0 and total / count or nil
 end
 
--- Items that went some other way (mailed to an alt, destroyed, used): when
--- you own fewer of a reagent than have recorded costs, the oldest go.
--- Crafted items are left alone, since they may be up for auction.
+-- Where recorded items are: bags, bank, or yours at the auction house (up,
+-- or sold with the gold not sent yet). More recorded than that, and the
+-- oldest go missing: mailed to an alt, destroyed, used, or out of sight (a
+-- sale's gold or an expired auction waiting in the mail, a post the
+-- auction list doesn't show yet). Missing ones aren't stock (no cost floor,
+-- not the next sale's cost), but they come back: a sale from the mail
+-- takes them first, and if more turn up than are recorded, the last to go
+-- missing return first, at the front, so a miscount undoes itself. Dropped
+-- once mail would have expired.
+local function MoveToMissing(itemID, n)
+    local db = DB()
+    local lots = db.stock[itemID]
+    local missing = db.missing[itemID] or {}
+    db.missing[itemID] = missing
+    local now = time()
+    while lots and #lots > 0 and n > 0 do
+        local lot = lots[1]
+        local use = math.min(lot.n, n)
+        missing[#missing + 1] = { n = use, cost = lot.cost, bought = lot.bought, crafted = lot.crafted,
+            time = lot.time, gone = now }
+        n = n - use
+        lot.n = lot.n - use
+        if lot.n <= 0 then
+            table.remove(lots, 1)
+        end
+    end
+    if lots and #lots == 0 then
+        db.stock[itemID] = nil
+    end
+    if #missing == 0 then
+        db.missing[itemID] = nil
+    end
+end
+
+local function Restore(itemID, n)
+    local db = DB()
+    local missing = db.missing[itemID]
+    while missing and #missing > 0 and n > 0 do
+        local lot = missing[#missing]
+        local use = math.min(lot.n, n)
+        local lots = db.stock[itemID] or {}
+        db.stock[itemID] = lots
+        table.insert(lots, 1, { n = use, cost = lot.cost, bought = lot.bought, crafted = lot.crafted, time = lot.time })
+        n = n - use
+        lot.n = lot.n - use
+        if lot.n <= 0 then
+            table.remove(missing)
+        end
+    end
+    if missing and #missing == 0 then
+        db.missing[itemID] = nil
+    end
+end
+
 local function Reconcile()
     if GetTime() - lastMove < SETTLE then
         return
     end
-    local stock = DB().stock
-    for itemID, lots in pairs(stock) do
-        local anyCrafted = false
-        for _, lot in ipairs(lots) do
-            anyCrafted = anyCrafted or lot.crafted == true
-        end
-        if not anyCrafted then
-            local extra = Recorded(itemID) - Inventory.Total(itemID)
-            if extra > 0 then
-                TakeStock(itemID, extra)
+    local db = DB()
+    local oldest = time() - History.MISSING_DAYS * History.DAY
+    local items = {}
+    for itemID, lots in pairs(db.missing) do
+        for index = #lots, 1, -1 do
+            if (lots[index].gone or 0) < oldest then
+                table.remove(lots, index)
             end
         end
+        if #lots == 0 then
+            db.missing[itemID] = nil
+        else
+            items[itemID] = true
+        end
     end
+    for itemID in pairs(db.stock) do
+        items[itemID] = true
+    end
+    local Auctions = VendorProfit.Auctions
+    for itemID in pairs(items) do
+        local extra = Recorded(itemID) - Inventory.Total(itemID) - (Auctions and Auctions.Owned(itemID) or 0)
+        if extra > 0 then
+            MoveToMissing(itemID, extra)
+        elseif extra < 0 then
+            Restore(itemID, -extra)
+        end
+    end
+end
+
+-- How many of an item are missing. For tests and debugging.
+function History.Missing(itemID)
+    local total = 0
+    for _, lot in ipairs(DB().missing[itemID] or {}) do
+        total = total + lot.n
+    end
+    return total
 end
 
 -- Purchases ---------------------------------------------------------------------
@@ -329,11 +413,21 @@ end
 -- Sales -------------------------------------------------------------------------
 
 local function AddSale(itemID, n, how, sold)
-    local taken, cost, bought = TakeStock(itemID, n)
+    -- An auction's sale from the mail: missing ones first (likely the very
+    -- ones, out of sight since). A vendor's: from the bags, so stock first.
+    local db = DB()
+    local first, second = db.stock, db.missing
+    if how == "auction" then
+        first, second = db.missing, db.stock
+    end
+    local taken, cost, bought = TakeLots(first, itemID, n)
+    if taken < n then
+        local more, moreCost, moreBought = TakeLots(second, itemID, n - taken)
+        taken, cost, bought = taken + more, cost + moreCost, bought + moreBought
+    end
     if taken <= 0 then
         return
     end
-    local db = DB()
     local sales = db.sales
     local sale = {
         time = time(), item = itemID, n = taken, how = how,
@@ -574,14 +668,102 @@ local function SnapshotBuyback()
     buyback = Counts(buybackList)
 end
 
--- New entries in the buyback list are things just sold.
+-- Vendor: the sell itself ----------------------------------------------------------
+
+-- The buyback list holds 12. Once it's full, selling a stack just like the
+-- oldest one pushes that one off and adds its twin, and the list reads the
+-- same as before: the sale can't be seen there. So a sell (a right-click at
+-- the merchant, which is C_Container.UseContainerItem; vendor addons sell
+-- the same way) is noted too, and recorded once its stack leaves the bags.
+-- A sell the list does show is matched to the note, so it's recorded once
+-- whichever comes first. Drag-and-drop sells aren't noted, but the list
+-- catches them as before. A note nothing confirms (the merchant wouldn't
+-- take it) goes after a few seconds.
+local SELL_TIMEOUT = 5
+local pendingSells = {}  -- { itemID, n, price, time, recorded, listed }
+local sellBase = {}      -- itemID -> { count = in bags before, matched = left since }
+
+local function ExpireSells()
+    local now = GetTime()
+    for index = #pendingSells, 1, -1 do
+        if now - pendingSells[index].time > SELL_TIMEOUT then
+            table.remove(pendingSells, index)
+        end
+    end
+    local waiting = {}
+    for _, sell in ipairs(pendingSells) do
+        waiting[sell.itemID] = true
+    end
+    for itemID in pairs(sellBase) do
+        if not waiting[itemID] then
+            sellBase[itemID] = nil
+        end
+    end
+end
+
+-- Stacks gone from the bags: the oldest sells of them are confirmed.
+local function CheckSells()
+    ExpireSells()
+    for _, sell in ipairs(pendingSells) do
+        local base = sellBase[sell.itemID]
+        if not sell.gone and base then
+            local gone = base.count - (C_Item.GetItemCount(sell.itemID) or 0) - base.matched
+            if gone >= sell.n then
+                base.matched = base.matched + sell.n
+                sell.gone = true
+                if not sell.recorded then
+                    sell.recorded = true
+                    AddSale(sell.itemID, sell.n, "vendor", sell.price)
+                end
+            end
+        end
+    end
+end
+
+if C_Container and C_Container.UseContainerItem then
+    hooksecurefunc(C_Container, "UseContainerItem", function(bag, slot, onSelf)
+        if onSelf or not (VendorProfit.Merchant and VendorProfit.Merchant.IsOpen()) then
+            return
+        end
+        -- Still in the slot: the sell is a request the server answers.
+        local info = C_Container.GetContainerItemInfo(bag, slot)
+        local itemID = info and info.itemID
+        local sellPrice = itemID and select(11, C_Item.GetItemInfo(itemID))
+        if not sellPrice or sellPrice <= 0 then
+            return  -- the merchant won't buy it
+        end
+        ExpireSells()
+        sellBase[itemID] = sellBase[itemID] or { count = C_Item.GetItemCount(itemID) or 0, matched = 0 }
+        local n = info.stackCount or 1
+        pendingSells[#pendingSells + 1] = { itemID = itemID, n = n, price = sellPrice * n, time = GetTime() }
+    end)
+end
+
+-- New entries in the buyback list are things just sold: each the sell
+-- noted for it if there is one, recorded once.
 local function CheckBuyback()
+    ExpireSells()
     local entries = BuybackEntries()
     local seen = {}
     for _, entry in ipairs(entries) do
         seen[entry.key] = (seen[entry.key] or 0) + 1
         if seen[entry.key] > (buyback[entry.key] or 0) then
-            AddSale(entry.itemID, entry.n, "vendor", entry.price)
+            local noted
+            for _, sell in ipairs(pendingSells) do
+                if not sell.listed and sell.itemID == entry.itemID and sell.n == entry.n then
+                    noted = sell
+                    break
+                end
+            end
+            if noted then
+                noted.listed = true
+            end
+            if not (noted and noted.recorded) then
+                if noted then
+                    noted.recorded = true
+                end
+                AddSale(entry.itemID, entry.n, "vendor", entry.price)
+            end
         end
     end
     buybackList = entries
@@ -627,12 +809,22 @@ end
 
 -- Mail: auction purchases and sales --------------------------------------------------
 
+-- Recorded from what actually arrives, not from the request to take a mail.
+-- A request can be made twice for one mail and the game pays out once:
+-- TradeSkillMaster holds a take back until the buyer's name has loaded,
+-- Open All asks again meanwhile, and the name loading refreshes the inbox.
+-- (Recording the requests put one Lionheart Helm sale down twice.) So
+-- taking a mail only notes what it should bring, and
+--   * a sale is recorded when its gold arrives (PLAYER_MONEY: the mail's
+--     money, the sale less the cut and the deposit back), matched by amount;
+--   * a purchase, or an auction back, when its items land in your bags.
+-- A request that brings nothing (the second for the same mail, or one the
+-- game refused: bags full) is dropped after PENDING_TIMEOUT. Identical
+-- mails (a purchase of several stacks comes as one mail per stack, the same
+-- invoice on each) each bring their own, so each is recorded.
+History.PENDING_TIMEOUT = 10
+
 local inbox = {}        -- what each mail held at the last inbox update
--- Mails already recorded since the last inbox update, by position. Taking a
--- mail again before the inbox updates (a double click) is the same mail; once
--- it updates, the next mail has moved up into that position and is a new one,
--- even if it reads exactly the same (a purchase arrives as one mail per
--- stack, all with the same invoice).
 
 -- Whether a mail's subject is the game's for an auction that came back:
 -- "Auction expired: %s" or "Auction cancelled: %s", matched from the
@@ -671,72 +863,181 @@ local function ReadMail(index)
     local _, itemID, _, n = GetInboxItem(index, 1)
     return {
         invoiceType = invoiceType, itemName = itemName, bid = bid, consignment = consignment,
-        count = count, itemID = itemID, n = n,
+        count = count, itemID = itemID, n = n, money = money,
         key = table.concat({ invoiceType, tostring(sender), tostring(subject), tostring(itemName),
             tostring(bid), tostring(count), tostring(daysLeft) }, "|"),
     }
 end
 
-local takenSinceUpdate = {}
-
 local function SnapshotInbox()
     inbox = {}
-    takenSinceUpdate = {}
     local shown = GetInboxNumItems()
     for index = 1, shown or 0 do
         inbox[index] = ReadMail(index) or false
     end
 end
 
--- Which tracked item a sale's mail names.
+-- Which tracked item a sale's mail names: in stock, or missing (its gold
+-- waiting in the mail is one reason to be).
 local function ItemByName(name)
-    for itemID in pairs(DB().stock) do
-        if C_Item.GetItemInfo(itemID) == name then
-            return itemID
+    local db = DB()
+    for _, store in ipairs({ db.stock, db.missing }) do
+        for itemID in pairs(store) do
+            if C_Item.GetItemInfo(itemID) == name then
+                return itemID
+            end
         end
     end
 end
 
--- Reads a mail's invoice as it's taken: a purchase when its item is taken,
--- a sale when its money is, an auction back when its item is. Read live:
--- taking is a request to the server, so the mail at that position is still
--- the one being taken. As it was at the last inbox update only if it's
--- already empty. Never just because the inbox has changed since: after a
--- taken mail is deleted the next moves up into its place, sometimes with no
--- inbox update between, and reading the old one then recorded it again in
--- place of the one really taken (the Mailbox's Open All recorded one helm's
--- sale three times).
+-- What takes are waiting for: sales for their gold ({ itemID, n, sold,
+-- money, time }), purchases and auctions back for their items ({ kind,
+-- itemID, n, total, time }), oldest first. For items: each item's bag count
+-- when the first of its takes was made, and how many have been matched
+-- since, so what's arrived is what's more than that.
+local pendingSales, pendingItems = {}, {}
+local itemBase = {}
+local lastMoney
+
+local function Expire(list)
+    local now = GetTime()
+    for index = #list, 1, -1 do
+        if now - list[index].time > History.PENDING_TIMEOUT then
+            table.remove(list, index)
+        end
+    end
+end
+
+local function InBags(itemID)
+    return C_Item.GetItemCount(itemID) or 0
+end
+
+-- Gold came in: the sales it pays for, matched by amount. One sale's gold
+-- (the oldest waiting at that amount), or else several in a row, oldest
+-- first, whose gold adds up to it. Gold from anything else matches none.
+local function MoneyArrived(gain)
+    Expire(pendingSales)
+    if gain <= 0 or #pendingSales == 0 then
+        return
+    end
+    local matched
+    for index, sale in ipairs(pendingSales) do
+        if sale.money == gain then
+            matched = { index }
+            break
+        end
+    end
+    if matched == nil then
+        local sum = 0
+        for index, sale in ipairs(pendingSales) do
+            sum = sum + sale.money
+            if sum == gain then
+                matched = {}
+                for i = 1, index do
+                    matched[i] = i
+                end
+                break
+            elseif sum > gain then
+                break
+            end
+        end
+    end
+    for i = #(matched or {}), 1, -1 do
+        local sale = table.remove(pendingSales, matched[i])
+        History.Sold(sale.itemID, sale.n, sale.sold, "auction")
+    end
+end
+
+local function CheckMoney()
+    local money = GetMoney()
+    if lastMoney then
+        MoneyArrived(money - lastMoney)
+    end
+    lastMoney = money
+end
+
+-- Items landed: the purchases and auctions back they're for, oldest first,
+-- each once all of its stack is in.
+local function CheckItems()
+    Expire(pendingItems)
+    local waiting = {}
+    for _, take in ipairs(pendingItems) do
+        waiting[take.itemID] = true
+    end
+    for itemID, base in pairs(itemBase) do
+        if not waiting[itemID] then
+            itemBase[itemID] = nil
+        end
+    end
+    local index = 1
+    while index <= #pendingItems do
+        local take = pendingItems[index]
+        local base = itemBase[take.itemID]
+        local arrived = InBags(take.itemID) - base.count - base.matched
+        if arrived >= take.n then
+            base.matched = base.matched + take.n
+            table.remove(pendingItems, index)
+            if take.kind == "purchase" then
+                History.Bought(take.itemID, take.n, take.total, "auction")
+            else
+                -- Back from the auction house: queued to post again (Poster.lua).
+                VendorProfit.Poster.Returned(take.itemID, take.n)
+            end
+        else
+            index = index + 1
+        end
+    end
+end
+
+-- Reads a mail's invoice as it's asked to be taken, and notes what it
+-- should bring: a purchase when its item is taken, a sale when its money
+-- is, an auction back when its item is. Read live: taking is a request, so
+-- the mail at that position is still the one being taken (as it was at the
+-- last inbox update only if it's already empty).
 local function TakeMail(index, takingItem, takingMoney)
     local mail = ReadMail(index)
     local before = inbox[index]
     if before and (mail == nil or (mail.key == before.key and takingItem and mail.itemID == nil)) then
         mail = before
     end
-    if mail == nil or takenSinceUpdate[index] then
+    if mail == nil then
         return
+    end
+    local now = GetTime()
+    local function ExpectItems(kind, n, total)
+        if itemBase[mail.itemID] == nil then
+            itemBase[mail.itemID] = { count = InBags(mail.itemID), matched = 0 }
+        end
+        pendingItems[#pendingItems + 1] = { kind = kind, itemID = mail.itemID, n = n, total = total, time = now }
+        -- Checked again once it's had time to land, in case no bag update
+        -- comes for it.
+        C_Timer.After(1, CheckItems)
     end
     if mail.invoiceType == "buyer" and takingItem then
         if mail.itemID and mail.bid then
-            takenSinceUpdate[index] = true
             -- The invoice is for the whole purchase (bid for count items),
             -- but a purchase of more than a stack comes as one mail per
             -- stack: this mail's share is its own stack (n) at the price
             -- each.
             local count = math.max(mail.count or mail.n or 1, 1)
             local n = mail.n or count
-            History.Bought(mail.itemID, n, mail.bid * n / count, "auction")
+            ExpectItems("purchase", n, mail.bid * n / count)
         end
     elseif mail.invoiceType == "returned" and takingItem then
-        -- Back from the auction house: queued to post again (Poster.lua).
         if mail.itemID then
-            takenSinceUpdate[index] = true
-            VendorProfit.Poster.Returned(mail.itemID, mail.n or 1)
+            ExpectItems("returned", mail.n or 1)
         end
     elseif mail.invoiceType == "seller" and takingMoney then
         local itemID = ItemByName(mail.itemName)
-        if itemID and mail.bid then
-            takenSinceUpdate[index] = true
-            History.Sold(itemID, mail.count or 1, mail.bid - (mail.consignment or 0), "auction")
+        if itemID and mail.bid and (mail.money or 0) > 0 then
+            -- With nothing else waiting, the gold now is where to count
+            -- from (whatever changed it before).
+            Expire(pendingSales)
+            if lastMoney == nil or #pendingSales == 0 then
+                lastMoney = GetMoney()
+            end
+            pendingSales[#pendingSales + 1] = { itemID = itemID, n = mail.count or 1,
+                sold = mail.bid - (mail.consignment or 0), money = mail.money, time = now }
         end
     end
 end
@@ -755,7 +1056,8 @@ end
 
 local reconcileWaiting, lastBagUpdate = false, 0
 local events = CreateFrame("Frame")
-for _, event in ipairs({ "MERCHANT_SHOW", "MERCHANT_UPDATE", "BAG_UPDATE_DELAYED", "MAIL_SHOW", "MAIL_INBOX_UPDATE" }) do
+for _, event in ipairs({ "MERCHANT_SHOW", "MERCHANT_UPDATE", "BAG_UPDATE_DELAYED", "MAIL_SHOW", "MAIL_INBOX_UPDATE",
+    "PLAYER_MONEY" }) do
     pcall(events.RegisterEvent, events, event)
 end
 -- Only the player's casts: registered for every unit, it ran for each cast
@@ -771,10 +1073,21 @@ events:SetScript("OnEvent", function(_, event, unit, _, spellID)
     elseif event == "MERCHANT_UPDATE" then
         CheckBuyback()
     elseif event == "MAIL_SHOW" or event == "MAIL_INBOX_UPDATE" then
+        if event == "MAIL_SHOW" then
+            lastMoney = GetMoney()
+        end
         SnapshotInbox()
+    elseif event == "PLAYER_MONEY" then
+        CheckMoney()
     elseif event == "BAG_UPDATE_DELAYED" then
+        if #pendingItems > 0 then
+            CheckItems()
+        end
         if VendorProfit.Merchant and VendorProfit.Merchant.IsOpen() then
             CheckBuyback()
+        end
+        if #pendingSells > 0 then
+            CheckSells()
         end
         Reconcile()
         -- Check again once things have settled, SETTLE after the last bag

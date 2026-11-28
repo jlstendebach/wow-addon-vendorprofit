@@ -982,6 +982,18 @@ C_Container = {
         stub.splits[#stub.splits + 1] = { bag, slot, count }
         if s and count <= s.count then cursor = { bag = bag, slot = slot, itemID = s.itemID, count = count } end
     end,
+    -- At a merchant, using a bag item sells it, a moment later (the server
+    -- answers). stub.sellLost: no answer.
+    UseContainerItem = function(bag, slot, onSelf)
+        local s = Slot(bag, slot)
+        if onSelf or s == nil or not MerchantFrame:IsShown() or stub.sellLost then return end
+        C_Timer.After(0, function()
+            local item = stub.items["item:" .. s.itemID]
+            if item == nil or (item.sellPrice or 0) <= 0 then return end
+            SetSlot(bag, slot, nil)
+            stub.SellItem(s.itemID, s.count)
+        end)
+    end,
     PickupContainerItem = function(bag, slot)
         if cursor and Slot(bag, slot) == nil then
             local from = Slot(cursor.bag, cursor.slot)
@@ -1044,7 +1056,12 @@ function GetInboxInvoiceInfo(index)
 end
 local function Answer(m, fn)
     C_Timer.After(0.1, function()
+        local money = stub.money
+        local bags = m[1] and stub.bags[m[1]] or 0
         fn()
+        -- The gold and items arriving, as the game says it.
+        if stub.money ~= money and not stub.mailMoneyQuiet then stub.Fire("PLAYER_MONEY") end
+        if m[1] and (stub.bags[m[1]] or 0) ~= bags then stub.Fire("BAG_UPDATE_DELAYED") end
         if stub.mailLingers and m.mail then
             m.mail.lingering = true
             C_Timer.After(0.05, function() m.mail.lingering = nil end)
@@ -1068,9 +1085,10 @@ local function TakeMoney(m)
         m.mail.money = 0
     end
 end
+-- stub.mailRefuse: the game refuses takes (bags full): nothing arrives.
 function TakeInboxItem(index)
     local m = Mails()[index]
-    if m then Answer(m, function() TakeItem(m) end) end
+    if m and not stub.mailRefuse then Answer(m, function() TakeItem(m) end) end
 end
 function TakeInboxMoney(index)
     local m = Mails()[index]
@@ -1206,8 +1224,14 @@ function stub.SellItem(itemID, n)
     stub.money = stub.money + price
     stub.buyback[#stub.buyback + 1] = { itemID = itemID, n = n, price = price }
     if #stub.buyback > 12 then table.remove(stub.buyback, 1) end
-    stub.Fire("MERCHANT_UPDATE")
-    stub.Fire("BAG_UPDATE_DELAYED")
+    -- stub.sellBagFirst: the bags update before the buyback list does.
+    if stub.sellBagFirst then
+        stub.Fire("BAG_UPDATE_DELAYED")
+        stub.Fire("MERCHANT_UPDATE")
+    else
+        stub.Fire("MERCHANT_UPDATE")
+        stub.Fire("BAG_UPDATE_DELAYED")
+    end
 end
 function stub.OpenMerchant(items)
     stub.merchant = items

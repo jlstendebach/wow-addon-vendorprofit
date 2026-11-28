@@ -17,6 +17,8 @@ Auctions.QUERY_DELAY = 0.5 -- seconds: lets a post or cancel land first
 
 local SORTS = { { sortOrder = 0, reverseSort = false } }
 local ACTIVE = Enum and Enum.AuctionStatus and Enum.AuctionStatus.Active or 0
+-- Sold, its gold not sent yet: the list keeps it until its mail goes out.
+local SOLD = Enum and Enum.AuctionStatus and Enum.AuctionStatus.Sold or 1
 
 local listeners = {}
 function Auctions.OnChange(fn)
@@ -34,6 +36,7 @@ local function DB()
     if type(db.auctions) ~= "table" or type(db.auctions.counts) ~= "table" then
         db.auctions = { counts = {} }
     end
+    db.auctions.sold = db.auctions.sold or {}
     return db.auctions
 end
 
@@ -42,22 +45,33 @@ function Auctions.Count(itemID)
     return DB().counts[itemID] or 0
 end
 
+-- How many of an item are still yours at the auction house: up, or sold
+-- with the gold not on its way yet (for History.lua, which looks for where
+-- your items went).
+function Auctions.Owned(itemID)
+    local db = DB()
+    return (db.counts[itemID] or 0) + (db.sold[itemID] or 0)
+end
+
 -- When the counts were last taken, or nil if never.
 function Auctions.Time()
     return DB().time
 end
 
 local function Read()
-    local counts = {}
+    local counts, sold = {}, {}
     for index = 1, C_AuctionHouse.GetNumOwnedAuctions() do
         local info = C_AuctionHouse.GetOwnedAuctionInfo(index)
         local itemID = info and info.itemKey and info.itemKey.itemID
         if itemID and info.status == ACTIVE then
             counts[itemID] = (counts[itemID] or 0) + (info.quantity or 1)
+        elseif itemID and info.status == SOLD then
+            sold[itemID] = (sold[itemID] or 0) + (info.quantity or 1)
         end
     end
     local db = DB()
     db.counts = counts
+    db.sold = sold
     db.time = time()
     Changed()
 end
