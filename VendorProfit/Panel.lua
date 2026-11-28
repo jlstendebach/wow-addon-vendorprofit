@@ -450,6 +450,10 @@ end
 local function BuyClick()
     local status = Shopper.Status()
     if not Shopper.ThrottleReady() then
+        -- Busy since the button was drawn: show it held, rather than a
+        -- click that seems to do nothing.
+        Shopper.WatchThrottle()
+        Panel.Refresh()
         return
     end
     if status == "confirm" then

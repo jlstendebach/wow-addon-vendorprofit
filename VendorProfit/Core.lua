@@ -380,6 +380,8 @@ VendorProfit.L = {
     PURCHASE_FAILED = "Buying %s failed. Scanning it again.",
     AUCTION_SEARCH_AGAIN = "Finding %s's auctions again: the auction house only sells from the latest search.",
     AUCTION_GONE = "%s was bought by someone else first. Buy goes on to the next cheapest.",
+    AUCTION_CHANGED = "%s's auctions changed since the scan. Finding them again.",
+    BID_BUSY = "The auction house was busy and didn't buy %s. Click Buy again.",
 }
 
 -- Prices ---------------------------------------------------------------------

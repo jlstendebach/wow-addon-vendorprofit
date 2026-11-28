@@ -662,6 +662,14 @@ opens.
   it). Both are followed now: AUCTION_CANCELED for the auction being bought
   counts (your own auctions fire it too, with other IDs), and the row takes
   the new ID so the next buy isn't "not found".
+- **Still: the first click buys nothing** (2026-11-28): no gold taken, no
+  error, and the next click (after the "No reply" and a new search) buys.
+  Unexplained. Three changes: the auction's ID is read again from the
+  game's results at the click, in case they changed after the scan; a
+  buyout the game drops is said at once instead of after 15 seconds; and a
+  temporary trace (VendorProfitCharDB.buyTrace: each PlaceBid and every
+  auction house event in the 20 seconds after it, plus every search) to
+  read what Forever actually does. Take the trace out once it's known.
 
 ## Crafting
 

@@ -1151,6 +1151,37 @@ run('__stub.Fire("AUCTION_CANCELED", 999)')
 check("another auction going (one of yours): nothing recorded", spent() == before_s + 140)
 run('__stub.ah.wonBy = nil')
 check("no errors following an auction going", ev("#__stub.errors") == 0)
+# The ID is read again from the game's results at the click: they can
+# change after the scan without a word.
+before_s = spent()
+run('__stub.ah.auctions[3576][1].auctionID = 555')
+bids = ev("#__stub.ah.bids")
+click(run, "buy"); run('__stub.Advance(0.5)')
+check("the results' ID changed since the scan: bought with the new one", ev("__stub.ah.bids[%d][1]" % (bids + 1)) == 555
+      and spent() == before_s + 70)
+check("...traced for reading from the saved file", any(line.split(" ")[1:3] == ["PlaceBid", "555"]
+      for line in ev("VendorProfitCharDB.buyTrace").values()))
+searches = ev("#__stub.ah.searches")
+run('__stub.ah.auctions[3576][1].buyout = 75')
+click(run, "buy"); run('__stub.Advance(0.1)')
+check("nothing at that price in the results any more: no bid, searched again", ev("#__stub.ah.bids") == bids + 1
+      and ev("#__stub.ah.searches") == searches + 1 and "changed since the scan" in ev("(VendorProfit.Shopper.Message())"))
+run('__stub.Advance(3)')
+# The game drops the buyout (busy): said at once, Buy offered again.
+run('__stub.ah.noBidReply = true')
+click(run, "buy")
+run('__stub.Fire("AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED")')
+check("a buyout the game drops: said at once, Buy ready again", ev("VendorProfit.Shopper.Status()") == "ready"
+      and "busy and didn't buy" in ev("(VendorProfit.Shopper.Message())"))
+run('__stub.ah.noBidReply = false; __stub.Advance(20)')
+check("...no 'No reply' later", "No reply" not in (ev("(VendorProfit.Shopper.Message())") or ""))
+run('__stub.ah.ready = false')
+click(run, "buy")
+check("clicked as the auction house got busy: nothing sent, the button shows it held", ev("#__stub.ah.bids") == bids + 2
+      and not ev(BUY + ":IsEnabled()"))
+run('__stub.ah.ready = true; __stub.Advance(0.5)')
+check("...and comes back once it isn't", ev(BUY + ":IsEnabled()"))
+check("no errors reading the auction at the click", ev("#__stub.errors") == 0)
 
 # --- Queue the exact recipe (under Auctionator's Vendor Profit line) ---------------
 run, ev = shop_client()

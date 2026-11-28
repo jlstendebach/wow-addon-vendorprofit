@@ -120,6 +120,54 @@ local function SetMessage(text, isError)
     message, messageIsError = text, isError or false
 end
 
+-- Buy trace (temporary) ---------------------------------------------------------
+
+-- Buying gear on Forever sometimes does nothing on the first click (no gold
+-- taken, no error) and works on the next. To see what the game actually
+-- says, each PlaceBid (anyone's) and every auction house event and search
+-- in the TRACE_WINDOW seconds after it are written to
+-- VendorProfitCharDB.buyTrace (the last TRACE_MAX lines), to read from the
+-- saved file. Not shown in game. To come out once the cause is known.
+Shopper.TRACE_MAX = 400
+Shopper.TRACE_WINDOW = 20
+local lastBidAt = -math.huge
+
+local function TraceArg(value)
+    if type(value) == "table" then
+        return value.itemID and ("item" .. value.itemID) or "{}"
+    end
+    return tostring(value)
+end
+
+local function Trace(what, ...)
+    local parts = { string.format("%.2f", GetTime()), what }
+    for index = 1, select("#", ...) do
+        parts[#parts + 1] = TraceArg((select(index, ...)))
+    end
+    VendorProfitCharDB = VendorProfitCharDB or {}
+    local trace = VendorProfitCharDB.buyTrace
+    if type(trace) ~= "table" then
+        trace = {}
+        VendorProfitCharDB.buyTrace = trace
+    end
+    trace[#trace + 1] = table.concat(parts, " ")
+    while #trace > Shopper.TRACE_MAX do
+        table.remove(trace, 1)
+    end
+end
+
+local function Tracing()
+    return GetTime() - lastBidAt <= Shopper.TRACE_WINDOW
+end
+
+if C_AuctionHouse.PlaceBid then
+    hooksecurefunc(C_AuctionHouse, "PlaceBid", function(auctionID, amount)
+        lastBidAt = GetTime()
+        Trace("PlaceBid", auctionID, amount, "ready=" .. tostring(C_AuctionHouse.IsThrottledMessageSystemReady()),
+            "status=" .. status)
+    end)
+end
+
 function Shopper.Status()
     return status
 end
@@ -452,6 +500,11 @@ if C_AuctionHouse.SendSearchQuery then
     hooksecurefunc(C_AuctionHouse, "SendSearchQuery", function(itemKey)
         CountSearch()
         lastSearched = type(itemKey) == "table" and itemKey.itemID or nil
+        -- Every search while the auction house is open: which one came
+        -- last before a buy matters.
+        if status ~= "closed" then
+            Trace("SendSearchQuery", itemKey)
+        end
     end)
 end
 if C_AuctionHouse.SendSellSearchQuery then
@@ -756,6 +809,14 @@ end
 -- few times at most), rather than waiting out its timeout. (A dropped quote
 -- can't be asked for again without a click; it times out and says so.)
 local function OnMessageDropped()
+    -- Our buyout, just sent: it won't go through, so Buy is offered again.
+    local bidding = purchase
+    if bidding and status == "buying" and bidding.auctionID and bidding.askedAt
+        and GetTime() - bidding.askedAt <= Shopper.QUOTE_DROP_WINDOW then
+        SetMessage(string.format(L.BID_BUSY, ItemName(bidding.itemID)), true)
+        EndPurchase("ready")
+        return
+    end
     -- Our quote request, just sent: it won't come, so Buy is offered again.
     local quoting = purchase
     if quoting and status == "quoting" and quoting.askedAt
@@ -775,14 +836,38 @@ local function OnMessageDropped()
     end
 end
 
+-- The auction to buy as the game's results hold it now. They can change
+-- after the scan read them (a row of identical auctions gets a new ID when
+-- one of them sells, and the game sends the new one with a results
+-- update), and an ID they no longer hold buys nothing: so the ID is read
+-- again at the click. Returns the ID (the one from the scan if it's still
+-- there, else another auction at the same price), or nil if there's none.
+local function LiveAuction(current)
+    local key = C_AuctionHouse.MakeItemKey(current.itemID)
+    local other
+    for index = 1, C_AuctionHouse.GetNumItemSearchResults(key) do
+        local info = C_AuctionHouse.GetItemSearchResultInfo(key, index)
+        if info and info.auctionID and info.buyoutAmount == current.budget
+            and not info.containsOwnerItem and not info.containsAccountItem then
+            if info.auctionID == current.auctionID then
+                return info.auctionID
+            end
+            other = other or info.auctionID
+        end
+    end
+    return other
+end
+
 -- Buys a single auction outright at its buyout: straight from the click,
 -- which is the only way the game allows it. Nothing to confirm.
 local function BuyAuction(current)
     status = "buying"
+    current.askedAt = GetTime()
     current.quote = current.budget
     C_AuctionHouse.PlaceBid(current.auctionID, current.budget)
     C_Timer.After(Shopper.PURCHASE_TIMEOUT, function()
         if purchase == current and status == "buying" then
+            Trace("NoReply", current.auctionID)
             SetMessage(string.format(L.NO_PURCHASE_REPLY, ItemName(current.itemID)), true)
             unanswered = current
             purchase = nil
@@ -819,6 +904,24 @@ function Shopper.Buy()
         buyAfterScan = true
         Rescan(nextPurchase.itemID)
         return
+    end
+    if nextPurchase.auctionID then
+        local live = LiveAuction(nextPurchase)
+        Trace("Buy", nextPurchase.itemID, nextPurchase.auctionID, nextPurchase.budget, "live=" .. tostring(live),
+            "lastSearched=" .. tostring(lastSearched))
+        if live == nil then
+            SetMessage(string.format(L.AUCTION_CHANGED, ItemName(nextPurchase.itemID)))
+            Rescan(nextPurchase.itemID)
+            return
+        end
+        if live ~= nextPurchase.auctionID then
+            local listing = listings[nextPurchase.itemID]
+            local row = listing and FindAuction(listing, nextPurchase.auctionID)
+            if row then
+                row.auctionID = live
+            end
+            nextPurchase.auctionID = live
+        end
     end
     purchase = nextPurchase
     SetMessage(nil)
@@ -1188,6 +1291,10 @@ for _, event in ipairs({
     "COMMODITY_PRICE_UPDATED", "COMMODITY_PRICE_UNAVAILABLE",
     "COMMODITY_PURCHASE_SUCCEEDED", "COMMODITY_PURCHASE_FAILED",
     "AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED",
+    -- Only for the buy trace:
+    "AUCTION_HOUSE_THROTTLED_MESSAGE_QUEUED", "AUCTION_HOUSE_THROTTLED_MESSAGE_SENT",
+    "AUCTION_HOUSE_THROTTLED_MESSAGE_RESPONSE_RECEIVED", "AUCTION_HOUSE_THROTTLED_SYSTEM_READY",
+    "AUCTION_HOUSE_NEW_RESULTS_RECEIVED",
 }) do
     -- One at a time, so an event this client doesn't have can't stop the rest.
     pcall(events.RegisterEvent, events, event)
@@ -1221,6 +1328,9 @@ local handlers = {
 }
 
 events:SetScript("OnEvent", function(_, event, ...)
+    if Tracing() then
+        Trace(event, ...)
+    end
     local handler = handlers[event]
     if handler then
         local args = { ... }
