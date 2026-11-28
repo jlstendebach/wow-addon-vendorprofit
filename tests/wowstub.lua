@@ -800,6 +800,16 @@ C_AuctionHouse = {
             local a = ah.auctions[foundIn][foundAt]
             a.quantity = (a.quantity or 1) - 1
             if a.quantity <= 0 then table.remove(ah.auctions[foundIn], foundAt) end
+            -- ah.wonBy "canceled": the game takes the one bought off and
+            -- says only that (AUCTION_CANCELED); the rest of the row get a
+            -- new ID, sent with the results update.
+            if ah.wonBy == "canceled" then
+                stub.Fire("AUCTION_CANCELED", auctionID)
+                if a.quantity > 0 then
+                    a.auctionID = auctionID + 1000
+                    stub.Fire("ITEM_SEARCH_RESULTS_UPDATED", { itemID = foundIn }, a.auctionID)
+                end
+            end
             stub.money = stub.money - amount
             local where = ah.toMail and stub.mail or stub.bags
             where[foundIn] = (where[foundIn] or 0) + 1
@@ -821,6 +831,7 @@ C_AuctionHouse = {
                 elseif by == "accepted" then
                     stub.Fire("CHAT_MSG_SYSTEM", ERR_AUCTION_BID_PLACED)
                 end
+                -- "canceled": said above, and nothing else.
             end
             if ah.wonLate then C_Timer.After(ah.wonLate, Say) else Say() end
             if not ah.toMail then stub.Fire("BAG_UPDATE_DELAYED") end

@@ -1127,6 +1127,30 @@ run('__stub.Fire("BIDS_UPDATED")')
 check("...a bids update later on records nothing more", spent() == before_s + 70)
 run('__stub.ah.wonLate = nil; __stub.ah.wonBy = nil')
 check("no errors with every way of saying it's bought", ev("#__stub.errors") == 0)
+# Said only by the auction going (AUCTION_CANCELED), the rest of the row
+# under a new ID: bought, and the next buy uses the new ID.
+run, ev = shop_client()
+run('__stub.createCount = 4; __stub.bags[2840] = 20; __stub.auctionPrices[3576] = 80'); run(QUEUE + ':Click()')
+run('''
+    __stub.ah.nonCommodity[3576] = true
+    __stub.ah.auctions[3576] = { { auctionID = 401, buyout = 70, quantity = 9 } }
+''')
+run('__stub.OpenAH()'); click(run, "scan"); run('__stub.Advance(3)')
+run('__stub.ah.wonBy = "canceled"')
+before_b, before_s = bought(), spent()
+bids = ev("#__stub.ah.bids")
+click(run, "buy"); run('__stub.Advance(0.5)')
+check("bought, said only by the auction going: recorded once, no 'No reply'", bought() == before_b + 1
+      and spent() == before_s + 70 and ev("VendorProfit.Shopper.Status()") == "ready"
+      and ev("(VendorProfit.Shopper.Message())") == "Bought 1 Tin Bar for |cffffffff70c|r.")
+check("...the row's new ID followed", ev("VendorProfit.Shopper.Listing(3576).rows[1].auctionID") == ev("__stub.ah.bids[%d][1]" % (bids + 1)) + 1000)
+click(run, "buy"); run('__stub.Advance(0.5)')
+check("...and the next buy uses it: bought too", bought() == before_b + 2 and spent() == before_s + 140
+      and ev("__stub.ah.bids[%d][1]" % (bids + 2)) == ev("__stub.ah.bids[%d][1]" % (bids + 1)) + 1000)
+run('__stub.Fire("AUCTION_CANCELED", 999)')
+check("another auction going (one of yours): nothing recorded", spent() == before_s + 140)
+run('__stub.ah.wonBy = nil')
+check("no errors following an auction going", ev("#__stub.errors") == 0)
 
 # --- Queue the exact recipe (under Auctionator's Vendor Profit line) ---------------
 run, ev = shop_client()

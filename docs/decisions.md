@@ -654,6 +654,14 @@ opens.
   count, the first one recorded. TradeSkillMaster takes the bids list or the
   chat line as the answer to a buyout. Which one Forever sends is
   unconfirmed.
+- **...and so does the auction going** (2026-11-28): the Transporter still
+  said "No reply". TradeSkillMaster also takes AUCTION_CANCELED as a
+  buyout's answer, and notes that buying from a row of identical auctions
+  takes the bought one off (AUCTION_CANCELED with its ID) and gives the rest
+  of the row a new ID in the same moment (ITEM_SEARCH_RESULTS_UPDATED with
+  it). Both are followed now: AUCTION_CANCELED for the auction being bought
+  counts (your own auctions fire it too, with other IDs), and the row takes
+  the new ID so the next buy isn't "not found".
 
 ## Crafting
 

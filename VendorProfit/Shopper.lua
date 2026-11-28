@@ -1015,10 +1015,13 @@ end
 
 -- A single auction bought. The game can say so several ways: the "auction
 -- won" notice (plain or formatted), the purchase-completed event, your bids
--- list updating, or "Bid accepted." in chat. Forever's client delivered the
+-- list updating, "Bid accepted." in chat, or the auction going
+-- (AUCTION_CANCELED, see OnAuctionCanceled). Forever's client delivered the
 -- item without the notice reaching the addon, so every one of them counts
--- (TradeSkillMaster takes the bids list or the chat line as the answer to a
--- buyout too). Only the first is recorded: the purchase ends with it.
+-- (TradeSkillMaster takes the bids list, the chat line or the auction going
+-- as the answer to a buyout too). Only the first is recorded: the purchase
+-- ends with it.
+local renamed  -- the row just bought from: { itemID, auctionID, at }
 local function OnAuctionWon()
     if (purchase == nil or status ~= "buying") and unanswered and unanswered.auctionID then
         -- One that timed out went through after all.
@@ -1040,6 +1043,7 @@ local function OnAuctionWon()
     if listing then
         TakeAuction(listing, bought.auctionID)
     end
+    renamed = { itemID = bought.itemID, auctionID = bought.auctionID, at = GetTime() }
     SetMessage(string.format(L.BOUGHT, bought.quantity, ItemName(bought.itemID), VendorProfit.FormatMoney(bought.quote)))
     EndPurchase("ready")
 end
@@ -1057,6 +1061,33 @@ local function OnPurchaseCompleted(auctionID)
     if current and current.auctionID and (auctionID == nil or auctionID == current.auctionID) then
         OnAuctionWon()
     end
+end
+
+-- Buying from a row of identical auctions, the game takes the one bought
+-- off the auction house (AUCTION_CANCELED with its ID) and may say nothing
+-- else: that's the answer. In the same moment the rest of the row gets a
+-- new ID (ITEM_SEARCH_RESULTS_UPDATED with it), which the next buy needs:
+-- the old one is gone. (TradeSkillMaster handles both the same way.) Your
+-- own auctions selling or being cancelled fire it too, with their IDs, so
+-- only the one being bought counts.
+local function OnAuctionCanceled(auctionID)
+    local current = (status == "buying" and purchase) or unanswered
+    if current and current.auctionID and auctionID == current.auctionID then
+        OnAuctionWon()
+    end
+end
+
+local function OnItemResultsUpdated(itemKey, auctionID)
+    local row = renamed
+    if auctionID and row and GetTime() - row.at < 1 and type(itemKey) == "table" and itemKey.itemID == row.itemID then
+        renamed = nil
+        local listing = listings[row.itemID]
+        local found = listing and FindAuction(listing, row.auctionID)
+        if found then
+            found.auctionID = auctionID
+        end
+    end
+    OnItemResults(itemKey)
 end
 
 -- "Bid accepted." in chat, or "You won an auction for <item>".
@@ -1153,7 +1184,7 @@ for _, event in ipairs({
     "COMMODITY_SEARCH_RESULTS_UPDATED", "COMMODITY_SEARCH_RESULTS_ADDED",
     "ITEM_SEARCH_RESULTS_UPDATED", "ITEM_SEARCH_RESULTS_ADDED",
     "AUCTION_HOUSE_SHOW_NOTIFICATION", "AUCTION_HOUSE_SHOW_FORMATTED_NOTIFICATION", "UI_ERROR_MESSAGE",
-    "AUCTION_HOUSE_PURCHASE_COMPLETED", "BIDS_UPDATED", "CHAT_MSG_SYSTEM",
+    "AUCTION_HOUSE_PURCHASE_COMPLETED", "BIDS_UPDATED", "CHAT_MSG_SYSTEM", "AUCTION_CANCELED",
     "COMMODITY_PRICE_UPDATED", "COMMODITY_PRICE_UNAVAILABLE",
     "COMMODITY_PURCHASE_SUCCEEDED", "COMMODITY_PURCHASE_FAILED",
     "AUCTION_HOUSE_THROTTLED_MESSAGE_DROPPED",
@@ -1171,7 +1202,7 @@ local handlers = {
     COMMODITY_SEARCH_RESULTS_ADDED = function(itemID)
         OnCommodityResults(itemID or (scanning and scanning.itemID))
     end,
-    ITEM_SEARCH_RESULTS_UPDATED = OnItemResults,
+    ITEM_SEARCH_RESULTS_UPDATED = OnItemResultsUpdated,
     ITEM_SEARCH_RESULTS_ADDED = function(itemKey)
         OnItemResults(itemKey or (scanning and C_AuctionHouse.MakeItemKey(scanning.itemID)))
     end,
@@ -1180,6 +1211,7 @@ local handlers = {
     AUCTION_HOUSE_PURCHASE_COMPLETED = OnPurchaseCompleted,
     BIDS_UPDATED = function() OnAuctionWon() end,
     CHAT_MSG_SYSTEM = OnSystemMessage,
+    AUCTION_CANCELED = OnAuctionCanceled,
     UI_ERROR_MESSAGE = OnErrorMessage,
     COMMODITY_PRICE_UPDATED = OnPriceUpdated,
     COMMODITY_PRICE_UNAVAILABLE = OnPriceUnavailable,
